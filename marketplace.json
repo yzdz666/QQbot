@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/yuexia-php/marketplace/main/schema.json",
+  "version": "1.0.0",
+  "description": "月下PHP官方插件市场 - 从GitHub仓库安装高质量的QQ机器人插件",
+  "plugins": [
+    {
+      "name": "名言",
+      "title": "每日名言/全能测试",
+      "description": "包含每日签到、名言警句、撤回测试、按钮交互等全能测试功能",
+      "version": "1.0.0",
+      "author": "月下",
+      "repository": {
+        "type": "github",
+        "url": "https://github.com/example/plugin-quote"
+      },
+      "license": "MIT",
+      "tags": ["工具", "签到", "测试"],
+      "min_framework_version": "1.0.0",
+      "category": "功能"
+    },
+    {
+      "name": "音乐",
+      "title": "点歌系统",
+      "description": "支持搜索和播放音乐，包含歌词展示、音乐卡片等功能",
+      "version": "1.0.0",
+      "author": "月下",
+      "repository": {
+        "type": "github",
+        "url": "https://github.com/example/plugin-music"
+      },
+      "license": "MIT",
+      "tags": ["音乐", "娱乐"],
+      "min_framework_version": "1.0.0",
+      "category": "娱乐"
+    },
+    {
+      "name": "发送测试",
+      "title": "消息发送测试",
+      "description": "管理员指令测试插件，支持文字/图片/Ark卡片等多种消息格式的发送测试",
+      "version": "1.0.0",
+      "author": "月下",
+      "repository": {
+        "type": "github",
+        "url": "https://github.com/example/plugin-sendtest"
+      },
+      "license": "MIT",
+      "tags": ["测试", "管理"],
+      "min_framework_version": "1.0.0",
+      "category": "管理"
+    },
+    {
+      "name": "Ark卡片",
+      "title": "Ark消息卡片",
+      "description": "生成精美的Ark消息卡片，支持自定义模板和内容布局",
+      "version": "1.0.0",
+      "author": "月下",
+      "repository": {
+        "type": "github",
+        "url": "https://github.com/example/plugin-arkcard"
+      },
+      "license": "MIT",
+      "tags": ["卡片", "消息"],
+      "min_framework_version": "1.0.0",
+      "category": "功能"
+    }
+  ]
+}

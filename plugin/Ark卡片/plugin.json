@@ -1,0 +1,11 @@
+{
+  "name": "Ark卡片",
+  "title": "Ark消息卡片",
+  "description": "生成精美的Ark消息卡片，支持自定义模板和内容布局",
+  "version": "1.0.0",
+  "author": "月下",
+  "license": "MIT",
+  "main": "Ark卡片.php",
+  "keywords": ["卡片", "Ark", "消息"],
+  "min_framework_version": "1.0.0"
+}

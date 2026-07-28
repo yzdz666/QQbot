@@ -1,0 +1,11 @@
+{
+  "name": "发送测试",
+  "title": "消息发送测试",
+  "description": "管理员指令测试插件，支持文字/图片/Ark卡片等多种消息格式的发送测试",
+  "version": "1.0.0",
+  "author": "月下",
+  "license": "MIT",
+  "main": "发送测试.php",
+  "keywords": ["测试", "发送", "管理"],
+  "min_framework_version": "1.0.0"
+}

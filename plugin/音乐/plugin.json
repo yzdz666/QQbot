@@ -1,0 +1,11 @@
+{
+  "name": "音乐",
+  "title": "点歌系统",
+  "description": "支持搜索和播放音乐，包含歌词展示、音乐卡片等功能",
+  "version": "1.0.0",
+  "author": "月下",
+  "license": "MIT",
+  "main": "音乐.php",
+  "keywords": ["音乐", "点歌", "娱乐"],
+  "min_framework_version": "1.0.0"
+}

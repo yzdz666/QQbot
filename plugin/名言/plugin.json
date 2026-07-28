@@ -1,0 +1,11 @@
+{
+  "name": "名言",
+  "title": "每日名言/全能测试",
+  "description": "包含每日签到、名言警句、撤回测试、按钮交互等全能测试功能",
+  "version": "1.0.0",
+  "author": "月下",
+  "license": "MIT",
+  "main": "名言.php",
+  "keywords": ["签到", "名言", "测试", "按钮"],
+  "min_framework_version": "1.0.0"
+}
