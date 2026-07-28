@@ -1,252 +1,1277 @@
-月下独酌管机 - 机器人管理后台系统
+官鸡机器人框架开发文档
+===
 
-📋 项目概述
+## 目录
 
-月下独酌管机是一个基于 PHP 的 QQ 机器人管理后台系统，提供完整的机器人接入、插件管理、日志监控、在线更新等功能。系统采用模块化设计，支持多机器人并行管理。
-
-✨ 核心功能
-
-1. 🤖 机器人管理
-
-· 添加机器人：支持通过 AppID 和 Secret 接入 QQ 机器人
-· 环境切换：正式/沙箱环境一键切换
-· 机器人列表：统一管理所有接入的机器人
-· 实时统计：展示群聊、私聊、加群、成员增减等数据
-
-2. 🔌 插件系统
-
-· 插件管理：启用/禁用/编辑/删除插件
-· API插件生成器：可视化构建插件，无需编程基础
-· 快速API模式：通过配置接口 URL 和触发词快速生成插件
-· 丰富的动作块：支持文字、图片、语音、视频、文件、Markdown、卡片、按钮、流式回复等
-· 数据操作：支持读写数据库、CURL 请求、API 调用
-
-3. 💬 聊天记录
-
-· 会话列表：按私聊/群聊分类展示
-· 消息历史：查看完整聊天记录
-· 消息操作：引用回复、撤回消息（2分钟内）
-· 消息筛选：按日期、类型筛选日志
-· 头像显示：自动获取用户 QQ 头像
-
-4. 📊 日志管理
-
-· 日志查看：按日期查看机器人运行日志
-· 日志统计：记录数、文件数、事件类型统计
-· 日志搜索：按昵称/内容/原始数据搜索
-· 日志删除：支持删除指定日志文件
-· 事件支持：群成员增加/删除、好友添加/删除等
-
-5. 📦 在线更新
-
-· 版本检查：自动检测 GitHub 最新版本
-· 历史版本：支持选择历史版本下载
-· 自动备份：更新前自动备份关键文件
-· 一键回滚：支持恢复到任意备份版本
-· 备份管理：清理旧备份、查看备份列表
-
-6. 🧪 指令测试
-
-· 模拟触发：模拟用户发送指令测试插件
-· 实时响应：显示机器人所有回复内容
-· 多媒体支持：文字、图片、音频、视频、Markdown
-
-7. 🔐 安全与权限
-
-· 登录验证：基于 Cookie 的管理员认证
-· 账号设置：可修改管理员账号密码
-· 操作确认：关键操作（删除、更新、回滚）需二次确认
-
-🛠️ 技术特性
-
-后端技术
-
-· 语言：PHP 8.3
-· 架构：MVC 模式，RESTful API
-· 存储：JSON 文件数据库，无需 MySQL
-· 依赖：cURL、ZipArchive、sodium 扩展
-
-前端技术
-
-· 框架：原生 JavaScript
-· UI：响应式设计，适配移动端
-· 交互：Markdown 渲染、代码高亮、实时搜索
-
-📁 目录结构
-
-```
-/
-├── admin/                    # 后台管理页面
-│   ├── main.php             # 机器人总览
-│   ├── chat.php             # 聊天记录
-│   ├── log.php              # 日志管理
-│   ├── plugin.php           # 插件管理
-│   ├── update.php           # 在线更新
-│   ├── set.php              # 账号设置
-│   ├── simulate.php         # 指令测试
-│   ├── cmdtest.php          # 主动消息
-│   ├── custom_api.php       # API插件生成器
-│   ├── doc.php              # 开发文档
-│   └── index.php            # 登录页面
-│
-├── api/                     # API接口
-│   ├── login.php           # 登录认证
-│   ├── bot.php             # 机器人管理
-│   ├── plugin.php          # 插件管理
-│   ├── chat.php            # 聊天记录API
-│   ├── log.php             # 日志API
-│   ├── info.php            # 信息查询
-│   ├── update.php          # 更新API
-│   └── simulate.php        # 指令测试API
-│
-├── function/               # 核心函数库
-│   ├── GD.php              # 图像处理
-│   ├── qrcode.php          # 二维码生成
-│   ├── Parsedown.php       # Markdown解析
-│   └── Mail/               # 邮件发送
-│
-├── plugin/                 # 插件目录
-├── database/               # 数据存储
-├── Log/                    # 日志存储
-├── assets/                 # 静态资源
-├── bot.php                 # 机器人核心功能
-├── function.php            # 全局函数
-├── index.php               # 入口文件
-├── config.json             # 配置文件
-├── main.json               # 机器人配置
-└── version.php             # 版本信息
-```
-
-🎯 核心功能流程
-
-机器人消息处理流程
-
-1. 用户发送消息 → QQ 平台回调
-2. index.php 接收并验证请求
-3. 解析事件类型（群聊/私聊/事件）
-4. 加载对应插件（plugin/*.php）
-5. 插件处理业务逻辑并返回响应
-6. 通过 bot.php 函数发送回复
-
-插件执行流程
-
-1. 用户在后台创建插件（可视化/快速模式）
-2. 系统生成 PHP 代码并保存到 plugin/ 目录
-3. 机器人收到消息时自动加载并执行匹配插件
-4. 插件可调用系统函数（文字/图片/MD/API等）
-
-📊 支持的机器人事件
-
-事件类型 描述
-GROUP_AT_MESSAGE_CREATE 群聊 @ 消息
-GROUP_MESSAGE_CREATE 群聊普通消息
-C2C_MESSAGE_CREATE 私聊消息
-GROUP_ADD_ROBOT 机器人被加入群聊
-GROUP_DEL_ROBOT 机器人退出群聊
-GROUP_MEMBER_ADD 群成员增加
-GROUP_MEMBER_REMOVE 群成员移除
-INTERACTION_CREATE 按钮/互动事件
-FRIEND_ADD 添加好友
-FRIEND_DEL 删除好友
-
-🔧 核心函数
-
-bot.php 核心函数
-
-· 文字($content) - 发送文字消息
-· 图片($image, $content) - 发送图片
-· 语音($url) - 发送语音
-· 视频($url) - 发送视频
-· 文件($url, $name) - 发送文件
-· MD($md, $keyboard) - 发送 Markdown
-· 流式(...$msgs) - 流式回复
-· 撤回($id) - 撤回消息
-· 引用($msgId, $content) - 引用回复
-· 按钮($key) - 发送官方按钮
-· 原生按钮($md, $rows) - 自定义按钮
-· 文卡(...$items) - 文本卡片
-· 大图($title, $xtitle, $iurl) - 大图卡片
-· 跳转卡($title, $desc, $image, $tz) - 跳转卡片
-
-function.php 核心函数
-
-· 写($文件, $键, $值) - 写入 JSON 数据
-· 读($文件, $键, $默认值) - 读取 JSON 数据
-· wlog($content) - 写日志
-· curl($url, $method, $headers, $params) - HTTP 请求
-· 二维码($content) - 生成二维码
-· markdown转html($markdown) - MD 转 HTML
-· HTML转图($html, $long, $width) - HTML 转图片
-· 邮箱($title, $content, $to, $from, $password) - 发送邮件
-
-📦 更新与备份机制
-
-更新流程
-
-1. 检查 GitHub 最新版本
-2. 用户选择版本下载
-3. 自动创建备份（backup_YYYYmmdd_HHMMSS/）
-4. 下载并解压更新包
-5. 应用更新（保留 plugin/、main.json、config.json）
-6. 更新版本信息
-
-备份与回滚
-
-· 自动备份：每次更新前自动备份
-· 手动回滚：选择历史备份一键恢复
-· 备份清理：保留最近 5 个备份
-· 备份内容：admin/、api/、function/、assets/ 等核心文件
-
-🚀 快速开始
-
-环境要求
-
-· PHP 7.4+
-· PHP 扩展：sodium, curl, zip
-· 服务器支持：Apache/Nginx
-
-安装步骤
-
-1. 上传所有文件到服务器
-2. 确保目录权限（plugin/、database/、Log/ 可写）
-3. 访问 index.php 登录后台
-4. 默认账号：admin / admin
-5. 添加机器人配置（AppID/Secret）
-6. 开始管理机器人和插件
-
-安全建议
-
-· 修改默认管理员密码
-· 定期备份数据库和配置文件
-· 使用 HTTPS 访问后台
-· 限制后台访问 IP
-
-📝 开发文档
-
-详细开发文档请查看 doc.php 或 文档.md，包含：
-
-· 插件开发指南
-· API 接口说明
-· 事件处理机制
-· 函数使用示例
-
-⚠️ 注意事项
-
-1. 权限设置：确保 plugin/、database/、Log/ 目录可写
-2. sodium 扩展：必须安装 sodium 扩展用于签名验证
-3. 安全提示：修改默认密码，定期更新系统
-4. 备份重要数据：更新前自动备份，但建议手动额外备份
-5. API 限流：注意 QQ 官方 API 调用频率限制
-
-📞 技术支持
-
-· 项目文档：查看 doc.php
-· 问题反馈：GitHub Issues
-· 版本更新：GitHub Releases
+1. [插件编写方法](#一插件编写方法)
+2. [可用变量（常量）](#二可用变量常量)
+3. [数据读写](#三数据读写)
+4. [消息发送函数](#四消息发送函数)
+5. [主动推送函数](#五主动推送函数)
+6. [官机函数](#六官机函数)
+7. [群管理函数](#七群管理函数)
+8. [辅助函数](#八辅助函数)
+9. [画布函数](#九画布函数)
+10. [事件类型与处理](#十事件类型与处理)
+11. [WebHook 模式](#十一webhook-模式)
+12. [WebSocket 模式](#十二websocket-模式)
+13. [聊天管理界面](#十三聊天管理界面)
+14. [代发功能](#十四代发功能)
+15. [数据存储结构](#十五数据存储结构)
+16. [插件示例](#十六插件示例)
+17. [开发注意事项](#十七开发注意事项)
+18. [常见问题排查](#十八常见问题排查)
 
 ---
-q官方群:973942141
-版本：1.0.0
-更新日期：2026-06-18
-作者：月下独酌,3139606844
-描述：月下独酌管机 - 机器人管理后台系统
+
+## 一、插件编写方法
+
+插件目录: `plugin/`
+
+在插件目录下创建 PHP 文件，如 `plugin/音乐.php`。框架会自动扫描并加载所有 `.php` 文件。
+
+### 基础示例
+
+```php
+<?php
+if (消息 == "测试") {
+    文字("收到来自" . 用户 . "的消息");
+}
+?>
+```
+
+### 插件加载机制
+
+- 框架在每次收到消息/事件时加载 `plugin/` 目录下所有 `.php` 文件
+- 插件默认全部启用，除非在管理后台显式禁用
+- 插件使用 `require_once` 加载，避免重复定义函数
+- 插件中的错误会被捕获并记录到日志，不会影响其他插件或框架稳定性
+- 每个事件在独立上下文中处理（WH: 独立HTTP请求; WS: 独立子进程），常量互不干扰
+
+### 插件禁用
+
+通过管理后台 `插件管理` 页面或直接操作 `plugin_status` 表：
+
+```sql
+-- 禁用插件
+INSERT INTO plugin_status (appid, plugin_name, enabled) VALUES ('你的appid', '音乐', 0);
+
+-- 启用插件
+INSERT INTO plugin_status (appid, plugin_name, enabled) VALUES ('你的appid', '音乐', 1);
+```
+
+---
+
+## 二、可用变量（常量）
+
+框架在事件处理时会定义以下全局常量，插件中可直接使用：
+
+| 变量名 | 说明 | 示例值 |
+|--------|------|--------|
+| `消息来源` | 消息场景类型 | 群聊、私聊、加群、退群、群成员增加、群成员移除、互动、文字子频道 |
+| `消息` | 消息内容（已清洗，去除@前缀和/前缀） | 你好 |
+| `消息ID` | 当前消息的唯一ID（用于回复） | msg_xxxx |
+| `事件ID` | 事件ID（用于加群/退群/互动等事件回复） | evt_xxxx |
+| `来源` | 来源标识（群openid/用户openid/频道ID） | group_openid_xxx |
+| `用户` | 发送者用户ID（member_openid/user_openid） | user_openid_xxx |
+| `raw` | 原始事件数据（数组，用于获取交互详情） | [...](完整事件JSON) |
+| `appid` | 机器人AppID | 123456789 |
+| `secret` | 机器人Secret | xxxx |
+| `type` | 运行环境 | 正式、沙箱 |
+| `plugin` | 插件启用状态数组 | `['音乐'=>true, '签到'=>true]` |
+
+### 消息来源类型说明
+
+| 消息来源 | 触发事件 | 说明 |
+|----------|----------|------|
+| 群聊 | GROUP_AT_MESSAGE_CREATE / GROUP_MESSAGE_CREATE | 群聊消息（@机器人或全量消息） |
+| 私聊 | C2C_MESSAGE_CREATE | 私聊消息 |
+| 互动 | INTERACTION_CREATE | 按钮点击/交互回调 |
+| 加群 | GROUP_ADD_ROBOT | 机器人被加入群 |
+| 退群 | GROUP_DEL_ROBOT | 机器人被移出群 |
+| 群成员增加 | GROUP_MEMBER_ADD | 群成员入群 |
+| 群成员移除 | GROUP_MEMBER_REMOVE | 群成员退群/被移出 |
+| 文字子频道 | AT_MESSAGE_CREATE / MESSAGE_CREATE | 频道消息 |
+
+### raw 原始数据结构
+
+```php
+// 群聊消息的 raw 结构
+raw["d"]["content"]         // 原始消息内容（含@标记）
+raw["d"]["author"]["username"]  // 发送者昵称
+raw["d"]["author"]["member_openid"]  // 发送者openid
+raw["d"]["author"]["member_role"]  // 群成员角色（owner/admin/member）
+raw["d"]["author"]["bot"]   // 是否为机器人
+raw["d"]["attachments"]     // 附件列表
+raw["d"]["mentions"]        // @提及列表
+raw["d"]["message_scene"]   // 消息场景（含REFIDX用于引用）
+raw["d"]["group_openid"]    // 群openid
+```
+
+---
+
+## 三、数据读写
+
+框架使用 SQLite 数据库存储数据，`读()` 和 `写()` 函数签名与文件版兼容，但底层使用数据库，性能更强、支持并发。
+
+**重要**：框架的 `写()` 函数会自动序列化数组/对象（内部使用 `json_encode`），`读()` 函数会自动反序列化 JSON 为数组。因此存储数组时**无需手动 `json_encode`**，读取时也**无需手动 `json_decode`**。
+
+### 3.1 数据写入 - 写()
+
+```php
+写($路径, $键, $值);
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| $路径 | string | 存储命名空间（建议格式：`"功能名/" . appid`） |
+| $键 | string | 键名（建议包含用户ID或群ID用于隔离） |
+| $值 | mixed | 任意类型（数组/对象会自动序列化） |
+
+```php
+// 存储签到状态
+写("签到/" . appid, "sign_" . 用户 . "_" . date("Y-m-d"), true);
+
+// 存储积分
+写("签到/" . appid, "sign_total_" . 用户, 100);
+
+// 存储复杂数据（数组自动序列化，无需 json_encode）
+写("点歌/" . appid, "history_" . 用户, $songsArray);
+```
+
+### 3.2 数据读取 - 读()
+
+```php
+$值 = 读($路径, $键, $默认值);
+```
+
+```php
+// 读取签到状态
+$hasSigned = 读("签到/" . appid, "sign_" . 用户 . "_" . date("Y-m-d"), false);
+
+// 读取积分
+$totalPoints = 读("签到/" . appid, "sign_total_" . 用户, 0);
+
+// 读取复杂数据（框架自动反序列化为数组，无需 json_decode）
+$songs = 读("点歌/" . appid, "history_" . 用户, []);
+
+// 兼容写法：如果可能存在手动 json_encode 存储的旧数据
+$raw = 读("点歌/" . appid, "history_" . 用户, '');
+$songs = is_array($raw) ? $raw : json_decode($raw, true);
+```
+
+### 3.3 数据删除 - 删()
+
+```php
+删($路径, $键);
+```
+
+```php
+删("点歌/" . appid, "history_" . 用户);
+```
+
+### 3.4 数据存储最佳实践
+
+```php
+// 推荐：按功能+appid+用户隔离
+写("签到/" . appid, "sign_" . 用户, true);
+写("点歌/" . appid, "history_" . 用户, $dataArray);  // 数组自动序列化
+写("配置/" . appid, "setting_key", $value);
+
+// 避免：全局冲突
+写("data", "key", $value);  // 可能与其他插件冲突
+
+// 避免：键名过于简单
+写("签到/" . appid, "sign", true);  // 用户之间会覆盖
+
+// 避免：手动 json_encode（框架会自动序列化，导致双重编码）
+写("点歌/" . appid, "history_" . 用户, json_encode($data));  // ❌ 多余
+写("点歌/" . appid, "history_" . 用户, $data);               // ✅ 正确
+```
+
+### 3.5 查看存储的数据
+
+```sql
+-- 查看所有存储数据
+SELECT * FROM kv_store;
+
+-- 查看特定功能的存储
+SELECT * FROM kv_store WHERE namespace = '签到/你的appid';
+
+-- 查看特定用户的存储
+SELECT * FROM kv_store WHERE key LIKE '%用户ID%';
+```
+
+---
+
+## 四、消息发送函数
+
+这些函数依赖当前消息上下文（`消息来源`、`来源`、`消息ID` 等），用于回复当前收到的消息。
+
+### 4.1 文字消息
+
+```php
+文字(内容)
+```
+
+发送纯文本消息。自动根据 `消息来源` 选择群聊/私聊/互动等发送方式。
+
+```php
+文字("你好，世界！");
+文字("收到消息：" . 消息);
+```
+
+### 4.2 图片消息
+
+```php
+图片(链接或数据, [附加文字])
+```
+
+发送图片，支持 URL 或 base64 数据。第二个参数为可选附加文字。
+
+```php
+// URL方式
+图片("https://example.com/image.png");
+
+// 带文字
+图片("https://example.com/image.png", "这是一张图片");
+```
+
+### 4.3 语音消息
+
+```php
+语音(MP3链接)
+```
+
+自动将 MP3 转为 silk 格式后发送语音。
+
+```php
+语音("https://example.com/music.mp3");
+```
+
+### 4.4 本地语音
+
+```php
+本地语音(silk链接或数据)
+```
+
+直接发送已转换好的 silk 语音（不自动转换）。
+
+### 4.5 视频消息
+
+```php
+视频(链接或数据)
+```
+
+### 4.6 文件消息
+
+```php
+文件(链接或数据, [文件名])
+```
+
+发送文件。如果不提供文件名，会自动从 URL 中提取。
+
+```php
+文件("https://example.com/doc.pdf");
+文件("https://example.com/doc.pdf", "文档.pdf");
+```
+
+### 4.7 按钮模板
+
+```php
+按钮(按钮ID)
+```
+
+发送预定义的按钮（需先在 QQ 开放平台配置按钮模板）。
+
+### 4.8 文卡（列表卡片）
+
+```php
+文卡(["text"=>"文字"], ["text"=>"链接文字", "url"=>"跳转链接"], ...)
+```
+
+发送 Ark 模板 23（列表卡片）。
+
+```php
+文卡(
+    ["text" => "选项1"],
+    ["text" => "选项2", "url" => "https://example.com"]
+);
+```
+
+### 4.9 大图卡片
+
+```php
+大图("大标题", "小标题", "图片链接")
+```
+
+发送 Ark 模板 37（大图卡片）。
+
+### 4.10 跳转卡片
+
+```php
+跳转卡("标题", "介绍", "图片链接", "跳转链接")
+```
+
+发送 Ark 模板 24（跳转卡片）。
+
+### 4.11 引用消息
+
+```php
+引用(消息ID, 内容)
+```
+
+引用回复指定消息。消息ID可以是消息ID或REFIDX（从消息场景中提取）。
+
+```php
+// 引用当前收到的消息
+引用(消息ID, "这是引用回复");
+
+// 引用指定消息
+引用("msg_xxxx", "回复内容");
+```
+
+### 4.12 Markdown 消息
+
+```php
+MD(内容, [按钮ID], [样式数组])
+```
+
+| 参数 | 说明 |
+|------|------|
+| 内容 | Markdown 文本 |
+| 按钮ID（可选） | 预配置的按钮 ID |
+| 样式数组（可选） | `["layout"=>"hide_avatar_and_center", "main_font_size"=>"small"]` |
+
+```php
+// 基础
+MD("# 标题\n内容");
+
+// 带按钮
+MD("请确认操作", "confirm_btn");
+
+// 带样式
+MD("# 通知\n内容", null, ["layout" => "hide_avatar_and_center", "main_font_size" => "small"]);
+```
+
+### 4.13 原生按钮（自定义行内按钮）
+
+```php
+原生按钮(MD内容, 按钮行数组)
+```
+
+发送 Markdown 并附带自定义行内按钮。
+
+```php
+$rows = [
+    [
+        "buttons" => [
+            [
+                "id" => "btn_1",
+                "render_data" => [
+                    "label" => "确认",
+                    "visited_label" => "已确认",
+                    "style" => 1  // 1=蓝色, 2=灰色, 3=红色
+                ],
+                "action" => [
+                    "type" => 2,  // 2=回调
+                    "data" => "确认",
+                    "enter" => false,
+                    "permission" => ["type" => 2]
+                ]
+            ]
+        ]
+    ]
+];
+原生按钮("请选择操作", $rows);
+```
+
+### 4.14 自定义模板MD
+
+```php
+发MD(模板ID, 参数数组, [按钮ID], [样式数组])
+```
+
+使用自定义模板发送 Markdown。
+
+```php
+// 单个参数
+$params = ["key" => "title", "values" => ["欢迎"]];
+
+// 多个参数
+$params = [
+    ["key" => "title", "values" => ["欢迎"]],
+    ["key" => "desc", "values" => ["描述"]]
+];
+发MD("template_123", $params);
+```
+
+### 4.15 Emoji 表情
+
+```php
+Emoji(emojiID, [附加文字])
+```
+
+### 4.16 通用 Ark 模板
+
+```php
+Ark(模板ID, kv数组)
+```
+
+发送任意 Ark 模板。
+
+```php
+// 关联数组
+Ark(23, ["key1" => "value1", "key2" => "value2"]);
+
+// 标准格式
+Ark(23, [["key" => "#DESC#", "value" => "描述"]]);
+```
+
+### 4.17 图文卡片
+
+```php
+图文卡片("标题", "描述", "图片链接", "跳转链接")
+```
+
+发送 msg_type=8 的图文卡片。
+
+### 4.18 流式回复
+
+```php
+流式(内容1, 内容2, ...)
+```
+
+仅支持私聊。依次发送多段内容，实现流式输出效果。
+
+```php
+流式("第一段", "第二段", "第三段");
+```
+
+### 4.19 撤回消息
+
+```php
+撤回(消息ID)
+```
+
+撤回指定消息（需机器人有权限）。
+
+```php
+// 撤回刚发送的消息
+$resp = 文字("这条消息会被撤回");
+$data = json_decode($resp, true);
+if (isset($data['id'])) {
+    撤回($data['id']);
+}
+```
+
+### 4.20 确认互动事件
+
+```php
+确认互动(事件ID, [响应内容])
+```
+
+确认按钮互动回调（ACK）。
+
+```php
+if (消息来源 == "互动") {
+    确认互动(事件ID);
+    文字("已确认互动");
+}
+```
+
+---
+
+## 五、主动推送函数
+
+这些函数不依赖当前消息上下文，可主动向任意群或用户发送消息。适用于定时任务、跨会话推送等场景。
+
+### 5.1 基础推送
+
+```php
+推送到群(群openid, 内容, [消息类型])  // 消息类型：0=文字，2=MD
+推送到用户(用户openid, 内容, [消息类型])
+```
+
+```php
+// 推送文字到群
+推送到群("group_openid_xxx", "定时推送消息");
+
+// 推送MD到群
+推送到群("group_openid_xxx", "# 通知\n内容", 2);
+```
+
+### 5.2 推送 Markdown
+
+```php
+推送MD到群(群openid, MD内容, [按钮ID])
+推送MD到用户(用户openid, MD内容, [按钮ID])
+```
+
+### 5.3 推送富媒体
+
+```php
+推送图片到群(群openid, 图片链接/数据)
+推送图片到用户(用户openid, 图片链接/数据)
+推送语音到群(群openid, MP3链接)
+推送语音到用户(用户openid, MP3链接)
+推送视频到群(群openid, 视频链接/数据)
+推送视频到用户(用户openid, 视频链接/数据)
+推送文件到群(群openid, 文件链接/数据, [文件名])
+推送文件到用户(用户openid, 文件链接/数据, [文件名])
+```
+
+### 5.4 推送卡片
+
+```php
+推送Ark到群(群openid, 模板ID, kv数组)
+推送Ark到用户(用户openid, 模板ID, kv数组)
+推送图文到群(群openid, "标题", "描述", "图片链接", "跳转链接")
+推送图文到用户(用户openid, "标题", "描述", "图片链接", "跳转链接")
+```
+
+### 5.5 主动推送示例
+
+```php
+<?php
+// 定时推送插件示例
+// 配合 crontab 调用代发接口实现定时推送
+
+// 或者通过插件中检测特定条件后主动推送
+if (消息 == "广播") {
+    // 向所有群推送
+    $groups = db()->fetchAll("SELECT group_id FROM groups WHERE appid = ?", [appid]);
+    foreach ($groups as $g) {
+        推送到群($g['group_id'], "这是一条广播消息");
+    }
+    文字("已向 " . count($groups) . " 个群推送广播");
+}
+?>
+```
+
+---
+
+## 六、官机函数
+
+### 6.1 头像
+
+```php
+头像(用户ID)
+```
+
+返回用户头像 URL。
+
+```php
+$avatarUrl = 头像(用户);
+```
+
+### 6.2 机器人信息
+
+```php
+BOT信息()
+```
+
+返回机器人自身信息（JSON 字符串）。
+
+```php
+$info = json_decode(BOT信息(), true);
+echo $info['username'];  // 机器人昵称
+```
+
+### 6.3 互动判断
+
+```php
+互动私聊()
+```
+
+判断当前互动事件是否来自私聊场景。
+
+```php
+if (消息来源 == "互动") {
+    if (互动私聊()) {
+        文字("这是私聊互动");
+    } else {
+        文字("这是群聊互动");
+    }
+}
+```
+
+### 6.4 互动目标用户
+
+```php
+互动目标用户()
+```
+
+获取互动事件的目标用户ID。
+
+---
+
+## 七、群管理函数
+
+### 7.1 获取群成员
+
+```php
+获取群成员(群openid, 成员openid)
+```
+
+返回指定成员的详细信息。
+
+### 7.2 获取群成员列表
+
+```php
+获取群成员列表(群openid, [每页数量], [分页游标])
+```
+
+### 7.3 获取机器人成员信息
+
+```php
+获取机器人成员(群openid)
+```
+
+获取机器人在群中的成员信息。
+
+### 7.4 生成群分享链接
+
+```php
+分享链接(群openid)
+```
+
+### 7.5 获取图片尺寸
+
+```php
+图片尺寸(图片源)
+```
+
+返回图片的宽、高、类型（数组）。支持 URL、本地路径、base64 数据。
+
+```php
+$size = 图片尺寸("https://example.com/image.png");
+// 返回: ['width'=>750, 'height'=>1334, 'type'=>'image/jpeg']
+```
+
+### 7.6 推送富媒体上传
+
+```php
+推送富媒体(类型, 数据, 目标, 是否群, [文件名])
+```
+
+通用富媒体上传函数，不依赖消息来源常量。
+
+| 参数 | 说明 |
+|------|------|
+| 类型 | "图片"、"视频"、"语音"、"文件" |
+| 数据 | URL 或 base64 数据 |
+| 目标 | 群openid 或 用户openid |
+| 是否群 | true=群, false=用户 |
+| 文件名 | 可选文件名 |
+
+---
+
+## 八、辅助函数
+
+| 函数 | 说明 |
+|------|------|
+| `读(路径, 键, 默认值)` | 读取存储数据（数据库版） |
+| `写(路径, 键, 值)` | 写入存储数据（数据库版） |
+| `删(路径, 键)` | 删除存储数据 |
+| `curl(链接, 方法, 头部, 参数)` | 发送 HTTP 请求 |
+| `二维码(内容)` | 生成二维码图片数据 |
+| `域名大写(文本)` | 将文本中的域名转为大写 |
+| `markdown转html(MD内容)` | 将 Markdown 转为 HTML |
+| `邮箱(标题, 内容, 收件人, 发件人, SMTP授权码)` | 发送邮件（QQ邮箱） |
+| `HTML转图(HTML代码, 宽度, 高度)` | 将 HTML 转为图片链接 |
+| `图片尺寸(图片源)` | 返回图片尺寸信息 |
+| `wlog(内容, [appid])` | 写入系统日志 |
+| `silk(MP3链接)` | 将 MP3 转为 silk 格式 |
+
+### curl 函数
+
+```php
+curl($url, $method, $headers, $params)
+```
+
+| 参数 | 说明 |
+|------|------|
+| $url | 请求URL |
+| $method | "GET"、"POST"、"PUT"、"DELETE" |
+| $headers | 请求头数组，如 `['Content-Type: application/json']` |
+| $params | 请求参数，数组或字符串 |
+
+```php
+// GET请求
+$response = curl("https://api.example.com/data", "GET", [], '');
+
+// POST请求
+$json = json_encode(["key" => "value"]);
+$response = curl("https://api.example.com/data", "POST", ['Content-Type: application/json'], $json);
+```
+
+---
+
+## 九、画布函数
+
+```php
+$h = new 画布();
+$h->创建(宽, 高, [背景色HEX]);          // 创建画布
+$h->贴图($画布, 路径/链接, x, y, 宽, 高, [透明度]);
+$h->文字($画布, 文字内容, 字体大小, x, y, 颜色HEX, 字体路径, [角度]);
+$h->直线($画布, x1, y1, x2, y2, 颜色HEX);
+$h->矩形($画布, 左上x, 左上y, 右下x, 右下y, 颜色HEX);
+$h->填充矩形($画布, 左上x, 左上y, 右下x, 右下y, 颜色HEX);
+$h->圆($画布, 圆心x, 圆心y, 宽, 高, 颜色HEX);
+$h->填充圆($画布, 圆心x, 圆心y, 宽, 高, 颜色HEX);
+$h->输出($画布);                         // 输出为 PNG 数据
+$h->二进制输出($画布);                   // 输出图片原始二进制
+$h->销毁($画布);
+```
+
+### 示例
+
+```php
+<?php
+if (消息 == "画图") {
+    $gd = new 画布();
+    $img = $gd->创建(600, 400, "#FFFFFF");
+    $gd->文字($img, "你好，世界", 24, 50, 80, "#000000", "/path/to/font.ttf");
+    $gd->矩形($img, 50, 50, 550, 350, "#FF0000");
+    $pngData = $gd->二进制输出($img);
+    图片($pngData, "画布图片");
+    $gd->销毁($img);
+}
+?>
+```
+
+---
+
+## 十、事件类型与处理
+
+### 10.1 支持的事件类型
+
+| 事件类型 | 消息来源 | 说明 |
+|----------|----------|------|
+| GROUP_AT_MESSAGE_CREATE | 群聊 | 群聊@机器人消息 |
+| GROUP_MESSAGE_CREATE | 群聊 | 群聊全量消息（需开通权限） |
+| C2C_MESSAGE_CREATE | 私聊 | 私聊消息 |
+| INTERACTION_CREATE | 互动 | 按钮点击/交互回调 |
+| GROUP_ADD_ROBOT | 加群 | 机器人被加入群 |
+| GROUP_DEL_ROBOT | 退群 | 机器人被移出群 |
+| GROUP_MEMBER_ADD | 群成员增加 | 群成员入群 |
+| GROUP_MEMBER_REMOVE | 群成员移除 | 群成员退群/被移出 |
+
+### 10.2 @消息处理
+
+框架在 WH 和 WS 两种模式下都支持 @ 消息处理：
+
+- **内容清洗**：自动去除消息内容中的 `<@!?id>` 标记，插件收到的 `消息` 常量已去除 @ 前缀
+- **用户识别**：优先使用 `member_openid`，兜底使用 `author.id`
+- **群识别**：优先使用 `group_openid`，兜底使用 `group_id`
+- **mentions 数组**：通过 `raw["d"]["mentions"]` 可获取完整的 @ 提及列表
+
+```php
+<?php
+// 检查是否被@
+if (消息来源 == "群聊") {
+    $mentions = raw["d"]["mentions"] ?? [];
+    foreach ($mentions as $mention) {
+        if ($mention["is_you"] ?? false) {
+            文字("你@了我！");
+            break;
+        }
+    }
+}
+?>
+```
+
+### 10.3 群成员变动事件
+
+```php
+<?php
+// 群成员入群欢迎
+if (消息来源 == "群成员增加") {
+    文字("欢迎新成员加入群聊！");
+}
+
+// 群成员退群提示
+if (消息来源 == "群成员移除") {
+    // 可以记录退群统计
+    写("统计/" . appid, "member_leave_" . 来源 . "_" . date("Y-m-d"), 时间戳());
+}
+?>
+```
+
+### 10.4 互动事件处理
+
+```php
+<?php
+if (消息来源 == "互动") {
+    // 确认互动（ACK）
+    确认互动(事件ID);
+    
+    // 获取按钮数据
+    $buttonData = 消息;
+    
+    // 判断是群聊还是私聊互动
+    if (互动私聊()) {
+        文字("私聊互动: " . $buttonData);
+    } else {
+        文字("群聊互动: " . $buttonData);
+    }
+}
+?>
+```
+
+---
+
+## 十一、WebHook 模式
+
+### 11.1 工作原理
+
+WebHook 模式下，QQ 平台通过 HTTP POST 请求将事件推送到框架的 `index.php` 入口。
+
+- 事件入口：`index.php`
+- 签名验证：使用 Ed25519 签名验证（op=13）
+- 事件去重：基于事件ID（顶层id），5分钟内重复事件自动跳过
+- 事件分发：解析事件类型 → 定义全局常量 → 记录数据库 → 加载 bot.php → 加载插件
+
+### 11.2 WH 模式 @ 消息处理
+
+WH 模式已完整支持 @ 消息处理，与 WS 模式逻辑完全一致：
+
+1. **内容清洗**：去除消息中的 @ 标记（`<@!?id>` 格式）
+2. **字段映射**：`group_openid` 优先，`group_id` 兜底；`member_openid` 优先，`id` 兜底
+3. **互动解析**：根据 `chat_type` 和 `scene` 判断群聊/私聊
+
+### 11.3 WH 配置
+
+1. 在 QQ 开放平台配置 WebHook 回调地址为 `https://你的域名/index.php`
+2. 在管理后台添加机器人（AppID + Secret）
+3. 确保 PHP 已安装 `sodium` 扩展（用于签名验证）
+
+### 11.4 WH 事件流程
+
+```
+QQ平台 → POST index.php
+  ├── 验证签名 (op=13) → 返回签名
+  ├── 事件去重 (op=0, id)
+  ├── 记录原始事件到数据库
+  ├── Main($raw) → 解析事件类型
+  │     ├── 定义常量 (消息来源, 消息, 来源, 用户, 等)
+  │     ├── 记录消息到数据库 (recordIncomingMessage)
+  │     ├── 加载 bot.php
+  │     └── 加载插件 (load_plugin)
+  └── 返回响应
+```
+
+---
+
+## 十二、WebSocket 模式
+
+### 12.1 WebSocket vs WebHook
+
+| 模式 | 特点 | 适用场景 |
+|------|------|----------|
+| WebSocket | 长连接，需处理心跳，实时性高 | 需要主动推送、低延迟 |
+| WebHook | HTTP 被动接收，无需维护连接 | 简单部署、无服务器常驻 |
+
+两种模式都支持完整的 @ 消息处理、事件解析和插件加载，逻辑完全一致。
+
+### 12.2 WebSocket 启动
+
+```bash
+# 连接单个机器人
+php ws_client.php 你的appid
+
+# 连接所有已启用WS的机器人
+php ws_client.php
+```
+
+### 12.3 WebSocket 架构
+
+- `ws_client.php`：主进程，负责 WebSocket 连接和心跳
+- `ws_event_handler.php`：子进程，处理单个事件
+- 每个事件在独立子进程中处理，确保：
+  - 常量隔离（`define` 不会冲突）
+  - `require_once` 正常工作
+  - 插件错误不影响 WS 连接稳定性
+  - 内存自动回收
+
+### 12.4 WebSocket 事件流程
+
+```
+WS连接 → 收到事件 (op=0)
+  ├── 事件去重 (id)
+  ├── 记录原始事件
+  ├── exec ws_event_handler.php <appid> <event_json>
+  │     ├── 初始化常量 (appid, secret, type)
+  │     ├── 解析事件类型 → 定义消息常量
+  │     ├── 记录用户/群组
+  │     ├── 记录消息到数据库
+  │     ├── 加载 bot.php
+  │     └── 加载插件
+  └── 继续监听
+```
+
+### 12.5 在管理后台启用 WS
+
+在机器人设置中启用 `ws_enabled`，然后通过命令行启动 `ws_client.php`。
+
+---
+
+## 十三、聊天管理界面
+
+### 13.1 功能概览
+
+管理后台聊天界面（`admin/chat.php`）提供以下功能：
+
+- **会话列表**：显示所有群聊/私聊会话，按最后活跃时间排序
+- **消息记录**：查看完整聊天记录，支持图片/视频/语音/文件渲染
+- **发送消息**：支持多种消息类型（文字/MD/图片/语音/视频/文件）
+- **@提及**：输入 `@` 可弹出群成员列表，选择后插入 @ 提及
+- **引用消息**：点击消息的"引用"按钮，可引用回复该消息
+- **撤回消息**：点击消息的"撤回"按钮，撤回指定消息
+- **系统事件显示**：群成员退出/加入等事件以系统通知样式显示
+- **昵称/备注**：支持设置用户备注和群备注，优先显示备注名
+- **自定义头像**：支持设置群自定义头像
+
+### 13.2 发送方式选择
+
+在聊天输入区上方有发送类型选择栏：
+
+| 类型 | 说明 |
+|------|------|
+| 文字 | 纯文本消息（msg_type=0） |
+| MD | Markdown 消息（msg_type=2） |
+| 图片 | 发送图片URL（msg_type=7） |
+| 语音 | 发送语音URL（自动转silk） |
+| 视频 | 发送视频URL（msg_type=7） |
+| 文件 | 发送文件URL（msg_type=7） |
+
+### 13.3 系统事件显示
+
+群聊视图中会自动显示以下系统事件：
+
+| 事件 | 图标 | 显示文本 |
+|------|------|----------|
+| 群成员退出 | 👋 | 用户名 退出了群聊 |
+| 群成员被移出 | 🚫 | 用户名 被移出群聊 |
+| 机器人加群 | 🎉 | 机器人加入群聊 |
+| 群成员入群 | ➕ | 用户名 加入群聊 |
+
+系统事件以居中的系统通知样式显示，区别于普通聊天消息。
+
+---
+
+## 十四、代发功能
+
+用于外部脚本（定时任务、其他项目、Ajax）主动调用机器人发消息。
+
+### 14.1 请求方式
+
+POST 到机器人入口文件（`index.php`），Content-Type: application/json
+
+### 14.2 请求格式
+
+```json
+{
+    "type": "代发",
+    "op": "send",
+    "data": {
+        "appid": "目标机器人AppID（可选）",
+        "address": "/v2/groups/{group_openid}/messages",
+        "method": "POST",
+        "body": { "content": "消息内容", "msg_type": 0, "msg_seq": 12345 }
+    }
+}
+```
+
+### 14.3 PHP 调用示例
+
+```php
+<?php
+$ch = curl_init("https://你的域名/index.php");
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+    'type' => '代发',
+    'op' => 'send',
+    'data' => [
+        'address' => '/v2/groups/群openid/messages',
+        'body' => ['content' => '定时任务消息', 'msg_type' => 0, 'msg_seq' => rand(1,99999)]
+    ]
+]));
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+$response = curl_exec($ch);
+curl_close($ch);
+?>
+```
+
+### 14.4 Crontab 示例
+
+```bash
+# 每天早上9点推送
+0 9 * * * curl -X POST https://你的域名/index.php \
+  -H "Content-Type: application/json" \
+  -d '{"type":"代发","op":"send","data":{"address":"/v2/groups/xxx/messages","body":{"content":"早安","msg_type":0,"msg_seq":1}}}'
+```
+
+---
+
+## 十五、数据存储结构
+
+框架使用 SQLite 数据库，主要存储表：
+
+| 表名 | 说明 |
+|------|------|
+| kv_store | 通用键值存储（`读()`/`写()` 使用） |
+| messages | 消息日志（收发记录） |
+| system_logs | 系统日志 |
+| bots | 机器人配置 |
+| users | 用户信息 |
+| groups | 群组信息 |
+| sessions | 会话管理 |
+| plugin_status | 插件启用状态 |
+| event_dedup | 事件去重记录 |
+
+### 15.1 常用查询
+
+```sql
+-- 查看所有存储数据
+SELECT * FROM kv_store;
+
+-- 查看特定功能的存储
+SELECT * FROM kv_store WHERE namespace LIKE '签到%';
+
+-- 查看特定用户的存储
+SELECT * FROM kv_store WHERE key LIKE '%用户ID%';
+
+-- 查看系统日志
+SELECT * FROM system_logs ORDER BY created_at DESC LIMIT 20;
+
+-- 查看消息记录
+SELECT * FROM messages ORDER BY created_at DESC LIMIT 50;
+
+-- 查看群成员退出事件
+SELECT * FROM messages WHERE source_type IN ('退群', '群成员移除') ORDER BY created_at DESC;
+```
+
+---
+
+## 十六、插件示例
+
+### 16.1 签到插件
+
+```php
+<?php
+if (消息 == "#签到") {
+    $today = date("Y-m-d");
+    $signKey = "sign_" . 用户 . "_" . $today;
+    $hasSigned = 读("签到/" . appid, $signKey, false);
+    
+    if ($hasSigned) {
+        文字("❌ 今天已经签到过了！\n\n📅 签到日期: " . $today);
+        return;
+    }
+    
+    写("签到/" . appid, $signKey, true);
+    
+    $points = mt_rand(1, 100);
+    $totalKey = "sign_total_" . 用户;
+    $totalPoints = 读("签到/" . appid, $totalKey, 0);
+    $totalPoints += $points;
+    写("签到/" . appid, $totalKey, $totalPoints);
+    
+    文字("✅ 签到成功！\n\n📅 签到日期: " . $today . "\n🎁 获得积分: " . $points . "\n📊 累计积分: " . $totalPoints);
+    return;
+}
+
+if (消息 == "#积分") {
+    $totalPoints = 读("签到/" . appid, "sign_total_" . 用户, 0);
+    文字("📊 您的累计积分: " . $totalPoints);
+    return;
+}
+?>
+```
+
+### 16.2 点歌插件
+
+```php
+<?php
+// 插件：点歌系统
+// 命令：点歌 歌曲名  - 搜索歌曲列表
+//      播放 序号    - 播放列表中第N首
+
+// 点歌命令
+if (strpos(消息, "点歌") === 0) {
+    $keyword = trim(substr(消息, strlen("点歌")));
+    if (empty($keyword)) {
+        文字("🎵 请输入歌曲名称\n例如：点歌 仙逆");
+        return;
+    }
+
+    $api_url = "https://jcy.meiaodai.xyz/api/api/qsyy.php?msg=" . urlencode($keyword);
+    文字("⏳ 正在搜索《{$keyword}》相关歌曲...");
+
+    $response = curl($api_url, "GET", [], '');
+    $data = json_decode($response, true);
+    
+    if (!$data || $data['code'] != 200 || empty($data['data'])) {
+        文字("❌ 未找到《{$keyword}》的相关歌曲");
+        return;
+    }
+
+    $songs = $data['data'];
+    // 使用框架命名空间存储（数组自动序列化，无需 json_encode）
+    写("点歌/" . appid, "history_" . 用户, $songs);
+
+    $result = "🎵 找到 " . count($songs) . " 首《{$keyword}》相关歌曲\n\n📋 歌曲列表：\n";
+    $display_count = min(30, count($songs));
+    for ($i = 0; $i < $display_count; $i++) {
+        $song = $songs[$i];
+        $result .= "{$song['n']}. {$song['title']} - {$song['singer']}\n";
+    }
+    $result .= "\n💡 发送「播放 序号」播放对应歌曲";
+    文字($result);
+    return;
+}
+
+// 播放命令
+if (strpos(消息, "播放") === 0) {
+    $input = trim(substr(消息, strlen("播放")));
+    if (!is_numeric($input)) {
+        文字("🎵 使用方式: 播放 [序号]");
+        return;
+    }
+
+    $songs = 读("点歌/" . appid, "history_" . 用户, []);
+    if (empty($songs)) {
+        文字("❌ 请先使用「点歌」指令搜索歌曲");
+        return;
+    }
+    $song_num = (int)$input;
+    $selected_song = null;
+    foreach ($songs as $song) {
+        if ($song['n'] == $song_num) {
+            $selected_song = $song;
+            break;
+        }
+    }
+
+    if (!$selected_song) {
+        文字("❌ 未找到序号为 {$song_num} 的歌曲");
+        return;
+    }
+
+    $detail_url = "https://jcy.meiaodai.xyz/api/api/qsyy.php?msg=" . urlencode($selected_song['title']) . "&n=" . $selected_song['n'];
+    文字("🔍 正在获取《{$selected_song['title']}》...");
+
+    $response = curl($detail_url, "GET", [], '');
+    $detail = json_decode($response, true);
+    
+    if (!$detail || empty($detail['music'])) {
+        文字("❌ 获取失败: " . ($detail['msg'] ?? "未知错误"));
+        return;
+    }
+
+    // 发送封面和音频
+    if (!empty($detail['cover'])) {
+        图片($detail['cover'], $detail['title'] . " - " . $detail['singer']);
+    }
+    语音($detail['music']);
+    return;
+}
+?>
+```
+
+### 16.3 群成员变动通知插件
+
+```php
+<?php
+// 群成员入群欢迎
+if (消息来源 == "群成员增加") {
+    文字("🎉 欢迎新成员加入群聊！");
+    return;
+}
+
+// 群成员退群记录
+if (消息来源 == "群成员移除") {
+    // 记录退群统计
+    $today = date("Y-m-d");
+    $leaveCount = 读("统计/" . appid, "leave_" . 来源 . "_" . $today, 0);
+    写("统计/" . appid, "leave_" . 来源 . "_" . $today, $leaveCount + 1);
+    return;
+}
+
+// 查询退群统计
+if (消息 == "退群统计") {
+    $today = date("Y-m-d");
+    $count = 读("统计/" . appid, "leave_" . 来源 . "_" . $today, 0);
+    文字("📊 今日退群人数: " . $count);
+    return;
+}
+?>
+```
+
+---
+
+## 十七、开发注意事项
+
+1. **数据隔离**：始终使用 `"功能名/" . appid` 作为命名空间，避免不同机器人数据冲突
+2. **用户隔离**：键名中包含用户ID，避免不同用户数据混淆
+3. **错误处理**：关键操作添加 `wlog()` 记录，方便排查问题
+4. **消息长度**：单条消息不要超过2000字符，长内容请分段发送
+5. **频率限制**：注意QQ API的频率限制，避免发送过于频繁
+6. **return 语句**：插件中使用 `return;` 阻止后续代码执行，避免一个消息触发多个插件逻辑
+7. **函数存在检查**：如果定义了自定义函数，使用 `function_exists()` 检查避免重复定义
+8. **mbstring 兼容**：框架提供 `mb_substr`、`mb_strlen` 等函数的兼容层，但 `mb_str_split` 需要自行处理
+9. **curl 超时**：框架的 `curl()` 函数默认30秒超时，不支持自定义超时参数
+10. **主动消息**：主动推送函数不包含 `msg_id`/`event_id`，适合定时任务和跨会话推送
+
+---
+
+## 十八、常见问题排查
+
+### 1. 插件不执行
+
+- 检查文件是否在 `plugin/` 目录，扩展名为 `.php`
+- 检查 `plugin_status` 表，确保插件未被禁用
+- 在插件开头添加 `wlog("插件已加载", appid);` 查看日志
+
+### 2. 数据读不到
+
+- 确认 `写()` 和 `读()` 使用相同的路径和键名
+- 检查数据是否被其他插件覆盖
+- 使用 SQL 查询直接查看数据库内容
+
+### 3. 发送消息失败
+
+- 检查机器人是否有权限（群聊/私聊）
+- 查看 `system_logs` 中的错误信息
+- 确认 AppID 和 Secret 配置正确
+- 检查 `msg_id` 是否过期（5分钟时效限制）
+
+### 4. WH 模式收不到消息
+
+- 确保服务器可公网访问
+- 检查签名验证（sodium 扩展是否安装）
+- 查看 `system_logs` 是否有请求记录
+- 确认回调地址配置正确
+
+### 5. WS 模式断线
+
+- 检查网络连接
+- 查看 `ws_client.php` 输出日志
+- 确认机器人在管理后台启用了 WS
+- 检查 Access Token 是否正常获取
+
+### 6. @消息不触发
+
+- WH 模式：确认回调地址正确，且已通过签名验证
+- WS 模式：确认 WebSocket 连接正常
+- 检查 `消息` 常量是否已去除 @ 前缀（框架自动处理）
+- 群聊需@机器人才会收到 GROUP_AT_MESSAGE_CREATE 事件
+
+### 7. 群成员退出不显示
+
+- 确认事件类型为 GROUP_MEMBER_REMOVE
+- 检查数据库 messages 表中 source_type 是否为"群成员移除"
+- 聊天界面会自动将系统事件归入群聊会话显示
