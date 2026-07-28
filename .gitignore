@@ -1,0 +1,13 @@
+# Build/screenshot tooling (not part of project source)
+_build/
+_chrome/
+_shot/
+extracted/
+screenshots/
+
+# Runtime-generated files (created at first run, not source)
+project/main.json
+project/database/
+project/Log/
+project/plugin/*
+!project/plugin/ws全能测试.php
