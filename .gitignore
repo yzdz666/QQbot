@@ -1,0 +1,18 @@
+# 数据文件
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.pid
+data/*.flag
+data/logs/
+
+# 临时文件
+*.tmp
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
