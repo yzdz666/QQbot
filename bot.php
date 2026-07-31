@@ -120,7 +120,6 @@ function 文字($content) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $json = json_encode([
         "content" => "{$content}",
         "msg_type" => 0,
@@ -128,6 +127,24 @@ function 文字($content) {
         "msg_seq" => rand(1,99999)
          ]);
          $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送文字", 来源, $content, "文字", $messageId, $resp);
+         return $resp;
+         break;
+     case "互动":
+        $json = json_encode([
+        "content" => "{$content}",
+        "msg_type" => 0,
+        "event_id" => 事件ID,
+        "msg_seq" => rand(1,99999)
+         ]);
+         // 互动私聊发送到用户端点，群互动发送到群端点
+         if (互动私聊()) {
+             $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+         } else {
+             $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         }
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送文字", 来源, $content, "文字", $messageId, $resp);
@@ -230,7 +247,6 @@ function 图片($image,$content=null) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $file_info =富媒体("图片",$image);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -244,6 +260,29 @@ function 图片($image,$content=null) {
         "media" => ["file_info" => $file]
         ]);
         $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+        $data = json_decode($resp, true);
+        $messageId = $data['id'] ?? '';
+        记录发送("发送图片", 来源, $logContent, "图片", $messageId, $resp);
+        return $resp;
+        break;
+     case "互动":
+        $file_info =富媒体("图片",$image);
+        if (isset($file_info['message'])) {
+          return 文字($file_info['message']);
+        }
+        $file = $file_info['file_info'];
+        $json = json_encode([
+        "content" => "{$content}",
+        "msg_type" => 7,
+        "event_id" => 事件ID,
+        "msg_seq" => mt_rand(1, 9999),
+        "media" => ["file_info" => $file]
+        ]);
+        if (互动私聊()) {
+           $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+        } else {
+           $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+        }
         $data = json_decode($resp, true);
         $messageId = $data['id'] ?? '';
         记录发送("发送图片", 来源, $logContent, "图片", $messageId, $resp);
@@ -316,7 +355,6 @@ function 本地语音($yy) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
       $file_info = 富媒体("语音",$yy);
           if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -329,6 +367,28 @@ function 本地语音($yy) {
           "media" => ["file_info" => $file]
          ]);
          $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送本地语音", 来源, $logContent, "语音", $messageId, $resp);
+         return $resp;
+         break;
+     case "互动":
+      $file_info = 富媒体("语音",$yy);
+          if (isset($file_info['message'])) {
+         return 文字($file_info['message']);
+        }
+        $file = $file_info['file_info'];
+        $json = json_encode([
+          "msg_type" => 7,
+          "event_id" => 事件ID,
+          "msg_seq" => mt_rand(1, 9999),
+          "media" => ["file_info" => $file]
+         ]);
+         if (互动私聊()) {
+            $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+         } else {
+            $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         }
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送本地语音", 来源, $logContent, "语音", $messageId, $resp);
@@ -382,7 +442,6 @@ function 语音($yy) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
@@ -396,6 +455,29 @@ function 语音($yy) {
           "media" => ["file_info" => $file]
          ]);
          $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送语音", 来源, $logContent, "语音", $messageId, $resp);
+         return $resp;
+         break;
+     case "互动":
+        $silk = silk($yy);
+        $file_info = 富媒体("语音",$silk);
+        if (isset($file_info['message'])) {
+         return 文字($file_info['message']);
+        }
+        $file = $file_info['file_info'];
+        $json = json_encode([
+          "msg_type" => 7,
+          "event_id" => 事件ID,
+          "msg_seq" => mt_rand(1, 9999),
+          "media" => ["file_info" => $file]
+         ]);
+         if (互动私聊()) {
+            $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+         } else {
+            $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         }
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送语音", 来源, $logContent, "语音", $messageId, $resp);
@@ -462,7 +544,6 @@ function 文件($yy, $nm = null) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $file_info = 富媒体("文件",$yy,$nm);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -475,6 +556,28 @@ function 文件($yy, $nm = null) {
           "media" => ["file_info" => $file]
          ]);
          $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送文件", 来源, $logContent, "文件", $messageId, $resp);
+         return $resp;
+         break;
+     case "互动":
+        $file_info = 富媒体("文件",$yy,$nm);
+        if (isset($file_info['message'])) {
+          return 文字($file_info['message']);
+        }
+        $file = $file_info['file_info'];
+        $json = json_encode([
+          "msg_type" => 7,
+          "event_id" => 事件ID,
+          "msg_seq" => mt_rand(1, 9999),
+          "media" => ["file_info" => $file]
+         ]);
+         if (互动私聊()) {
+            $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+         } else {
+            $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         }
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送文件", 来源, $logContent, "文件", $messageId, $resp);
@@ -527,7 +630,6 @@ function 视频($video) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $file_info =富媒体("视频",$video);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -540,6 +642,28 @@ function 视频($video) {
         "media" => ["file_info" => $file]
         ]);
         $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+        $data = json_decode($resp, true);
+        $messageId = $data['id'] ?? '';
+        记录发送("发送视频", 来源, $logContent, "视频", $messageId, $resp);
+        return $resp;
+        break;
+     case "互动":
+        $file_info =富媒体("视频",$video);
+        if (isset($file_info['message'])) {
+          return 文字($file_info['message']);
+        }
+        $file = $file_info['file_info'];
+        $json = json_encode([
+        "msg_type" => 7,
+        "event_id" => 事件ID,
+        "msg_seq" => mt_rand(1, 9999),
+        "media" => ["file_info" => $file]
+        ]);
+        if (互动私聊()) {
+            $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+        } else {
+            $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+        }
         $data = json_decode($resp, true);
         $messageId = $data['id'] ?? '';
         记录发送("发送视频", 来源, $logContent, "视频", $messageId, $resp);
@@ -585,7 +709,6 @@ function 按钮($key) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
-     case "互动":
         $json = json_encode([
          "msg_type" => 2,
          "event_id" => 事件ID,
@@ -595,6 +718,25 @@ function 按钮($key) {
            ]
          ]);
          $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送按钮", 来源, "[按钮ID: {$key}]", "按钮", $messageId, $resp);
+         return $resp;
+         break;
+     case "互动":
+        $json = json_encode([
+         "msg_type" => 2,
+         "event_id" => 事件ID,
+         "msg_seq" => mt_rand(1, 9999),
+         "keyboard" => [
+           "id" => $key
+           ]
+         ]);
+         if (互动私聊()) {
+            $resp = BOTAPI("/v2/users/".互动目标用户()."/messages","POST",$json);
+         } else {
+            $resp = BOTAPI("/v2/groups/".来源."/messages","POST",$json);
+         }
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送按钮", 来源, "[按钮ID: {$key}]", "按钮", $messageId, $resp);
@@ -677,9 +819,20 @@ function 文卡(...$items) {
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
-         case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           $data = json_decode($resp, true);
+           $messageId = $data['id'] ?? '';
+           记录发送("发送文卡", 来源, $wenkaLogJson, "Ark", $messageId, $resp);
+           return $resp;
+         break;
+         case "互动":
+           $json["event_id"] = 事件ID;
+           if (互动私聊()) {
+               $resp = BOTAPI("/v2/users/".互动目标用户()."/messages", "POST", json_encode($json));
+           } else {
+               $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           }
            $data = json_decode($resp, true);
            $messageId = $data['id'] ?? '';
            记录发送("发送文卡", 来源, $wenkaLogJson, "Ark", $messageId, $resp);
@@ -732,9 +885,20 @@ function 大图($title,$xtitle,$iurl){
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
-         case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           $data = json_decode($resp, true);
+           $messageId = $data['id'] ?? '';
+           记录发送("发送大图卡片", 来源, $datuLogJson, "Ark", $messageId, $resp);
+           return $resp;
+         break;
+         case "互动":
+           $json["event_id"] = 事件ID;
+           if (互动私聊()) {
+               $resp = BOTAPI("/v2/users/".互动目标用户()."/messages", "POST", json_encode($json));
+           } else {
+               $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           }
            $data = json_decode($resp, true);
            $messageId = $data['id'] ?? '';
            记录发送("发送大图卡片", 来源, $datuLogJson, "Ark", $messageId, $resp);
@@ -790,9 +954,20 @@ function 跳转卡($title,$desc,$image,$tz){
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
-         case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           $data = json_decode($resp, true);
+           $messageId = $data['id'] ?? '';
+           记录发送("发送跳转卡片", 来源, $tzLogJson, "Ark", $messageId, $resp);
+           return $resp;
+         break;
+         case "互动":
+           $json["event_id"] = 事件ID;
+           if (互动私聊()) {
+               $resp = BOTAPI("/v2/users/".互动目标用户()."/messages", "POST", json_encode($json));
+           } else {
+               $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
+           }
            $data = json_decode($resp, true);
            $messageId = $data['id'] ?? '';
            记录发送("发送跳转卡片", 来源, $tzLogJson, "Ark", $messageId, $resp);
@@ -892,10 +1067,18 @@ function 引用($msgId, $content = '') {
         case "退群":
         case "群成员增加":
         case "群成员移除":
-        case "互动":
             $payload["event_id"] = 事件ID;
             $payload["msg_seq"] = rand(1, 99999);
             $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
+            break;
+        case "互动":
+            $payload["event_id"] = 事件ID;
+            $payload["msg_seq"] = rand(1, 99999);
+            if (互动私聊()) {
+                $resp = BOTAPI("/v2/users/".互动目标用户()."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
+            } else {
+                $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
+            }
             break;
             
         case "文字子频道":
@@ -1081,8 +1264,14 @@ function 发MD($template_id, $params, $keyboard_id = null, $style = null) {
         case "退群":
         case "群成员增加":   // 新增
         case "群成员移除":   // 新增
-        case "互动":
             $api_url = "/v2/groups/" . 来源 . "/messages";
+            break;
+        case "互动":
+            if (互动私聊()) {
+                $api_url = "/v2/users/" . 互动目标用户() . "/messages";
+            } else {
+                $api_url = "/v2/groups/" . 来源 . "/messages";
+            }
             break;
         case "私聊":
             $api_url = "/v2/users/" . 来源 . "/messages";
@@ -1132,8 +1321,14 @@ function Emoji($emojiId, $content = '') {
         case "退群":
         case "群成员增加":
         case "群成员移除":
-        case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
+            break;
+        case "互动":
+            if (互动私聊()) {
+                $api = "/v2/users/" . 互动目标用户() . "/messages";
+            } else {
+                $api = "/v2/groups/" . 来源 . "/messages";
+            }
             break;
         case "私聊":
             $api = "/v2/users/" . 来源 . "/messages";
@@ -1204,8 +1399,14 @@ function Ark23($kv) {
         case "退群":
         case "群成员增加":
         case "群成员移除":
-        case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
+            break;
+        case "互动":
+            if (互动私聊()) {
+                $api = "/v2/users/" . 互动目标用户() . "/messages";
+            } else {
+                $api = "/v2/groups/" . 来源 . "/messages";
+            }
             break;
         case "私聊":
             $api = "/v2/users/" . 来源 . "/messages";
@@ -1253,8 +1454,14 @@ function Ark($template_id, $kv) {
         case "退群":
         case "群成员增加":
         case "群成员移除":
-        case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
+            break;
+        case "互动":
+            if (互动私聊()) {
+                $api = "/v2/users/" . 互动目标用户() . "/messages";
+            } else {
+                $api = "/v2/groups/" . 来源 . "/messages";
+            }
             break;
         case "私聊":
             $api = "/v2/users/" . 来源 . "/messages";

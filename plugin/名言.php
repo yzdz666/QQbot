@@ -373,38 +373,37 @@ if (消息 == "测试撤回") {
 }
 
 // ==================== 处理原生按钮点击（互动事件） ====================
+// 参照 ElainaBot_v2: button_data 提取为 event.content (即 消息 常量)
+// 插件可通过 消息(button_data) 或 button_id 匹配回调
 if (消息来源 == "互动") {
     $buttonId = raw["d"]["data"]["resolved"]["button_id"] ?? "";
-    $buttonData = raw["d"]["data"]["resolved"]["data"] ?? "";
-    
+    // 修正: 使用 button_data 而非 data (与 ElainaBot_v2 InteractionParser 一致)
+    $buttonData = raw["d"]["data"]["resolved"]["button_data"] ?? "";
+    // 消息 常量已包含 button_data，可直接用于匹配
+    $callbackData = 消息;
+
     // 调试日志
-    wlog('[调试] 按钮点击 - ID: ' . $buttonId . ', Data: ' . $buttonData, appid);
-    
-    // 根据按钮ID或按钮data响应
-    $responseData = $buttonData ?: $buttonId;
-    
-    switch ($buttonId) {
-        case "nb_1":
+    wlog('[调试] 按钮点击 - ID: ' . $buttonId . ', Data: ' . $buttonData . ', 消息: ' . $callbackData, appid);
+
+    // 优先通过 button_data (消息常量) 匹配，其次通过 button_id 匹配
+    switch (true) {
+        case $callbackData === "按钮1数据" || $buttonId === "nb_1":
             文字("✅ 操作成功！您点击了按钮1\n\n📦 回调数据: " . $buttonData);
             break;
-        case "nb_2":
+        case $callbackData === "按钮2数据" || $buttonId === "nb_2":
             文字("✅ 操作成功！您点击了按钮2\n\n📦 回调数据: " . $buttonData);
             break;
-        case "nb_3":
+        case $callbackData === "按钮3数据" || $buttonId === "nb_3":
             文字("✅ 操作成功！您点击了按钮3\n\n📦 回调数据: " . $buttonData);
             break;
-        case "confirm_btn":
+        case $callbackData === "confirm" || $buttonId === "confirm_btn":
             文字("✅ 已确认操作");
             break;
-        case "cancel_btn":
+        case $callbackData === "cancel" || $buttonId === "cancel_btn":
             文字("❌ 已取消操作");
             break;
         default:
-            // 如果没有匹配的按钮ID，尝试根据data响应
-            if (!empty($buttonData) && $buttonData !== 'confirm' && $buttonData !== 'cancel') {
-                // 直接发送按钮data作为消息触发对应功能
-                // 这里不做处理，让其他插件处理
-            }
+            // 未匹配的回调，让其他插件处理
             break;
     }
     return;

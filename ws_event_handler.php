@@ -113,7 +113,7 @@ switch ($eventType) {
         }
         // 互动内容: 参照 Python InteractionParser -> resolved.button_data
         $buttonData = $d['data']['resolved']['button_data'] ?? '';
-        define('消息', $buttonData);
+        define('消息', $buttonData ?: '[互动]');
         break;
 
     case 'GROUP_ADD_ROBOT':

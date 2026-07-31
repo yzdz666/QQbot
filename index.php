@@ -292,9 +292,30 @@ function Main($raw) {
     // 记录到数据库（增强功能）
     recordIncomingMessage($event, $raw);
 
-    // 按钮互动需要快速 ACK
-    if (($raw["t"] ?? "") === "INTERACTION_CREATE" && function_exists('fastcgi_finish_request')) {
-        @fastcgi_finish_request();
+    // ==================== WebHook模式回调按钮ACK ====================
+    // QQ平台要求收到 INTERACTION_CREATE 后必须在HTTP响应中返回 {"op": 12, "code": 0}
+    // 参照 ElainaBot_v2 webhook.py: return web.json_response({'op': 12, 'code': code})
+    if (($raw["t"] ?? "") === "INTERACTION_CREATE") {
+        // 清空之前的输出缓冲区内容
+        ob_end_clean();
+
+        // 设置响应头并输出ACK
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+        }
+        echo json_encode(["op" => 12, "code" => 0], JSON_UNESCAPED_UNICODE);
+
+        // 刷新输出到客户端，让QQ平台尽快收到ACK
+        if (function_exists('fastcgi_finish_request')) {
+            // FastCGI模式: 发送响应并关闭连接，后续插件处理不影响响应
+            @fastcgi_finish_request();
+        } else {
+            // 非FastCGI环境(如PHP内置服务器): 尝试刷新缓冲区
+            @flush();
+        }
+
+        // 重新开始输出缓冲区，捕获后续插件输出（避免污染ACK响应）
+        ob_start();
     }
 
     // 加载bot.php和插件（与原版一致：在Main内加载）
