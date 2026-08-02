@@ -96,7 +96,9 @@ switch ($eventType) {
 
     case 'INTERACTION_CREATE':
         define('消息来源', '互动');
-        define('事件ID', $raw['id'] ?? ($d['id'] ?? ''));
+        // 参照 ElainaBot_v2 InteractionParser: event.message_id = d.get('id', '')
+        // 官方文档: interaction_id 从 INTERACTION_CREATE 事件 d.id 字段获取 (非顶层 raw.id)
+        define('事件ID', $d['id'] ?? ($raw['id'] ?? ''));
         // 参照 Python InteractionParser: 根据 chat_type/scene 判断群聊/私聊
         $chatType = $d['chat_type'] ?? null;
         $scene = $d['scene'] ?? '';
@@ -113,7 +115,7 @@ switch ($eventType) {
         }
         // 互动内容: 参照 Python InteractionParser -> resolved.button_data
         $buttonData = $d['data']['resolved']['button_data'] ?? '';
-        define('消息', $buttonData ?: '[互动]');
+        define('消息', $buttonData);
         break;
 
     case 'GROUP_ADD_ROBOT':
@@ -218,6 +220,15 @@ define('plugin', $pluginConfig);
 
 // ==================== 加载 bot.php ====================
 require __DIR__ . '/bot.php';
+
+// ==================== 互动回调确认 (在插件加载前执行, 确保及时响应) ====================
+// 官方文档: 收到 INTERACTION_CREATE 事件后需调用 PUT /interactions/{interaction_id} 回应
+// 否则客户端会一直 loading 直到超时 (显示"请求第三方失败")
+// 必须在插件加载前执行, 避免插件处理耗时导致超时
+// interaction_id 从事件 d.id 获取 (非顶层 raw.id)
+if ($eventType === 'INTERACTION_CREATE' && defined('事件ID') && 事件ID) {
+    确认互动(事件ID);
+}
 
 // ==================== 加载插件 ====================
 // 与 index.php load_plugin 一致

@@ -376,10 +376,16 @@ class WebSocketClient {
 
         echo "[" . date('Y-m-d H:i:s') . "] 收到事件: {$eventType}\n";
 
-        // 互动事件立即发送 ACK (对应 Python: event.start_ack_countdown() + _fire_default_ack 超时兜底)
-        // code=0 表示成功, 不等待子进程 (PHP子进程无法回传code, 直接用默认值)
+        // 互动事件: 立即通过 HTTP PUT /interactions/{id} 确认, 不等待子进程
+        // 官方文档: 收到 INTERACTION_CREATE 事件后需调用 PUT /interactions/{interaction_id} 回应
+        // 否则客户端会一直 loading 直到超时 (显示"请求第三方失败")
+        // 注意: OP 12 (HTTP Callback ACK) 仅用于 webhook 模式, WebSocket 模式不可使用
+        // interaction_id 从事件 d.id 字段获取 (非顶层 raw.id)
         if ($eventType === 'INTERACTION_CREATE') {
-            $this->sendEventAck(0);
+            $interactionId = $data['id'] ?? '';
+            if (!empty($interactionId)) {
+                $this->confirmInteraction($interactionId);
+            }
         }
 
         // 后台子进程处理事件 (对应 Python: asyncio.create_task(self._dispatch_with_backpressure(event)))
@@ -499,12 +505,42 @@ class WebSocketClient {
     }
 
     private function sendEventAck($code = 0) {
-        // 对应 Python _send_event_ack: {'op': _OP_EVENT_ACK, 'code': code}
+        // OP 12 仅用于 HTTP 回调(webhook)模式, WebSocket 模式不应使用
+        // 保留此方法以备将来需要, 但当前不调用
         $payload = [
             'op' => OP_EVENT_ACK,
             'code' => $code
         ];
         $this->sendFrame(json_encode($payload));
+    }
+
+    /**
+     * 立即通过 HTTP PUT /interactions/{id} 确认互动回调
+     * 官方文档: PUT /interactions/{interaction_id}, body={"code":0}
+     * 必须在收到 INTERACTION_CREATE 事件后尽快调用, 否则客户端超时显示"请求第三方失败"
+     * interaction_id 从事件 d.id 获取 (非顶层 raw.id)
+     */
+    private function confirmInteraction($interactionId) {
+        if (empty($interactionId)) return;
+
+        try {
+            $token = $this->getAccessToken();
+            $urls = [
+                '正式' => 'https://api.sgroup.qq.com',
+                '沙箱' => 'https://sandbox.api.sgroup.qq.com',
+            ];
+            $env = isset($urls[$this->env]) ? $this->env : '正式';
+            $url = $urls[$env] . '/interactions/' . $interactionId;
+            $headers = [
+                'Authorization: QQBot ' . $token,
+                'Content-Type: application/json',
+            ];
+            $body = json_encode(['code' => 0]);
+            $resp = curl($url, 'PUT', $headers, $body);
+            echo "[" . date('Y-m-d H:i:s') . "] 互动回调已确认: {$interactionId} => {$resp}\n";
+        } catch (Exception $e) {
+            echo "[" . date('Y-m-d H:i:s') . "] 互动回调确认失败: " . $e->getMessage() . "\n";
+        }
     }
 
     // ==================== WebSocket 帧编解码 ====================

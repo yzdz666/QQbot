@@ -16,6 +16,12 @@ if (!Auth::isInstalled()) {
 $currentScript = basename($_SERVER['SCRIPT_NAME']);
 if ($currentScript !== 'login.php') {
     Auth::requireAuth();
+    // 认证完成后立即关闭session写入，释放session锁
+    // 防止页面渲染期间阻塞AJAX请求（session文件锁竞争）
+    // 注意: 关闭后 $_SESSION 仍可读取，但不能修改
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
 }
 
 $admin = db()->fetch("SELECT * FROM admin LIMIT 1");
@@ -33,8 +39,11 @@ try {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="no-referrer">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title><?= isset($pageTitle) ? $pageTitle . ' - ' : '' ?>官鸡机器人管理</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
 <?php if ($currentScript !== 'login.php'): ?>

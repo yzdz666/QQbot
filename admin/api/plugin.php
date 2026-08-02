@@ -90,6 +90,12 @@ switch ($type) {
             die(json_encode(['code' => 400, 'msg' => '缺少参数']));
         }
         try {
+            // 先 INSERT OR IGNORE 确保记录存在，再 UPDATE 设置为禁用
+            // 修复：原代码仅 UPDATE，无记录时禁用操作无效（刷新后仍显示已启用）
+            db()->execute(
+                "INSERT OR IGNORE INTO plugin_status (appid, plugin_name, enabled) VALUES (?, ?, 0)",
+                [$appid, $name]
+            );
             db()->execute(
                 "UPDATE plugin_status SET enabled = 0 WHERE appid = ? AND plugin_name = ?",
                 [$appid, $name]

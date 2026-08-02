@@ -402,9 +402,18 @@ function getClientIp() {
 }
 
 function json_response($data, $code = 200) {
+    // 清除所有输出缓冲区内容，确保只输出纯JSON
+    // 防止 include 的文件产生的警告/通知/空白字符破坏JSON响应
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     http_response_code($code);
     if (!headers_sent()) {
         header('Content-Type: application/json; charset=utf-8');
+        // 禁止浏览器缓存API响应
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
     }
     // 使用 JSON_INVALID_UTF8_SUBSTITUTE 防止无效UTF-8字符导致json_encode返回false
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);

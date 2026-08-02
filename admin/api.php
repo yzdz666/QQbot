@@ -117,16 +117,47 @@ switch ($action) {
         $enabled = intval($_POST['enabled'] ?? 0);
         if (empty($appid) || empty($pluginName)) {
             json_response(['success' => false, 'message' => '参数缺失']);
+            break;
         }
-        db()->execute(
-            "INSERT OR IGNORE INTO plugin_status (appid, plugin_name, enabled) VALUES (?, ?, ?)",
-            [$appid, $pluginName, $enabled]
-        );
-        db()->execute(
-            "UPDATE plugin_status SET enabled = ? WHERE appid = ? AND plugin_name = ?",
-            [$enabled, $appid, $pluginName]
-        );
-        json_response(['success' => true, 'message' => '插件状态已更新']);
+        try {
+            $pdo = db()->getPdo();
+            // 使用事务确保 INSERT OR IGNORE + UPDATE 原子执行
+            $pdo->beginTransaction();
+            // 先 INSERT OR IGNORE 确保记录存在，再 UPDATE 设置状态
+            $pdo->prepare(
+                "INSERT OR IGNORE INTO plugin_status (appid, plugin_name, enabled) VALUES (?, ?, ?)"
+            )->execute([$appid, $pluginName, $enabled]);
+            $pdo->prepare(
+                "UPDATE plugin_status SET enabled = ? WHERE appid = ? AND plugin_name = ?"
+            )->execute([$enabled, $appid, $pluginName]);
+            $pdo->commit();
+
+            // 从数据库读取实际状态，验证写入是否成功
+            $verifyRow = db()->fetch(
+                "SELECT enabled FROM plugin_status WHERE appid = ? AND plugin_name = ?",
+                [$appid, $pluginName]
+            );
+            $actualEnabled = $verifyRow ? intval($verifyRow['enabled']) : -1;
+
+            if ($actualEnabled !== $enabled) {
+                // 验证失败：数据库状态与请求不一致
+                json_response([
+                    'success' => false,
+                    'message' => '数据库验证失败: 期望=' . $enabled . ' 实际=' . $actualEnabled
+                ]);
+            }
+
+            json_response([
+                'success' => true,
+                'message' => '插件状态已更新',
+                'enabled' => $actualEnabled
+            ]);
+        } catch (Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            json_response(['success' => false, 'message' => '数据库写入失败: ' . $e->getMessage()]);
+        }
         break;
 
     case 'plugin_create':

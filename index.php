@@ -246,7 +246,9 @@ function Main($raw) {
         case "INTERACTION_CREATE":
             // 参照 Python InteractionParser: 根据 chat_type/scene 判断群聊/私聊
             define("消息来源", "互动");
-            define("事件ID", $raw["id"] ?? '');
+            // 参照 ElainaBot_v2 InteractionParser: event.message_id = d.get('id', '')
+            // 官方文档: interaction_id 从 INTERACTION_CREATE 事件 d.id 字段获取 (非顶层 raw.id)
+            define("事件ID", $raw["d"]["id"] ?? ($raw["id"] ?? ''));
             $chatType = $raw["d"]["chat_type"] ?? null;
             $scene = $raw["d"]["scene"] ?? '';
             if ($chatType === 1 || $scene === "group") {
@@ -292,34 +294,24 @@ function Main($raw) {
     // 记录到数据库（增强功能）
     recordIncomingMessage($event, $raw);
 
-    // ==================== WebHook模式回调按钮ACK ====================
-    // QQ平台要求收到 INTERACTION_CREATE 后必须在HTTP响应中返回 {"op": 12, "code": 0}
-    // 参照 ElainaBot_v2 webhook.py: return web.json_response({'op': 12, 'code': code})
-    if (($raw["t"] ?? "") === "INTERACTION_CREATE") {
-        // 清空之前的输出缓冲区内容
-        ob_end_clean();
-
-        // 设置响应头并输出ACK
-        if (!headers_sent()) {
-            header('Content-Type: application/json');
-        }
-        echo json_encode(["op" => 12, "code" => 0], JSON_UNESCAPED_UNICODE);
-
-        // 刷新输出到客户端，让QQ平台尽快收到ACK
-        if (function_exists('fastcgi_finish_request')) {
-            // FastCGI模式: 发送响应并关闭连接，后续插件处理不影响响应
-            @fastcgi_finish_request();
-        } else {
-            // 非FastCGI环境(如PHP内置服务器): 尝试刷新缓冲区
-            @flush();
-        }
-
-        // 重新开始输出缓冲区，捕获后续插件输出（避免污染ACK响应）
-        ob_start();
+    // 按钮互动需要快速 ACK
+    if (($raw["t"] ?? "") === "INTERACTION_CREATE" && function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
     }
 
-    // 加载bot.php和插件（与原版一致：在Main内加载）
+    // 加载 bot.php (定义了 确认互动 等函数, 必须在调用前加载)
     require __DIR__ . "/bot.php";
+
+    // 互动回调确认: 在插件加载前执行, 确保及时响应
+    // 官方文档: 收到 INTERACTION_CREATE 事件后需调用 PUT /interactions/{interaction_id} 回应
+    // 否则客户端会一直 loading 直到超时 (显示"请求第三方失败")
+    // 注意: OP 12 仅用于 webhook HTTP 回调模式, 这里通过 PUT /interactions/{id} 确认
+    // interaction_id 从事件 d.id 获取 (非顶层 raw.id)
+    if (($raw["t"] ?? "") === "INTERACTION_CREATE" && defined('事件ID') && 事件ID) {
+        确认互动(事件ID);
+    }
+
+    // 加载插件（与原版一致：在Main内加载）
     load_plugin();
     exit;
 }

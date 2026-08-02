@@ -13,6 +13,20 @@ class Auth {
 
     public static function init() {
         if (session_status() === PHP_SESSION_NONE) {
+            // 设置 session cookie 参数，确保在手机浏览器上也能可靠传递
+            // SameSite=Lax 允许同站 AJAX 请求携带 cookie
+            // HttpOnly 防止 JavaScript 访问 cookie
+            // 路径为 / 确保所有路径都能访问
+            if (PHP_VERSION_ID >= 70300) {
+                session_set_cookie_params([
+                    'lifetime' => self::SESSION_DURATION,
+                    'path'     => '/',
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
+            } else {
+                session_set_cookie_params(self::SESSION_DURATION, '/', '', false, true);
+            }
             session_start();
         }
     }

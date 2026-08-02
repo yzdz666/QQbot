@@ -2,6 +2,11 @@
 /**
  * 管理后台 - 插件管理
  */
+// 禁止浏览器缓存，确保每次刷新都从服务器获取最新状态
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 $pageTitle = '插件管理';
 require_once('header.php');
 
@@ -147,7 +152,7 @@ function formatFileSize($bytes)
             <?php if ($selectedAppid !== ''): ?>
             <td>
               <label class="switch">
-                <input type="checkbox" <?= $isOn ? 'checked' : '' ?> onchange="togglePlugin(<?= $nameJs ?>, this)">
+                <input type="checkbox" <?= $isOn ? 'checked' : '' ?> onchange='togglePlugin(<?= $nameJs ?>, this)'>
                 <span class="slider"></span>
               </label>
               <span class="badge <?= $isOn ? 'badge-success' : 'badge-secondary' ?>" style="margin-left:6px;">
@@ -232,6 +237,12 @@ function apiCall(action, data, callback, isForm) {
     xhr.open('POST', 'api.php?action=' + encodeURIComponent(action), true);
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            // HTTP 401 表示会话过期，需要重新登录
+            if (xhr.status === 401) {
+                alert('登录已过期，请重新登录');
+                window.location.href = 'login.php';
+                return;
+            }
             var res;
             try {
                 res = JSON.parse(xhr.responseText);
@@ -242,6 +253,9 @@ function apiCall(action, data, callback, isForm) {
             }
             callback(res);
         }
+    };
+    xhr.onerror = function() {
+        callback({ success: false, message: '网络请求失败，请检查网络连接' });
     };
     if (isForm) {
         xhr.send(data); // FormData 自动设置 multipart/form-data 边界
@@ -274,15 +288,21 @@ function togglePlugin(pluginName, checkbox) {
         return;
     }
     var enabled = checkbox.checked ? 1 : 0;
+    // 禁用开关防止重复点击
+    checkbox.disabled = true;
     apiCall('plugin_toggle', {
         appid: selectedAppid,
         plugin_name: pluginName,
         enabled: enabled
     }, function (res) {
+        checkbox.disabled = false;
         if (!res.success) {
             checkbox.checked = !checkbox.checked; // 回滚
             alert(res.message || '状态更新失败');
         } else {
+            // 验证服务器返回的实际状态
+            var actualEnabled = (res.enabled !== undefined) ? res.enabled : enabled;
+            checkbox.checked = (actualEnabled == 1);
             // 同步行内徽章文字
             var cell = checkbox.closest('td');
             if (cell) {
