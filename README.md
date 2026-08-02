@@ -2,6 +2,9 @@
 
 > 基于 PHP + SQLite 的 QQ 机器人管理框架，支持 WebHook 和 WebSocket 双模式，自带可视化后台管理。
 
+QQ群：973942141（进群请备注“开源”）
+注意：禁止倒卖，仅供学习与二次开发。
+
 ## 功能特性
 
 - **双模式运行**：支持 WebHook 回调与 WebSocket 主动连接，适配不同服务器环境
@@ -95,11 +98,10 @@ php ws_client.php
 
 ```php
 <?php
-// plugin/我的插件.php
-// 通过 $msg, $ Send等全局变量与框架交互
 
-if ($msg === '你好') {
-    $Send->text('你好！我是官鸡机器人');
+if (消息 == "测试图片") {
+    图片("https://picsum.photos/400/300", "📸 示例图片");
+    return;
 }
 ```
 
