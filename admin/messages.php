@@ -221,6 +221,11 @@ function detectFileUrlFromContent($url) {
 ?>
 
 <style>
+/* 表格行滚动优化 */
+.table tbody tr {
+    content-visibility: auto;
+    contain-intrinsic-size: 50px;
+}
 /* 文件URL预览样式 */
 .msg-file-preview {
     display: inline-flex;
@@ -352,6 +357,42 @@ function detectFileUrlFromContent($url) {
     color: #7b1fa2;
     border: 1px solid #ce93d8;
 }
+/* 系统事件来源类型（带头像） */
+.msg-source-event {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.msg-event-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--border, #e0e0e0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #666;
+}
+.msg-event-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.msg-event-type {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #f5f5f5;
+    color: #666;
+}
+.msg-event-type.event-join { background: #e8f5e9; color: #2e7d32; }
+.msg-event-type.event-leave { background: #fff3e0; color: #e65100; }
+.msg-event-type.event-remove { background: #fce4ec; color: #c62828; }
+.msg-event-type.event-bot { background: #e3f2fd; color: #1565c0; }
 /* 内容类型徽章 */
 .msg-content-type {
     display: inline-block;
@@ -641,9 +682,10 @@ function detectFileUrlFromContent($url) {
                 }
             }
 
-            // 机器人信息：发送方向的消息显示机器人昵称和头像
+            // 机器人信息：发送方向的消息显示机器人昵称和头像；加群事件也需要机器人信息
             $botInfo = null;
-            if ($msgAppid && !$isRecv) {
+            $systemEventTypesForBot = ['退群', '群成员移除', '加群', '群成员增加'];
+            if ($msgAppid && (!$isRecv || in_array($sourceType, $systemEventTypesForBot, true))) {
                 foreach ($bots as $bot) {
                     if ($bot['appid'] === $msgAppid) {
                         $botInfo = $bot;
@@ -723,7 +765,44 @@ function detectFileUrlFromContent($url) {
                 </div>
               </div>
             </td>
-            <td><?= htmlspecialchars($sourceType) ?></td>
+            <td>
+              <?php
+              $systemEventTypes = ['退群', '群成员移除', '加群', '群成员增加'];
+              if (in_array($sourceType, $systemEventTypes, true)):
+                  // 生成系统事件头像
+                  $eventAvatarUrl = '';
+                  $eventAvatarChar = '&#128100;';
+                  if ($sourceType === '加群') {
+                      // 机器人加群，显示机器人头像
+                      $eventAvatarChar = '&#129302;';
+                      if (!empty($botInfo['avatar'])) {
+                          $eventAvatarUrl = $botInfo['avatar'];
+                      } elseif (!empty($botInfo['robot_qq'])) {
+                          $eventAvatarUrl = 'https://q1.qlogo.cn/g?b=qq&nk=' . $botInfo['robot_qq'] . '&s=640';
+                      }
+                  } elseif ($msgAppid && $msgUserId) {
+                      $eventAvatarUrl = 'https://q.qlogo.cn/qqapp/' . $msgAppid . '/' . $msgUserId . '/640';
+                  }
+                  // 事件类型CSS类
+                  $eventCls = 'event-leave';
+                  if ($sourceType === '群成员增加') $eventCls = 'event-join';
+                  elseif ($sourceType === '群成员移除') $eventCls = 'event-remove';
+                  elseif ($sourceType === '加群') $eventCls = 'event-bot';
+              ?>
+                <div class="msg-source-event">
+                  <div class="msg-event-avatar">
+                    <?php if ($eventAvatarUrl): ?>
+                    <img src="<?= htmlspecialchars($eventAvatarUrl) ?>" onerror="this.style.display='none';this.parentElement.innerHTML='<?= $eventAvatarChar ?>';" referrerpolicy="no-referrer">
+                    <?php else: ?>
+                    <?= $eventAvatarChar ?>
+                    <?php endif; ?>
+                  </div>
+                  <span class="msg-event-type <?= $eventCls ?>"><?= htmlspecialchars($sourceType) ?></span>
+                </div>
+              <?php else: ?>
+                <?= htmlspecialchars($sourceType) ?>
+              <?php endif; ?>
+            </td>
             <td><?= htmlspecialchars($targetId) ?></td>
             <td><span class="msg-content-type <?= htmlspecialchars($contentTypeCls) ?>"><?= htmlspecialchars($contentTypeLabel) ?></span></td>
             <td>
@@ -944,11 +1023,10 @@ document.addEventListener('keydown', function(e) {
 // ==================== 自动刷新消息日志 ====================
 var msgAutoRefreshTimer = null;
 var msgLastCount = <?= $total ?>;
-var msgLastMaxId = 0;
 
 function startMsgAutoRefresh() {
     stopMsgAutoRefresh();
-    // 每3秒自动刷新消息列表（只在第一页时刷新）
+    // 每10秒检查是否有新消息（轻量级API调用，不再获取整个页面HTML）
     msgAutoRefreshTimer = setInterval(function() {
         var urlParams = new URLSearchParams(window.location.search);
         var currentPage = parseInt(urlParams.get('page') || '1');
@@ -956,7 +1034,7 @@ function startMsgAutoRefresh() {
         if (currentPage === 1 && !document.getElementById('rawDataModal').style.display.includes('flex') && !document.getElementById('filePreviewModal').classList.contains('show')) {
             autoRefreshMsgList();
         }
-    }, 3000);
+    }, 10000);
 }
 
 function stopMsgAutoRefresh() {
@@ -967,31 +1045,25 @@ function stopMsgAutoRefresh() {
 }
 
 function autoRefreshMsgList() {
-    // 静默刷新当前页面以获取最新消息
-    var xhr = new XMLHttpRequest();
-    var params = new URLSearchParams(window.location.search);
-    params.set('autorefresh', '1');
-    xhr.open('GET', 'messages.php?' + params.toString(), true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            // 解析返回的HTML，提取消息总数
-            var parser = new DOMParser();
-            var doc = parser.parseFromString(xhr.responseText, 'text/html');
-            var listHeader = doc.querySelector('.card-header h3');
-            if (listHeader) {
-                var match = listHeader.textContent.match(/共\s*(\d+)\s*条/);
-                if (match) {
-                    var newCount = parseInt(match[1]);
-                    if (newCount !== msgLastCount) {
-                        msgLastCount = newCount;
-                        // 有新消息，刷新页面
-                        location.reload();
-                    }
-                }
+    // 轻量级检查：通过API获取消息总数，避免下载整个页面HTML
+    var urlParams = new URLSearchParams(window.location.search);
+    var data = {};
+    var currentAppid = urlParams.get('appid') || '';
+    var currentDirection = urlParams.get('direction') || '';
+    var currentDays = urlParams.get('days') || '';
+    if (currentAppid) data.appid = currentAppid;
+    if (currentDirection) data.direction = currentDirection;
+    if (currentDays) data.days = currentDays;
+    
+    apiCall('msg_count', data, function(res) {
+        if (res.success) {
+            var newCount = res.count || 0;
+            if (newCount !== msgLastCount) {
+                msgLastCount = newCount;
+                location.reload();
             }
         }
-    };
-    xhr.send();
+    });
 }
 
 // 启动自动刷新

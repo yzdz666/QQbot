@@ -232,6 +232,9 @@ class Database {
                 'nickname'  => "ALTER TABLE bots ADD COLUMN nickname TEXT DEFAULT ''",
                 'avatar'    => "ALTER TABLE bots ADD COLUMN avatar TEXT DEFAULT ''",
             ],
+            'messages' => [
+                'is_retracted' => "ALTER TABLE messages ADD COLUMN is_retracted INTEGER DEFAULT 0",
+            ],
         ];
 
         foreach ($migrations as $table => $columns) {

@@ -196,7 +196,7 @@ try {
 
             $messages = db()->fetchAll(
                 "SELECT id, appid, direction, source_type, target_id, user_id, 
-                        content_type, content, message_id as msg_id, raw_data, created_at
+                        content_type, content, message_id as msg_id, raw_data, created_at, is_retracted
                  FROM messages $where
                  ORDER BY created_at DESC 
                  LIMIT ? OFFSET ?",
@@ -602,8 +602,9 @@ try {
             $hasError = is_array($data) && isset($data['code']) && $data['code'] != 0;
 
             // 无论API是否返回错误，都更新数据库标记为已撤回（用户已明确操作）
+            // 不覆盖原始消息内容，只标记 is_retracted = 1
             db()->execute(
-                "UPDATE messages SET content = '[已撤回]', content_type = '系统' WHERE appid = ? AND message_id = ?",
+                "UPDATE messages SET is_retracted = 1 WHERE appid = ? AND message_id = ?",
                 [$appid, $messageId]
             );
 
@@ -637,7 +638,7 @@ try {
             // 查找该会话中最后一条发送的消息（排除已撤回的消息）
             $lastMsg = db()->fetch(
                 "SELECT message_id, target_id FROM messages 
-                 WHERE appid = ? AND target_id = ? AND direction = '发送' AND content_type != '系统'
+                 WHERE appid = ? AND target_id = ? AND direction = '发送' AND (is_retracted IS NULL OR is_retracted = 0)
                  ORDER BY created_at DESC LIMIT 1",
                 [$appid, $targetId]
             );
@@ -663,9 +664,9 @@ try {
             $resp = 撤回($lastMsg['message_id']);
             $data = json_decode($resp, true);
 
-            // 撤回成功后，更新数据库中的消息状态为已撤回
+            // 撤回成功后，更新数据库中的消息状态为已撤回（不覆盖原始内容）
             db()->execute(
-                "UPDATE messages SET content = '[已撤回]', content_type = '系统' WHERE appid = ? AND message_id = ?",
+                "UPDATE messages SET is_retracted = 1 WHERE appid = ? AND message_id = ?",
                 [$appid, $lastMsg['message_id']]
             );
 

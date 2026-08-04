@@ -289,6 +289,36 @@ switch ($action) {
         break;
 
     // ==================== 消息 ====================
+    case 'msg_count':
+        // 轻量级消息计数接口，用于自动刷新检测新消息
+        $appid = $_POST['appid'] ?? $_GET['appid'] ?? '';
+        $direction = $_POST['direction'] ?? $_GET['direction'] ?? '';
+        $days = $_POST['days'] ?? $_GET['days'] ?? '';
+        $where = [];
+        $params = [];
+        if ($appid !== '') {
+            $where[] = 'appid = ?';
+            $params[] = $appid;
+        }
+        if (in_array($direction, ['接收', '发送'], true)) {
+            $where[] = 'direction = ?';
+            $params[] = $direction;
+        }
+        if (in_array($days, ['1', '3', '7', '30', '90'], true)) {
+            $where[] = "created_at >= datetime('now','localtime','-" . intval($days) . " days')";
+        }
+        $whereClause = '';
+        if (!empty($where)) {
+            $whereClause = ' WHERE ' . implode(' AND ', $where);
+        }
+        try {
+            $count = (int) db()->fetchColumn("SELECT COUNT(*) FROM messages" . $whereClause, $params);
+        } catch (Exception $e) {
+            $count = 0;
+        }
+        json_response(['success' => true, 'count' => $count]);
+        break;
+
     case 'clear_messages':
         $appid = $_POST['appid'] ?? '';
         if (empty($appid)) {

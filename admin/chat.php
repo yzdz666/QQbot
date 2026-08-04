@@ -229,6 +229,8 @@ if (!empty($bots)) {
     overflow-y: auto;
     padding: 16px 20px;
     -webkit-overflow-scrolling: touch;
+    /* GPU加速滚动 */
+    will-change: scroll-position;
 }
 .chat-empty {
     display: flex;
@@ -245,6 +247,9 @@ if (!empty($bots)) {
     gap: 10px;
     margin-bottom: 16px;
     align-items: flex-start;
+    /* 虚拟滚动优化：允许浏览器跳过不可见消息的渲染 */
+    content-visibility: auto;
+    contain-intrinsic-size: 80px;
 }
 .chat-msg.sent {
     flex-direction: row-reverse;
@@ -308,6 +313,31 @@ if (!empty($bots)) {
 .chat-msg.sent .chat-msg-time {
     text-align: right;
 }
+/* 已撤回消息标记样式 */
+.chat-msg-retracted {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #e53935;
+    background: #ffebee;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-top: 4px;
+    width: fit-content;
+}
+.chat-msg.sent .chat-msg-retracted {
+    margin-left: auto;
+}
+.chat-retracted-icon {
+    font-size: 12px;
+}
+/* 撤回消息气泡半透明效果 */
+.chat-msg.is-retracted .chat-msg-bubble {
+    opacity: 0.5;
+    text-decoration: line-through;
+    text-decoration-color: var(--text-muted);
+}
 /* 系统事件消息样式（退群、群成员移除等） */
 .chat-msg.system-event {
     justify-content: center;
@@ -324,6 +354,23 @@ if (!empty($bots)) {
     color: var(--text-muted);
     max-width: 80%;
     flex-wrap: wrap;
+}
+.chat-system-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+.chat-system-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 .chat-system-icon {
     font-size: 14px;
@@ -1107,6 +1154,15 @@ var nicknameCache = {}; // 昵称缓存
 var groupAvatarCache = {}; // 群自定义头像缓存
 var remarkCache = {}; // 备注缓存（用户和群）
 
+// ==================== 分页加载状态 ====================
+var PAGE_SIZE = 50;       // 每页加载的消息数
+var currentMsgOffset = 0;  // 当前已加载的消息偏移量
+var totalMsgCount = 0;     // 会话总消息数
+var displayedMsgIds = {};  // 已显示的消息ID集合（用于去重）
+var currentLoadedMsgs = []; // 当前已加载的消息数组（从新到旧）
+var isLoadingMore = false;  // 是否正在加载更多
+var hasMoreMessages = false; // 是否还有更多消息可加载
+
 // 从URL或cookie中获取认证token
 var authToken = '';
 (function() {
@@ -1330,7 +1386,7 @@ function loadMentionUsers(callback) {
     apiGet('api/chat_api.php?action=get_messages&appid=' + encodeURIComponent(botId) +
            '&target_id=' + encodeURIComponent(currentSession.target_id) +
            '&source_type=' + encodeURIComponent(currentSession.source_type) +
-           '&offset=0&limit=10000', function(res) {
+           '&offset=0&limit=500', function(res) {
         if (res.success && res.data && res.data.messages) {
             var userMap = {};
             res.data.messages.forEach(function(m) {
@@ -1513,12 +1569,19 @@ function loadMessages(targetId, sourceType) {
     document.getElementById('chatTargetName').textContent = '加载中...';
     document.getElementById('chatTargetInfo').textContent = '';
 
+    // 重置分页状态
+    currentMsgOffset = 0;
+    totalMsgCount = 0;
+    displayedMsgIds = {};
+    currentLoadedMsgs = [];
+    hasMoreMessages = false;
+
     var postData = {
         action: 'get_messages',
         target_id: targetId,
         source_type: sourceType || '',
         offset: 0,
-        limit: 10000  // 加载全部消息
+        limit: PAGE_SIZE  // 分页加载，不再一次性加载全部
     };
     if (botId) postData.appid = botId;
 
@@ -1526,6 +1589,10 @@ function loadMessages(targetId, sourceType) {
         if (res.success && res.data) {
             var info = res.data.info || {};
             var msgs = res.data.messages || [];
+            totalMsgCount = info.total || msgs.length;
+            currentMsgOffset = msgs.length;
+            hasMoreMessages = currentMsgOffset < totalMsgCount;
+            
             // 显示昵称（优先备注）
             var displayName = info.remark || info.name || targetId;
             document.getElementById('chatTargetName').textContent = displayName;
@@ -1546,14 +1613,134 @@ function loadMessages(targetId, sourceType) {
                 headerAvatar.innerHTML = '<img src="' + escapeAttr(userAvatarSrc) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';" style="width:100%;height:100%;object-fit:cover;">';
             }
 
+            // 缓存已加载的消息和ID
+            currentLoadedMsgs = msgs;
+            msgs.forEach(function(m) {
+                var mid = m.id || m.msg_id || '';
+                if (mid) displayedMsgIds[mid] = true;
+            });
+
             renderMessages(msgs, false, botId);
             lastMsgCount = msgs.length;
             lastMsgLatestId = msgs.length > 0 ? (msgs[0].id || msgs[0].msg_id || '') : '';
+            
+            // 如果还有更多消息，添加"加载更多"按钮
+            if (hasMoreMessages) {
+                addLoadMoreButton();
+            }
         } else {
             document.getElementById('chatMessages').innerHTML =
                 '<div class="chat-empty">' + (res.msg || res.message || '加载失败') + '</div>';
         }
     });
+}
+
+// ==================== 加载更多历史消息 ====================
+function loadMoreMessages() {
+    if (isLoadingMore || !hasMoreMessages || !currentSession) return;
+    isLoadingMore = true;
+    
+    var botId = getCurrentBotId();
+    var postData = {
+        action: 'get_messages',
+        target_id: currentSession.target_id,
+        source_type: currentSession.source_type || '',
+        offset: currentMsgOffset,
+        limit: PAGE_SIZE
+    };
+    if (botId) postData.appid = botId;
+
+    apiCall('api/chat_api.php', postData, function(res) {
+        isLoadingMore = false;
+        if (res.success && res.data && res.data.messages) {
+            var msgs = res.data.messages || [];
+            // 过滤掉已显示的消息（去重）
+            var newMsgs = [];
+            msgs.forEach(function(m) {
+                var mid = m.id || m.msg_id || '';
+                if (mid && !displayedMsgIds[mid]) {
+                    displayedMsgIds[mid] = true;
+                    newMsgs.push(m);
+                }
+            });
+            
+            if (newMsgs.length === 0) {
+                hasMoreMessages = false;
+                removeLoadMoreButton();
+                return;
+            }
+
+            // 记录当前滚动位置和高度
+            var container = document.getElementById('chatMessages');
+            var oldScrollHeight = container.scrollHeight;
+            var oldScrollTop = container.scrollTop;
+
+            // 将新加载的旧消息添加到数组末尾（数组从新到旧排序）
+            currentLoadedMsgs = currentLoadedMsgs.concat(newMsgs);
+            currentMsgOffset += msgs.length;
+            hasMoreMessages = currentMsgOffset < totalMsgCount;
+
+            // 构建旧消息的HTML并插入到"加载更多"按钮之后（即消息列表顶部）
+            var loadMoreBtn = document.getElementById('loadMoreBtn');
+            var html = '';
+            // 从旧到新渲染（newMsgs是从新到旧，需要反转）
+            for (var i = newMsgs.length - 1; i >= 0; i--) {
+                html += buildMsgHtml(newMsgs[i], botId);
+            }
+            
+            if (loadMoreBtn) {
+                loadMoreBtn.insertAdjacentHTML('afterend', html);
+                // 更新"加载更多"按钮状态
+                if (!hasMoreMessages) {
+                    removeLoadMoreButton();
+                } else {
+                    var btnEl = loadMoreBtn.querySelector('button');
+                    if (btnEl) {
+                        btnEl.disabled = false;
+                        btnEl.textContent = '加载更多消息 (剩余' + (totalMsgCount - currentMsgOffset) + '条)';
+                    }
+                }
+            } else {
+                // 没有按钮，直接在顶部插入
+                container.insertAdjacentHTML('afterbegin', html);
+            }
+
+            // 保持滚动位置（插入旧消息后，滚动条位置需要调整）
+            var newScrollHeight = container.scrollHeight;
+            container.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+
+            // 批量加载新消息中的昵称
+            if (botId) {
+                var userIdsToLoad = [];
+                newMsgs.forEach(function(m) {
+                    if (m.user_id && !nicknameCache[m.user_id] && !queriedNicknameIds[m.user_id] && userIdsToLoad.indexOf(m.user_id) === -1) {
+                        userIdsToLoad.push(m.user_id);
+                    }
+                });
+                if (userIdsToLoad.length > 0) {
+                    loadNicknames(botId, userIdsToLoad);
+                }
+            }
+        }
+    });
+}
+
+// ==================== 添加/移除"加载更多"按钮 ====================
+function addLoadMoreButton() {
+    removeLoadMoreButton(); // 先移除已有的
+    var container = document.getElementById('chatMessages');
+    var btnDiv = document.createElement('div');
+    btnDiv.id = 'loadMoreBtn';
+    btnDiv.className = 'chat-load-more';
+    btnDiv.style.cssText = 'text-align:center; padding:8px;';
+    var remaining = totalMsgCount - currentMsgOffset;
+    btnDiv.innerHTML = '<button class="btn btn-outline btn-sm" onclick="loadMoreMessages()" style="font-size:12px;">加载更多消息 (剩余' + remaining + '条)</button>';
+    container.insertBefore(btnDiv, container.firstChild);
+}
+
+function removeLoadMoreButton() {
+    var btn = document.getElementById('loadMoreBtn');
+    if (btn) btn.remove();
 }
 
 // ==================== 渲染消息 ====================
@@ -1584,8 +1771,8 @@ function renderMessages(msgs, append, botId) {
         html += buildMsgHtml(m, botId);
     }
     container.innerHTML = html;
-    // 滚动到底部
-    container.scrollTop = container.scrollHeight;
+    // 滚动到底部（使用双重requestAnimationFrame确保content-visibility布局完成后再滚动）
+    scrollToBottomForce(container);
 
     // 收集所有未缓存的user_id，批量加载昵称
     if (botId) {
@@ -1666,8 +1853,39 @@ function buildMsgHtml(m, botId) {
             eventIcon = '➕';
             eventText = eventUserName + ' 加入群聊';
         }
+
+        // 生成系统事件头像
+        var sysAvatarHtml = '';
+        if (sourceType === '加群') {
+            // 机器人加群，显示机器人头像
+            var sysBotAvatar = '';
+            var sysBotRobotQq = '';
+            if (typeof botsData !== 'undefined' && botId) {
+                for (var sbi = 0; sbi < botsData.length; sbi++) {
+                    if (botsData[sbi].appid === botId) {
+                        sysBotAvatar = botsData[sbi].avatar || '';
+                        sysBotRobotQq = botsData[sbi].robot_qq || '';
+                        break;
+                    }
+                }
+            }
+            if (sysBotAvatar) {
+                sysAvatarHtml = '<img src="' + escapeAttr(sysBotAvatar) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
+            } else if (sysBotRobotQq) {
+                sysAvatarHtml = '<img src="https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(sysBotRobotQq) + '&s=640" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
+            } else {
+                sysAvatarHtml = '&#129302;';
+            }
+        } else if (eventUser && botId) {
+            // 群成员事件，显示对应用户头像
+            sysAvatarHtml = '<img src="https://q.qlogo.cn/qqapp/' + escapeAttr(botId) + '/' + escapeAttr(eventUser) + '/640" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';
+        } else {
+            sysAvatarHtml = '&#128100;';
+        }
+
         var sysHtml = '<div class="chat-msg system-event">';
         sysHtml += '<div class="chat-system-event">';
+        sysHtml += '<span class="chat-system-avatar">' + sysAvatarHtml + '</span>';
         sysHtml += '<span class="chat-system-icon">' + eventIcon + '</span>';
         sysHtml += '<span class="chat-system-text">' + escapeHtml(eventText) + '</span>';
         sysHtml += '<span class="chat-system-time">' + escapeHtml(m.created_at || '') + '</span>';
@@ -1785,7 +2003,8 @@ function buildMsgHtml(m, botId) {
         direction: m.direction || '',
         user_id: m.user_id || '',
         sender_name: senderName,
-        created_at: m.created_at || ''
+        created_at: m.created_at || '',
+        is_retracted: m.is_retracted || 0
     }));
 
     var html = '<div class="chat-msg ' + cls + '" data-msg-id="' + (m.id || '') + '" data-appid="' + escapeAttr(m.appid || '') + '" data-msg-data="' + msgDataAttr + '">';
@@ -1808,14 +2027,6 @@ function buildMsgHtml(m, botId) {
     var typeLabel = typeLabelMap[contentType] || contentType;
     var typeCls = 'type-' + (['image','video','voice','file','md','ark','embed'].indexOf(contentType) >= 0 ? contentType : (contentType === '图片' ? 'image' : contentType === '视频' ? 'video' : contentType === '语音' ? 'voice' : contentType === '文件' ? 'file' : contentType === 'MD' ? 'md' : 'text'));
     html += '<div class="chat-msg-type ' + typeCls + '">' + escapeHtml(typeLabel) + '</div>';
-
-    // 已撤回消息特殊渲染
-    if ((m.content === '[已撤回]') || contentType === '系统') {
-        html += '<div class="chat-msg-bubble" style="color:var(--text-muted);font-style:italic;font-size:13px;">' + escapeHtml(m.content || '[已撤回]') + '</div>';
-        html += '<div class="chat-msg-time">' + escapeHtml(m.created_at || '') + '</div>';
-        html += '</div></div>';
-        return html;
-    }
 
     // 内容渲染 - 优先使用attachments数组，其次media_url
     var content = (m.content || '(无内容)');
@@ -2041,11 +2252,18 @@ function buildMsgHtml(m, botId) {
 
     html += '<div class="chat-msg-time">' + escapeHtml(m.created_at || '') + '</div>';
 
+    // 已撤回标记（在消息内容下方显示，不覆盖原消息）
+    if (m.is_retracted) {
+        html += '<div class="chat-msg-retracted"><span class="chat-retracted-icon">&#128683;</span> 此消息已被撤回</div>';
+    }
+
     // 操作按钮
     html += '<div class="chat-msg-actions">';
     html += '<button class="chat-msg-action-btn" onclick="quoteMsg(this)">引用</button>';
-    // 所有消息（包括群成员消息）都显示撤回按钮
-    html += '<button class="chat-msg-action-btn" onclick="retractMsg(\'' + escapeAttr(m.appid || botId || '') + '\',\'' + escapeAttr(m.msg_id || '') + '\',\'' + escapeAttr(m.target_id || '') + '\')">撤回</button>';
+    // 已撤回的消息不再显示撤回按钮
+    if (!m.is_retracted) {
+        html += '<button class="chat-msg-action-btn" onclick="retractMsg(\'' + escapeAttr(m.appid || botId || '') + '\',\'' + escapeAttr(m.msg_id || '') + '\',\'' + escapeAttr(m.target_id || '') + '\')">撤回</button>';
+    }
     html += '<button class="chat-msg-action-btn" onclick="copyText(this)" data-text="' + escapeAttr(m.content || '') + '">复制</button>';
     html += '</div>';
 
@@ -2240,8 +2458,8 @@ function sendChatMessage(evt) {
             document.getElementById('chatInputMsg').value = '';
             hideMentionPopup();
             cancelQuote();
-            loadMessages(currentSession.target_id, currentSession.source_type);
-            loadSessions();
+            // 轻量刷新：只追加新消息，不重新加载整个消息列表
+            refreshAfterSend();
         } else {
             alert(res.message || '发送失败');
         }
@@ -2422,8 +2640,8 @@ function confirmFileSend() {
                 var res = JSON.parse(xhr.responseText);
                 if (res.success || res.code === 0) {
                     document.getElementById('chatInputMsg').value = '';
-                    loadMessages(currentSession.target_id, currentSession.source_type);
-                    loadSessions();
+                    // 轻量刷新：只追加新消息，不重新加载整个消息列表
+                    refreshAfterSend();
                 } else {
                     alert(res.message || res.msg || '发送失败');
                 }
@@ -2462,8 +2680,44 @@ function retractMsg(appid, msgId, targetId) {
     }, function(res) {
         if (res.success) {
             alert('撤回成功');
-            if (currentSession) {
-                loadMessages(currentSession.target_id, currentSession.source_type);
+            // 直接在DOM中更新被撤回的消息，不重新加载整个消息列表
+            var container = document.getElementById('chatMessages');
+            var msgElements = container.querySelectorAll('.chat-msg[data-msg-id]');
+            var updated = false;
+            msgElements.forEach(function(el) {
+                if (updated) return;
+                try {
+                    var msgData = JSON.parse(el.getAttribute('data-msg-data') || '{}');
+                    if (msgData.msg_id === msgId) {
+                        // 标记消息为已撤回状态（添加CSS类，使气泡半透明+删除线）
+                        el.classList.add('is-retracted');
+                        // 更新 data-msg-data 中的 is_retracted 标记
+                        msgData.is_retracted = 1;
+                        el.setAttribute('data-msg-data', escapeAttr(JSON.stringify(msgData)));
+                        // 在时间后面插入"已撤回"标记（如果尚未存在）
+                        var existingRetracted = el.querySelector('.chat-msg-retracted');
+                        if (!existingRetracted) {
+                            var timeEl = el.querySelector('.chat-msg-time');
+                            if (timeEl) {
+                                var retractedDiv = document.createElement('div');
+                                retractedDiv.className = 'chat-msg-retracted';
+                                retractedDiv.innerHTML = '<span class="chat-retracted-icon">&#128683;</span> 此消息已被撤回';
+                                timeEl.insertAdjacentElement('afterend', retractedDiv);
+                            }
+                        }
+                        // 移除撤回按钮（已撤回的消息不再显示撤回按钮）
+                        var retractBtn = null;
+                        el.querySelectorAll('.chat-msg-action-btn').forEach(function(btn) {
+                            if (btn.textContent === '撤回') retractBtn = btn;
+                        });
+                        if (retractBtn) retractBtn.remove();
+                        updated = true;
+                    }
+                } catch(e) {}
+            });
+            // 如果DOM更新失败，回退到轻量刷新
+            if (!updated && currentSession) {
+                refreshAfterSend();
             }
         } else {
             alert(res.message || '撤回失败');
@@ -2481,7 +2735,8 @@ function retractLastMsg() {
     }, function(res) {
         if (res.success) {
             alert('撤回成功');
-            loadMessages(currentSession.target_id, currentSession.source_type);
+            // 轻量刷新，不重新加载整个消息列表
+            refreshAfterSend();
         } else {
             alert(res.message || '撤回失败');
         }
@@ -2801,27 +3056,75 @@ function loadNicknames(botId, userIds) {
                     hasNewAvatars = true;
                 }
             }
-            // 只有获取到新昵称时才重新渲染，且不重新加载消息（避免循环）
+            // 只有获取到新昵称时才更新DOM，不再重新加载消息
             if ((hasNewNicknames || hasNewAvatars) && currentSession) {
-                // 只重新渲染，不重新加载消息
-                var botId2 = getCurrentBotId();
-                apiCall('api/chat_api.php', {
-                    action: 'get_messages',
-                    target_id: currentSession.target_id,
-                    source_type: currentSession.source_type || '',
-                    offset: 0,
-                    limit: 10000,
-                    appid: botId2
-                }, function(res2) {
-                    if (res2.success && res2.data && res2.data.messages) {
-                        renderMessages(res2.data.messages, false, botId2);
-                    }
-                });
+                // 直接更新DOM中已显示消息的昵称，避免重新加载全部消息
+                if (hasNewNicknames) {
+                    updateNicknamesInDOM();
+                }
                 // 如果有新群头像，重新渲染会话列表
                 if (hasNewAvatars) {
                     renderSessions(sessions);
                 }
             }
+        }
+    });
+}
+
+// ==================== 原地更新DOM中的昵称（避免重新加载全部消息）====================
+function updateNicknamesInDOM() {
+    var botId = getCurrentBotId();
+    if (!botId) return;
+    var container = document.getElementById('chatMessages');
+    if (!container) return;
+    
+    // 遍历所有消息元素，更新发送者昵称
+    var msgElements = container.querySelectorAll('.chat-msg[data-msg-id]');
+    msgElements.forEach(function(msgEl) {
+        var msgDataStr = msgEl.getAttribute('data-msg-data');
+        if (!msgDataStr) return;
+        try {
+            var msgData = JSON.parse(msgDataStr);
+            var userId = msgData.user_id || '';
+            var isSent = (msgData.direction === '发送');
+            
+            if (!isSent && userId && nicknameCache[userId]) {
+                // 更新接收方消息的昵称
+                var senderEl = msgEl.querySelector('.chat-msg-sender');
+                if (senderEl) {
+                    // 保留角色徽章
+                    var roleBadge = senderEl.querySelector('.chat-role-badge');
+                    var roleBadgeHtml = roleBadge ? roleBadge.outerHTML : '';
+                    var nick = nicknameCache[userId];
+                    // 清理不可见字符
+                    nick = nick.replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\uFFA0]/g, '').trim();
+                    if (nick) {
+                        senderEl.innerHTML = escapeHtml(nick) + roleBadgeHtml;
+                    }
+                }
+            }
+        } catch(e) {}
+    });
+    
+    // 更新@提及显示
+    var bubbleElements = container.querySelectorAll('.chat-msg-bubble');
+    bubbleElements.forEach(function(bubble) {
+        var html = bubble.innerHTML;
+        var hasAtMention = html.indexOf('chat-at-user') === -1 && (
+            html.indexOf('&lt;qqbot-at-user') > -1 || 
+            html.indexOf('&lt;@') > -1
+        );
+        if (hasAtMention) {
+            // 重新处理@提及替换
+            html = html.replace(/&lt;qqbot-at-user\s+id=&quot;([^&]*)&quot;\s*\/?&gt;/g, function(match, userId) {
+                var nick = getMentionDisplay(userId);
+                return '<span class="chat-at-user">@' + escapeHtml(nick) + '</span>';
+            });
+            html = html.replace(/&lt;@([A-Fa-f0-9]{16,})&gt;/g, function(match, userId) {
+                var nick = getMentionDisplay(userId);
+                return '<span class="chat-at-user">@' + escapeHtml(nick) + '</span>';
+            });
+            bubble.innerHTML = html;
         }
     });
 }
@@ -2971,6 +3274,98 @@ function saveRemark() {
     });
 }
 
+// ==================== 强制滚动到底部 ====================
+// 使用双重requestAnimationFrame + setTimeoutfallback确保content-visibility布局完成
+function scrollToBottomForce(container) {
+    if (!container) container = document.getElementById('chatMessages');
+    if (!container) return;
+    // 立即滚动一次（应对无content-visibility的简单场景）
+    container.scrollTop = container.scrollHeight;
+    // rAF后再次滚动（等待浏览器完成布局计算）
+    requestAnimationFrame(function() {
+        container.scrollTop = container.scrollHeight;
+        // 双重rAF确保content-visibility的contain-intrinsic-size被实际内容替换
+        requestAnimationFrame(function() {
+            container.scrollTop = container.scrollHeight;
+        });
+    });
+    // setTimeout兜底：图片/媒体加载后再次滚动
+    setTimeout(function() {
+        container.scrollTop = container.scrollHeight;
+    }, 100);
+}
+
+// ==================== 发送后轻量刷新（不重新加载全部消息） ====================
+function refreshAfterSend() {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) return;
+
+    // 轻量级获取最新消息，只追加新消息到列表底部
+    var postData = {
+        action: 'get_messages',
+        target_id: currentSession.target_id,
+        source_type: currentSession.source_type || '',
+        offset: 0,
+        limit: 10
+    };
+    if (botId) postData.appid = botId;
+
+    apiCall('api/chat_api.php', postData, function(res) {
+        if (res.success && res.data && res.data.messages) {
+            var msgs = res.data.messages;
+            var newLatestId = msgs.length > 0 ? (msgs[0].id || msgs[0].msg_id || '') : '';
+
+            // 找出真正的新消息（ID不在已显示集合中的）
+            var newMsgs = [];
+            msgs.forEach(function(m) {
+                var mid = m.id || m.msg_id || '';
+                if (mid && !displayedMsgIds[mid]) {
+                    displayedMsgIds[mid] = true;
+                    newMsgs.push(m);
+                }
+            });
+
+            if (newMsgs.length > 0) {
+                lastMsgCount = currentLoadedMsgs.length + newMsgs.length;
+                lastMsgLatestId = newLatestId;
+                totalMsgCount = res.data.info ? (res.data.info.total || totalMsgCount) : totalMsgCount;
+
+                // 将新消息添加到已加载数组前面（数组从新到旧排序）
+                currentLoadedMsgs = newMsgs.concat(currentLoadedMsgs);
+
+                // 构建新消息HTML并追加到容器底部
+                var container = document.getElementById('chatMessages');
+                var html = '';
+                for (var i = newMsgs.length - 1; i >= 0; i--) {
+                    html += buildMsgHtml(newMsgs[i], botId);
+                }
+                container.insertAdjacentHTML('beforeend', html);
+
+                // 发送后始终强制滚动到底部
+                scrollToBottomForce(container);
+
+                // 批量加载新消息中的昵称
+                var userIdsToLoad = [];
+                newMsgs.forEach(function(m) {
+                    if (m.user_id && !nicknameCache[m.user_id] && !queriedNicknameIds[m.user_id] && userIdsToLoad.indexOf(m.user_id) === -1) {
+                        userIdsToLoad.push(m.user_id);
+                    }
+                });
+                if (userIdsToLoad.length > 0) {
+                    loadNicknames(botId, userIdsToLoad);
+                }
+            } else {
+                // 没有新消息也要确保滚动到底部
+                scrollToBottomForce();
+            }
+        }
+    });
+
+    // 静默更新会话列表（不重新加载消息）
+    autoRefreshSessions();
+}
+
 // ==================== 自动刷新 ====================
 var autoRefreshTimer = null;
 var sessionRefreshTimer = null;
@@ -2981,16 +3376,16 @@ var lastMsgLatestId = '';
 function startAutoRefresh() {
     stopAutoRefresh();
     if (!autoRefreshEnabled) return;
-    // 每3秒自动刷新当前会话消息
+    // 每5秒自动刷新当前会话消息（轻量级，只获取最新少量消息）
     autoRefreshTimer = setInterval(function() {
         if (currentSession && !loading) {
             autoRefreshMessages();
         }
-    }, 3000);
-    // 每3秒自动刷新会话列表
+    }, 5000);
+    // 每10秒自动刷新会话列表
     sessionRefreshTimer = setInterval(function() {
         autoRefreshSessions();
-    }, 3000);
+    }, 10000);
 }
 
 function stopAutoRefresh() {
@@ -3036,27 +3431,88 @@ function autoRefreshMessages() {
     var botId = getCurrentBotId();
     if (!botId) return;
     
-    // 静默加载最新消息（不显示加载中）
+    // 轻量级刷新：只获取最新的少量消息，检查是否有新消息
     var postData = {
         action: 'get_messages',
         target_id: currentSession.target_id,
         source_type: currentSession.source_type || '',
         offset: 0,
-        limit: 10000
+        limit: 10  // 只获取最新10条，检查是否有新消息
     };
     if (botId) postData.appid = botId;
     
     apiCall('api/chat_api.php', postData, function(res) {
         if (res.success && res.data && res.data.messages) {
             var msgs = res.data.messages;
-            // 比较最新消息的ID和时间戳，不仅比较数量
             var newLatestId = msgs.length > 0 ? (msgs[0].id || msgs[0].msg_id || '') : '';
             var oldLatestId = lastMsgLatestId || '';
-            var shouldRefresh = (msgs.length !== lastMsgCount) || (newLatestId && newLatestId !== oldLatestId);
-            if (shouldRefresh) {
-                lastMsgCount = msgs.length;
+            
+            // 如果最新消息ID没变，不需要更新
+            if (newLatestId === oldLatestId && msgs.length === lastMsgCount) return;
+            
+            // 找出真正的新消息（ID不在已显示集合中的）
+            var newMsgs = [];
+            msgs.forEach(function(m) {
+                var mid = m.id || m.msg_id || '';
+                if (mid && !displayedMsgIds[mid]) {
+                    displayedMsgIds[mid] = true;
+                    newMsgs.push(m);
+                }
+            });
+            
+            if (newMsgs.length > 0) {
+                // 有新消息，插入到消息列表底部（最新的在底部）
+                lastMsgCount = currentLoadedMsgs.length + newMsgs.length;
                 lastMsgLatestId = newLatestId;
-                renderMessages(msgs, false, botId);
+                
+                // 更新总消息数
+                totalMsgCount = res.data.info ? (res.data.info.total || totalMsgCount) : totalMsgCount;
+                
+                // 将新消息添加到已加载数组的前面（数组从新到旧排序）
+                currentLoadedMsgs = newMsgs.concat(currentLoadedMsgs);
+                
+                // 构建新消息的HTML并追加到容器底部
+                var container = document.getElementById('chatMessages');
+                var html = '';
+                // 从旧到新渲染（newMsgs是从新到旧，需要反转后追加到末尾）
+                for (var i = newMsgs.length - 1; i >= 0; i--) {
+                    html += buildMsgHtml(newMsgs[i], botId);
+                }
+                container.insertAdjacentHTML('beforeend', html);
+                
+                // 自动滚动到底部（仅当用户已在底部附近时）
+                var isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 100;
+                if (isNearBottom) {
+                    container.scrollTop = container.scrollHeight;
+                }
+                
+                // 批量加载新消息中的昵称
+                var userIdsToLoad = [];
+                newMsgs.forEach(function(m) {
+                    if (m.user_id && !nicknameCache[m.user_id] && !queriedNicknameIds[m.user_id] && userIdsToLoad.indexOf(m.user_id) === -1) {
+                        userIdsToLoad.push(m.user_id);
+                    }
+                    // 从消息内容中提取@提及用户ID
+                    var rawContent = m.content || '';
+                    var atMatches = rawContent.match(/<@([A-Fa-f0-9]{20,})>/g);
+                    if (atMatches) {
+                        atMatches.forEach(function(atMatch) {
+                            var atUserId = atMatch.replace(/<@|>/g, '');
+                            if (atUserId && !nicknameCache[atUserId] && !queriedNicknameIds[atUserId] && userIdsToLoad.indexOf(atUserId) === -1) {
+                                userIdsToLoad.push(atUserId);
+                            }
+                        });
+                    }
+                });
+                if (userIdsToLoad.length > 0) {
+                    loadNicknames(botId, userIdsToLoad);
+                }
+            } else {
+                // 没有新消息，但可能消息数量变了（如撤回）
+                if (msgs.length !== lastMsgCount) {
+                    lastMsgCount = msgs.length;
+                    lastMsgLatestId = newLatestId;
+                }
             }
         }
     });
@@ -3257,8 +3713,8 @@ function sendArkMessage() {
         btn.textContent = origText;
         if (res.success || res.code === 0) {
             closeArkModal();
-            loadMessages(currentSession.target_id, currentSession.source_type);
-            loadSessions();
+            // 轻量刷新：只追加新消息，不重新加载整个消息列表
+            refreshAfterSend();
         } else {
             alert(res.message || res.msg || '发送失败');
         }
@@ -3359,8 +3815,8 @@ function sendTuwenMessage() {
             document.getElementById('tuwenImage').value = '';
             document.getElementById('tuwenLink').value = '';
             document.getElementById('tuwenPrompt').value = '';
-            loadMessages(currentSession.target_id, currentSession.source_type);
-            loadSessions();
+            // 轻量刷新：只追加新消息，不重新加载整个消息列表
+            refreshAfterSend();
         } else {
             alert(res.message || res.msg || '发送失败');
         }
