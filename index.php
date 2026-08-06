@@ -244,11 +244,15 @@ function Main($raw) {
             break;
 
         case "INTERACTION_CREATE":
-            // 参照 Python InteractionParser: 根据 chat_type/scene 判断群聊/私聊
+            // 参照 Python InteractionParser + 官方文档: 根据 chat_type/scene 判断群聊/私聊
             define("消息来源", "互动");
-            // 参照 ElainaBot_v2 InteractionParser: event.message_id = d.get('id', '')
-            // 官方文档: interaction_id 从 INTERACTION_CREATE 事件 d.id 字段获取 (非顶层 raw.id)
-            define("事件ID", $raw["d"]["id"] ?? ($raw["id"] ?? ''));
+            // 官方文档: d.id 是"事件ID，用于被动消息发送和互动回调"
+            // d.id (如 "c79536b9-...") 同时用于:
+            //   1. 消息API的 event_id 参数 (发送被动消息)
+            //   2. PUT /interactions/{interaction_id} 的路径参数 (互动回调确认)
+            // 注意: 顶层 raw.id 格式为 "INTERACTION_CREATE:{uuid}"，带事件类型前缀，
+            //       不能作为 event_id 使用，否则报错 "请求参数event_id无效" (40034025)
+            define("事件ID", $raw["d"]["id"] ?? '');
             $chatType = $raw["d"]["chat_type"] ?? null;
             $scene = $raw["d"]["scene"] ?? '';
             if ($chatType === 1 || $scene === "group") {
@@ -409,7 +413,7 @@ function Main($raw) {
     // 记录到数据库（增强功能）
     recordIncomingMessage($event, $raw);
 
-    // 按钮互动需要快速 ACK
+    // 按钮互动需要快速关闭HTTP连接 (避免QQ服务器等待超时)
     if (($raw["t"] ?? "") === "INTERACTION_CREATE" && function_exists('fastcgi_finish_request')) {
         @fastcgi_finish_request();
     }
@@ -417,17 +421,19 @@ function Main($raw) {
     // 加载 bot.php (定义了 确认互动 等函数, 必须在调用前加载)
     require __DIR__ . "/bot.php";
 
-    // 互动回调确认: 在插件加载前执行, 确保及时响应
+    // 加载插件（与原版一致：在Main内加载）
+    // 注意: 互动ACK (PUT /interactions) 必须在插件发送消息之后执行,
+    //       因为 ACK 会"消费" interaction_id, 导致后续消息API的 event_id 失效
+    //       参照 ElainaBot_v2: ACK 由框架在插件分发结束后统一调用, 而非提前调用
+    load_plugin();
+
+    // 互动回调确认: 在插件执行完毕后调用, 确保消息先通过 event_id 发送成功
     // 官方文档: 收到 INTERACTION_CREATE 事件后需调用 PUT /interactions/{interaction_id} 回应
     // 否则客户端会一直 loading 直到超时 (显示"请求第三方失败")
-    // 注意: OP 12 仅用于 webhook HTTP 回调模式, 这里通过 PUT /interactions/{id} 确认
-    // interaction_id 从事件 d.id 获取 (非顶层 raw.id)
+    // interaction_id = d.id = 事件ID, 与消息API的 event_id 使用同一个值
     if (($raw["t"] ?? "") === "INTERACTION_CREATE" && defined('事件ID') && 事件ID) {
         确认互动(事件ID);
     }
-
-    // 加载插件（与原版一致：在Main内加载）
-    load_plugin();
     exit;
 }
 
