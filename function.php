@@ -124,6 +124,29 @@ function logMessage($appid, $direction, $sourceType, $targetId, $contentType, $c
                 $content = mb_substr($content, 0, 200) . '...[内容过长已截断]';
             }
         }
+
+        // ==================== 系统事件去重 ====================
+        // 系统事件（入群申请、群成员增加/移除、加群、退群等）可能同时通过
+        // webhook(index.php) 和 WebSocket(ws_event_handler.php) 两条路径到达，
+        // 导致同一条事件被记录两次。在此做去重：检查最近10秒内是否已有相同事件。
+        $systemEventTypes = ['加群', '退群', '群成员增加', '群成员移除', '入群申请',
+                             '群消息拒绝', '群消息接收', '好友增加', '好友删除',
+                             '订阅状态', '频道更新'];
+        if ($direction === '接收' && in_array($sourceType, $systemEventTypes, true)) {
+            $existing = db()->fetch(
+                "SELECT id FROM messages
+                 WHERE appid = ? AND direction = '接收' AND source_type = ?
+                   AND target_id = ? AND user_id = ?
+                   AND created_at >= datetime('now','localtime','-10 seconds')
+                 LIMIT 1",
+                [$appid, $sourceType, $targetId, $userId]
+            );
+            if ($existing) {
+                // 已有相同事件，跳过插入（去重）
+                return;
+            }
+        }
+
         db()->execute(
             "INSERT INTO messages (appid, direction, source_type, target_id, user_id, content_type, content, message_id, raw_data)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

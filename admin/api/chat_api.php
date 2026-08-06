@@ -216,20 +216,32 @@ try {
                 array_merge($params, [$limit, $offset])
             );
 
-            // 去重: 加群事件与群成员增加事件在10秒内只保留群成员增加（避免重复显示"加入群聊"）
+            // 去重: 系统事件可能通过 webhook 和 WebSocket 两条路径重复记录
+            // 1. 加群事件与群成员增加事件在10秒内只保留群成员增加
+            // 2. 同类型系统事件在10秒内只保留第一条（防止重复显示）
             $filteredMessages = [];
             $skipIds = [];
+            $systemEventTypes = ['加群', '退群', '群成员增加', '群成员移除', '入群申请',
+                                 '群消息拒绝', '群消息接收', '好友增加', '好友删除',
+                                 '订阅状态', '频道更新'];
             foreach ($messages as $msg) {
-                if ($msg['source_type'] === '加群') {
-                    // 检查是否有对应的群成员增加事件
-                    foreach ($messages as $other) {
-                        if ($other['source_type'] === '群成员增加' 
-                            && $other['target_id'] === $msg['target_id']
-                            && $other['id'] !== $msg['id']
-                            && abs(strtotime($other['created_at']) - strtotime($msg['created_at'])) <= 10) {
-                            $skipIds[] = $msg['id'];
-                            break;
-                        }
+                if (!in_array($msg['source_type'], $systemEventTypes)) continue;
+                foreach ($messages as $other) {
+                    if ($other['id'] === $msg['id']) continue;
+                    if ($other['target_id'] !== $msg['target_id']) continue;
+                    if (abs(strtotime($other['created_at']) - strtotime($msg['created_at'])) > 10) continue;
+
+                    // 规则1: 加群 + 群成员增加 → 跳过加群
+                    if ($msg['source_type'] === '加群' && $other['source_type'] === '群成员增加') {
+                        $skipIds[] = $msg['id'];
+                        break;
+                    }
+                    // 规则2: 同类型 + 同用户 + 同来源 → 跳过较新的那条
+                    if ($msg['source_type'] === $other['source_type']
+                        && $msg['user_id'] === $other['user_id']
+                        && $msg['id'] > $other['id']) {
+                        $skipIds[] = $msg['id'];
+                        break;
                     }
                 }
             }
