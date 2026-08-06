@@ -684,7 +684,7 @@ function detectFileUrlFromContent($url) {
 
             // 机器人信息：发送方向的消息显示机器人昵称和头像；加群事件也需要机器人信息
             $botInfo = null;
-            $systemEventTypesForBot = ['退群', '群成员移除', '加群', '群成员增加'];
+            $systemEventTypesForBot = ['退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收', '好友增加', '好友删除', '订阅状态', '频道', '频道私信', '表情表态', '频道更新'];
             if ($msgAppid && (!$isRecv || in_array($sourceType, $systemEventTypesForBot, true))) {
                 foreach ($bots as $bot) {
                     if ($bot['appid'] === $msgAppid) {
@@ -767,7 +767,7 @@ function detectFileUrlFromContent($url) {
             </td>
             <td>
               <?php
-              $systemEventTypes = ['退群', '群成员移除', '加群', '群成员增加'];
+              $systemEventTypes = ['退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收', '好友增加', '好友删除', '订阅状态', '频道', '频道私信', '表情表态', '频道更新'];
               if (in_array($sourceType, $systemEventTypes, true)):
                   // 生成系统事件头像
                   $eventAvatarUrl = '';
@@ -788,6 +788,16 @@ function detectFileUrlFromContent($url) {
                   if ($sourceType === '群成员增加') $eventCls = 'event-join';
                   elseif ($sourceType === '群成员移除') $eventCls = 'event-remove';
                   elseif ($sourceType === '加群') $eventCls = 'event-bot';
+                  elseif ($sourceType === '入群申请') $eventCls = 'event-join';
+                  elseif ($sourceType === '好友增加') $eventCls = 'event-join';
+                  elseif ($sourceType === '好友删除') $eventCls = 'event-leave';
+                  elseif ($sourceType === '群消息拒绝') $eventCls = 'event-remove';
+                  elseif ($sourceType === '群消息接收') $eventCls = 'event-join';
+                  elseif ($sourceType === '订阅状态') $eventCls = 'event-bot';
+                  elseif ($sourceType === '频道') $eventCls = 'event-bot';
+                  elseif ($sourceType === '频道私信') $eventCls = 'event-bot';
+                  elseif ($sourceType === '表情表态') $eventCls = 'event-join';
+                  elseif ($sourceType === '频道更新') $eventCls = 'event-bot';
               ?>
                 <div class="msg-source-event">
                   <div class="msg-event-avatar">

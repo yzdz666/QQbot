@@ -100,6 +100,8 @@ function 文字($content) {
          return $resp;
          break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件, 使用私聊端点
+     case "好友删除":
         $jsonData = [
         "content" => "{$content}",
         "msg_type" => 0,
@@ -118,8 +120,11 @@ function 文字($content) {
          break;
      case "加群":
      case "退群":
-     case "群成员增加":   // 新增
-     case "群成员移除":   // 新增
+     case "群成员增加":
+     case "群成员移除":
+     case "入群申请":   // 群生命周期事件, 使用群聊端点
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $json = json_encode([
         "content" => "{$content}",
@@ -134,11 +139,23 @@ function 文字($content) {
          return $resp;
          break;
      case "文字子频道":
+     case "频道":   // 频道消息
          $json = json_encode([
          "content" => $content,
          "msg_id" => 消息ID
          ]);
          $resp = BOTAPI("/channels/".来源."/messages","POST",$json);
+         $data = json_decode($resp, true);
+         $messageId = $data['id'] ?? '';
+         记录发送("发送文字", 来源, $content, "文字", $messageId, $resp);
+         return $resp;
+         break;
+     case "频道私信":   // 频道私信(DM)
+         $json = json_encode([
+         "content" => $content,
+         "msg_id" => 消息ID
+         ]);
+         $resp = BOTAPI("/dms/".来源."/messages","POST",$json);
          $data = json_decode($resp, true);
          $messageId = $data['id'] ?? '';
          记录发送("发送文字", 来源, $content, "文字", $messageId, $resp);
@@ -172,11 +189,16 @@ function 富媒体($type,$image,$name = null) {
            case "退群":
            case "群成员增加":   // 新增
            case "群成员移除":   // 新增
+           case "入群申请":   // 群生命周期事件
+           case "群消息拒绝":
+           case "群消息接收":
            case "群聊":
            case "互动":
                return json_decode(BOTAPI("/v2/groups/".来源."/files", "POST",$json),true);
                break;
            case "私聊":
+           case "好友增加":   // C2C生命周期事件
+           case "好友删除":
                return json_decode(BOTAPI("/v2/users/".来源."/files", "POST",$json),true);
                break;
         }
@@ -208,6 +230,8 @@ function 图片($image,$content=null) {
         return $resp;
         break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $file_info =富媒体("图片",$image);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -230,6 +254,9 @@ function 图片($image,$content=null) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $file_info =富媒体("图片",$image);
         if (isset($file_info['message'])) {
@@ -250,6 +277,7 @@ function 图片($image,$content=null) {
         return $resp;
         break;
      case "文字子频道":
+     case "频道":   // 频道消息
          $json = json_encode([
              "content" => $content,
              "file_image" => $image,
@@ -295,6 +323,8 @@ function 本地语音($yy) {
          return $resp;
          break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
        $file_info = 富媒体("语音",$yy);
          if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -316,6 +346,9 @@ function 本地语音($yy) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
       $file_info = 富媒体("语音",$yy);
           if (isset($file_info['message'])) {
@@ -360,6 +393,8 @@ function 语音($yy) {
          return $resp;
          break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
@@ -382,6 +417,9 @@ function 语音($yy) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
@@ -441,6 +479,8 @@ function 文件($yy, $nm = null) {
          return $resp;
          break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $file_info = 富媒体("文件",$yy,$nm);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -462,6 +502,9 @@ function 文件($yy, $nm = null) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $file_info = 富媒体("文件",$yy,$nm);
         if (isset($file_info['message'])) {
@@ -506,6 +549,8 @@ function 视频($video) {
         return $resp;
         break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $file_info =富媒体("视频",$video);
         if (isset($file_info['message'])) {
           return 文字($file_info['message']);
@@ -527,6 +572,9 @@ function 视频($video) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $file_info =富媒体("视频",$video);
         if (isset($file_info['message'])) {
@@ -567,6 +615,8 @@ function 按钮($key) {
          return $resp;
          break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $json = json_encode([
          "msg_type" => 2,
          "msg_id" => 消息ID,
@@ -585,6 +635,9 @@ function 按钮($key) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
      case "互动":
         $json = json_encode([
          "msg_type" => 2,
@@ -663,6 +716,8 @@ function 文卡(...$items) {
            return $resp;
          break;
          case "私聊":
+         case "好友增加":   // C2C生命周期事件
+         case "好友删除":
            $evId = defined("事件ID") ? 事件ID : "";
            $msgId = defined("消息ID") ? 消息ID : "";
            if (!empty($evId)) $json["event_id"] = $evId;
@@ -677,6 +732,9 @@ function 文卡(...$items) {
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
+         case "入群申请":   // 群生命周期事件
+         case "群消息拒绝":
+         case "群消息接收":
          case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
@@ -718,6 +776,8 @@ function 大图($title,$xtitle,$iurl){
            return $resp;
          break;
          case "私聊":
+         case "好友增加":   // C2C生命周期事件
+         case "好友删除":
            $evId = defined("事件ID") ? 事件ID : "";
            $msgId = defined("消息ID") ? 消息ID : "";
            if (!empty($evId)) $json["event_id"] = $evId;
@@ -732,6 +792,9 @@ function 大图($title,$xtitle,$iurl){
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
+         case "入群申请":   // 群生命周期事件
+         case "群消息拒绝":
+         case "群消息接收":
          case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
@@ -776,6 +839,8 @@ function 跳转卡($title,$desc,$image,$tz){
            return $resp;
          break;
          case "私聊":
+         case "好友增加":   // C2C生命周期事件
+         case "好友删除":
            $evId = defined("事件ID") ? 事件ID : "";
            $msgId = defined("消息ID") ? 消息ID : "";
            if (!empty($evId)) $json["event_id"] = $evId;
@@ -790,6 +855,9 @@ function 跳转卡($title,$desc,$image,$tz){
          case "退群":
          case "群成员增加":   // 新增
          case "群成员移除":   // 新增
+         case "入群申请":   // 群生命周期事件
+         case "群消息拒绝":
+         case "群消息接收":
          case "互动":
            $json["event_id"] = 事件ID;
            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json));
@@ -883,6 +951,8 @@ function 引用($msgId, $content = '') {
             break;
             
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $payload["msg_id"] = 消息ID;
             $payload["msg_seq"] = rand(1, 99999);
             $resp = BOTAPI("/v2/users/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
@@ -892,6 +962,9 @@ function 引用($msgId, $content = '') {
         case "退群":
         case "群成员增加":
         case "群成员移除":
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
         case "互动":
             $payload["event_id"] = 事件ID;
             $payload["msg_seq"] = rand(1, 99999);
@@ -899,6 +972,7 @@ function 引用($msgId, $content = '') {
             break;
             
         case "文字子频道":
+        case "频道":   // 频道消息
             $payload["msg_id"] = 消息ID;
             $resp = BOTAPI("/channels/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
             break;
@@ -950,6 +1024,8 @@ function MD($md, $keyboard = null, $style = null) {
         return $resp;
         break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $evId = defined("事件ID") ? 事件ID : "";
            $msgId = defined("消息ID") ? 消息ID : "";
            if (!empty($evId)) $json["event_id"] = $evId;
@@ -964,6 +1040,9 @@ function MD($md, $keyboard = null, $style = null) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
         $json["event_id"] = 事件ID;
         $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
         $data = json_decode($resp, true);
@@ -1010,6 +1089,8 @@ function 原生按钮($md, $rows) {
         return $resp;
         break;
      case "私聊":
+     case "好友增加":   // C2C生命周期事件
+     case "好友删除":
         $json["msg_id"] = 消息ID;
         $resp = BOTAPI("/v2/users/".来源."/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
         $data = json_decode($resp, true);
@@ -1021,6 +1102,9 @@ function 原生按钮($md, $rows) {
      case "退群":
      case "群成员增加":   // 新增
      case "群成员移除":   // 新增
+     case "入群申请":   // 群生命周期事件
+     case "群消息拒绝":
+     case "群消息接收":
         $json["event_id"] = 事件ID;
         $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
         $data = json_decode($resp, true);
@@ -1081,13 +1165,19 @@ function 发MD($template_id, $params, $keyboard_id = null, $style = null) {
         case "退群":
         case "群成员增加":   // 新增
         case "群成员移除":   // 新增
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
         case "互动":
             $api_url = "/v2/groups/" . 来源 . "/messages";
             break;
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $api_url = "/v2/users/" . 来源 . "/messages";
             break;
         case "文字子频道":
+        case "频道":   // 频道消息
             $api_url = "/channels/" . 来源 . "/messages";
             break;
         default:
@@ -1132,10 +1222,15 @@ function Emoji($emojiId, $content = '') {
         case "退群":
         case "群成员增加":
         case "群成员移除":
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
         case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
             break;
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $api = "/v2/users/" . 来源 . "/messages";
             break;
         default:
@@ -1204,13 +1299,19 @@ function Ark23($kv) {
         case "退群":
         case "群成员增加":
         case "群成员移除":
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
         case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
             break;
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $api = "/v2/users/" . 来源 . "/messages";
             break;
         case "文字子频道":
+        case "频道":   // 频道消息
             $api = "/channels/" . 来源 . "/messages";
             break;
         default:
@@ -1253,13 +1354,19 @@ function Ark($template_id, $kv) {
         case "退群":
         case "群成员增加":
         case "群成员移除":
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
         case "互动":
             $api = "/v2/groups/" . 来源 . "/messages";
             break;
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $api = "/v2/users/" . 来源 . "/messages";
             break;
         case "文字子频道":
+        case "频道":   // 频道消息
             $api = "/channels/" . 来源 . "/messages";
             break;
         default:
@@ -1397,6 +1504,80 @@ function 确认互动($eventId, $body = '') {
     return $resp;
 }
 
+// ==================== 处理入群申请 (POST /v2/groups/{group_openid}/members/{member_openid}/operate) ====================
+// 参照 QQ Bot API 官方文档: 群成员操作接口
+// 用于同意/拒绝用户入群申请 (GROUP_JOIN_REQUEST 事件)
+// 参数:
+//   $groupOpenid  - 群 openid (来源)
+//   $memberOpenid - 申请者 openid (用户)
+//   $approve      - true=同意, false=拒绝
+//   $reason       - 拒绝理由 (可选)
+function 处理入群申请($groupOpenid, $memberOpenid, $approve, $reason = '') {
+    if (empty($groupOpenid) || empty($memberOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
+    }
+    $data = ["approve" => $approve];
+    if (!$approve && !empty($reason)) {
+        $data["reason"] = $reason;
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/v2/groups/{$groupOpenid}/members/{$memberOpenid}/operate", "POST", $json);
+    return $resp;
+}
+
+// ==================== 发送频道私信 (POST /dms/{guild_id}/messages) ====================
+// 参照 ElainaBot_v2 框架: 频道私信(DM)消息发送端点
+// 用于频道场景下的私信消息发送
+// 参数:
+//   $guildId    - 频道 ID
+//   $content    - 消息内容
+//   $msgId      - 回复的消息 ID (可选, 用于被动消息)
+function 发送频道私信($guildId, $content, $msgId = '') {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    $data = [
+        "content" => $content,
+        "msg_type" => 0
+    ];
+    if (!empty($msgId)) {
+        $data["msg_id"] = $msgId;
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/dms/{$guildId}/messages", "POST", $json);
+    return $resp;
+}
+
+// ==================== 添加表情表态 (PUT /channels/{channel_id}/messages/{message_id}/reactions/{type}/{id}) ====================
+// 参照 QQ Bot API 官方文档: 表情表态接口 (仅频道可用)
+// 参数:
+//   $channelId - 频道 ID
+//   $messageId - 消息 ID
+//   $type      - 表情类型 (1=系统表情, 2=自定义表情)
+//   $emojiId   - 表情 ID
+function 添加表态($channelId, $messageId, $type, $emojiId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 message_id 为空']);
+    }
+    $resp = BOTAPI("/channels/{$channelId}/messages/{$messageId}/reactions/{$type}/{$emojiId}", "PUT", "");
+    return $resp;
+}
+
+// ==================== 删除表情表态 (DELETE /channels/{channel_id}/messages/{message_id}/reactions/{type}/{id}) ====================
+// 参照 QQ Bot API 官方文档: 表情表态接口 (仅频道可用)
+// 参数:
+//   $channelId - 频道 ID
+//   $messageId - 消息 ID
+//   $type      - 表情类型 (1=系统表情, 2=自定义表情)
+//   $emojiId   - 表情 ID
+function 删除表态($channelId, $messageId, $type, $emojiId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 message_id 为空']);
+    }
+    $resp = BOTAPI("/channels/{$channelId}/messages/{$messageId}/reactions/{$type}/{$emojiId}", "DELETE", "");
+    return $resp;
+}
+
 // ==================== 获取图片尺寸 ====================
 function 图片尺寸($imageSource) {
     if (preg_match('/^https?:\/\//i', $imageSource)) {
@@ -1443,6 +1624,8 @@ function 图文卡片($title, $description, $pic_url, $url) {
             $resp = BOTAPI("/v2/groups/" . 来源 . "/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
             break;
         case "私聊":
+        case "好友增加":   // C2C生命周期事件
+        case "好友删除":
             $evId = defined("事件ID") ? 事件ID : "";
            $msgId = defined("消息ID") ? 消息ID : "";
            if (!empty($evId)) $json["event_id"] = $evId;
@@ -1453,6 +1636,9 @@ function 图文卡片($title, $description, $pic_url, $url) {
         case "退群":
         case "群成员增加":
         case "群成员移除":
+        case "入群申请":   // 群生命周期事件
+        case "群消息拒绝":
+        case "群消息接收":
             $json["event_id"] = 事件ID;
             $resp = BOTAPI("/v2/groups/" . 来源 . "/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
             break;

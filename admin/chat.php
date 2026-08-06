@@ -1829,8 +1829,8 @@ function buildMsgHtml(m, botId) {
     var isSent = (m.direction === '发送');
     var cls = isSent ? 'sent' : 'received';
 
-    // ==================== 系统事件消息（退群、群成员移除、加群、群成员增加） ====================
-    var systemEventTypes = ['退群', '群成员移除', '加群', '群成员增加'];
+    // ==================== 系统事件消息（退群、群成员移除、加群、群成员增加、入群申请等） ====================
+    var systemEventTypes = ['退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收', '好友增加', '好友删除', '订阅状态', '频道', '频道私信', '表情表态', '频道更新'];
     var sourceType = m.source_type || '';
     if (systemEventTypes.indexOf(sourceType) > -1) {
         var eventIcon = '';
@@ -1852,6 +1852,36 @@ function buildMsgHtml(m, botId) {
         } else if (sourceType === '群成员增加') {
             eventIcon = '➕';
             eventText = eventUserName + ' 加入群聊';
+        } else if (sourceType === '入群申请') {
+            eventIcon = '📝';
+            eventText = eventUserName + ' 申请加入群聊';
+        } else if (sourceType === '群消息拒绝') {
+            eventIcon = '🔇';
+            eventText = '群管理员关闭了通知';
+        } else if (sourceType === '群消息接收') {
+            eventIcon = '🔔';
+            eventText = '群管理员开启了通知';
+        } else if (sourceType === '好友增加') {
+            eventIcon = '🤝';
+            eventText = eventUserName + ' 添加了机器人为好友';
+        } else if (sourceType === '好友删除') {
+            eventIcon = '💔';
+            eventText = eventUserName + ' 删除了机器人好友';
+        } else if (sourceType === '订阅状态') {
+            eventIcon = '📡';
+            eventText = '订阅消息状态变更';
+        } else if (sourceType === '频道') {
+            eventIcon = '📢';
+            eventText = eventUserName + ' 发送了频道消息';
+        } else if (sourceType === '频道私信') {
+            eventIcon = '📬';
+            eventText = eventUserName + ' 发送了频道私信';
+        } else if (sourceType === '表情表态') {
+            eventIcon = '😊';
+            eventText = eventUserName + ' 进行了表情表态';
+        } else if (sourceType === '频道更新') {
+            eventIcon = '🔄';
+            eventText = '频道信息更新';
         }
 
         // 生成系统事件头像

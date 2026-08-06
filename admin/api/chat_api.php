@@ -52,7 +52,9 @@ try {
             }
 
             // 获取去重的 target_id 列表（即会话列表）
-            // 系统事件（退群、群成员移除、加群、群成员增加）归入群聊会话
+            // 群相关系统事件归入群聊会话，好友相关归入私聊会话
+            $groupEventTypes = ['退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收'];
+            $c2cEventTypes = ['好友增加', '好友删除'];
             $total = db()->fetchColumn(
                 "SELECT COUNT(DISTINCT target_id) FROM messages " . $where,
                 $params
@@ -60,13 +62,21 @@ try {
 
             $sessions = db()->fetchAll(
                 "SELECT appid, target_id, 
-                        CASE WHEN source_type IN ('退群', '群成员移除', '加群', '群成员增加') THEN '群聊' ELSE source_type END as source_type,
+                        CASE 
+                            WHEN source_type IN ('退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收') THEN '群聊'
+                            WHEN source_type IN ('好友增加', '好友删除') THEN '私聊'
+                            ELSE source_type 
+                        END as source_type,
                         MAX(created_at) as last_active,
                         COUNT(*) as msg_count
                  FROM messages 
                  {$where} 
                  GROUP BY appid, target_id, 
-                          CASE WHEN source_type IN ('退群', '群成员移除', '加群', '群成员增加') THEN '群聊' ELSE source_type END 
+                          CASE 
+                            WHEN source_type IN ('退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收') THEN '群聊'
+                            WHEN source_type IN ('好友增加', '好友删除') THEN '私聊'
+                            ELSE source_type 
+                          END 
                  ORDER BY last_active DESC 
                  LIMIT ? OFFSET ?",
                 array_merge($params, [$pageSize, $offset])
@@ -101,7 +111,7 @@ try {
                 if ($lastMsg) {
                     $previewContent = $lastMsg['content'] ?? '';
                     // 系统事件显示事件类型
-                    $sysTypes = ['退群', '群成员移除', '加群', '群成员增加'];
+                    $sysTypes = ['退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收', '好友增加', '好友删除', '订阅状态', '频道', '频道私信', '表情表态', '频道更新'];
                     // 媒体类型（兼容英文和中文content_type）
                     $imageTypes = ['image', '图片'];
                     $voiceTypes = ['voice', '语音'];
@@ -175,9 +185,12 @@ try {
             $params = [$appid, $targetId];
 
             if (!empty($sourceType)) {
-                // 群聊视图包含系统事件（退群、群成员移除、加群、群成员增加）
+                // 群聊视图包含群相关系统事件
                 if ($sourceType === '群聊') {
-                    $where .= " AND source_type IN ('群聊', '退群', '群成员移除', '加群', '群成员增加')";
+                    $where .= " AND source_type IN ('群聊', '退群', '群成员移除', '加群', '群成员增加', '入群申请', '群消息拒绝', '群消息接收')";
+                } elseif ($sourceType === '私聊') {
+                    // 私聊视图包含好友相关系统事件
+                    $where .= " AND source_type IN ('私聊', '好友增加', '好友删除')";
                 } else {
                     $where .= " AND source_type = ?";
                     $params[] = $sourceType;
@@ -202,6 +215,31 @@ try {
                  LIMIT ? OFFSET ?",
                 array_merge($params, [$limit, $offset])
             );
+
+            // 去重: 加群事件与群成员增加事件在10秒内只保留群成员增加（避免重复显示"加入群聊"）
+            $filteredMessages = [];
+            $skipIds = [];
+            foreach ($messages as $msg) {
+                if ($msg['source_type'] === '加群') {
+                    // 检查是否有对应的群成员增加事件
+                    foreach ($messages as $other) {
+                        if ($other['source_type'] === '群成员增加' 
+                            && $other['target_id'] === $msg['target_id']
+                            && $other['id'] !== $msg['id']
+                            && abs(strtotime($other['created_at']) - strtotime($msg['created_at'])) <= 10) {
+                            $skipIds[] = $msg['id'];
+                            break;
+                        }
+                    }
+                }
+            }
+            foreach ($messages as $msg) {
+                if (!in_array($msg['id'], $skipIds)) {
+                    $filteredMessages[] = $msg;
+                }
+            }
+            $messages = $filteredMessages;
+            $total = max(0, $total - count($skipIds));
 
             // 解析 raw_data 提取 member_role、username、bot、ref_idx
             foreach ($messages as &$msg) {

@@ -285,6 +285,121 @@ function Main($raw) {
             define("用户", $raw["d"]["member_openid"] ?? '');
             break;
 
+        case "GROUP_JOIN_REQUEST":
+            // 参照 Python GroupJoinRequestParser: 成员申请入群
+            define("消息来源", "入群申请");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[入群申请]");
+            define("来源", $raw["d"]["group_openid"] ?? '');
+            define("用户", $raw["d"]["member_openid"] ?? '');
+            break;
+
+        case "FRIEND_ADD":
+            // 参照 Python FriendAddParser: openid, scene, scene_param
+            define("消息来源", "好友增加");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[好友增加]");
+            define("来源", $raw["d"]["openid"] ?? '');
+            define("用户", $raw["d"]["openid"] ?? '');
+            break;
+
+        case "FRIEND_DEL":
+            // 参照 Python FriendDelParser: openid
+            define("消息来源", "好友删除");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[好友删除]");
+            define("来源", $raw["d"]["openid"] ?? '');
+            define("用户", $raw["d"]["openid"] ?? '');
+            break;
+
+        case "GROUP_MSG_REJECT":
+            // 参照 Python GroupMsgRejectParser: 群聊拒绝主动消息
+            define("消息来源", "群消息拒绝");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[群消息拒绝]");
+            define("来源", $raw["d"]["group_openid"] ?? '');
+            define("用户", $raw["d"]["op_member_openid"] ?? '');
+            break;
+
+        case "GROUP_MSG_RECEIVE":
+            // 参照 Python GroupMsgReceiveParser: 群聊接收主动消息
+            define("消息来源", "群消息接收");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[群消息接收]");
+            define("来源", $raw["d"]["group_openid"] ?? '');
+            define("用户", $raw["d"]["op_member_openid"] ?? '');
+            break;
+
+        case "SUBSCRIBE_MESSAGE_STATUS":
+            // 参照 Python SubscribeStatusParser: 订阅消息状态
+            define("消息来源", "订阅状态");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[订阅状态变更]");
+            define("来源", $raw["d"]["group_openid"] ?? ($raw["d"]["openid"] ?? ''));
+            define("用户", $raw["d"]["openid"] ?? ($raw["d"]["op_member_openid"] ?? ''));
+            break;
+
+        // ==================== 频道消息事件 (参照 Python ChannelMessageParser) ====================
+        case "AT_MESSAGE_CREATE":
+            // 频道@消息 (公域)
+            define("消息来源", "频道");
+            define("消息ID", $raw["d"]["id"] ?? '');
+            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            $content = preg_replace('/<@!?[A-Za-z0-9]+>/', '', $content);
+            $content = trim($content);
+            define("消息", $content);
+            define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["guild_id"] ?? ''));
+            define("用户", $raw["d"]["author"]["id"] ?? ($raw["d"]["author"]["member_openid"] ?? ''));
+            break;
+
+        case "MESSAGE_CREATE":
+            // 频道消息 (私域)
+            define("消息来源", "频道");
+            define("消息ID", $raw["d"]["id"] ?? '');
+            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            define("消息", $content);
+            define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["guild_id"] ?? ''));
+            define("用户", $raw["d"]["author"]["id"] ?? '');
+            break;
+
+        case "DIRECT_MESSAGE_CREATE":
+            // 频道私信
+            define("消息来源", "频道私信");
+            define("消息ID", $raw["d"]["id"] ?? '');
+            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            define("消息", $content);
+            define("来源", $raw["d"]["guild_id"] ?? ($raw["d"]["channel_id"] ?? ''));
+            define("用户", $raw["d"]["author"]["id"] ?? '');
+            break;
+
+        // ==================== 表态事件 (参照 Python SILENT_TYPES, 仅记录不分发) ====================
+        case "MESSAGE_REACTION_ADD":
+            // 消息表情表态-添加 (静默事件)
+            define("消息来源", "表情表态");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[表情表态添加]");
+            define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["group_openid"] ?? ''));
+            define("用户", $raw["d"]["user_id"] ?? ($raw["d"]["op_member_openid"] ?? ''));
+            break;
+
+        case "MESSAGE_REACTION_REMOVE":
+            // 消息表情表态-移除 (静默事件)
+            define("消息来源", "表情表态");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[表情表态移除]");
+            define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["group_openid"] ?? ''));
+            define("用户", $raw["d"]["user_id"] ?? ($raw["d"]["op_member_openid"] ?? ''));
+            break;
+
+        case "GUILD_UPDATE":
+            // 频道信息更新 (静默事件)
+            define("消息来源", "频道更新");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[频道信息更新]");
+            define("来源", $raw["d"]["id"] ?? '');
+            define("用户", "");
+            break;
+
         default:
             return;
     }
@@ -374,15 +489,45 @@ function recordIncomingMessage($eventType, $raw) {
             $targetId = $d['group_openid'] ?? '';
             $userId = $d['member_openid'] ?? '';
             break;
+        case 'GROUP_JOIN_REQUEST':
+            $sourceType = '入群申请';
+            $targetId = $d['group_openid'] ?? '';
+            $userId = $d['member_openid'] ?? '';
+            break;
+        case 'FRIEND_ADD':
+            $sourceType = '好友增加';
+            $targetId = $d['openid'] ?? '';
+            $userId = $d['openid'] ?? '';
+            break;
+        case 'FRIEND_DEL':
+            $sourceType = '好友删除';
+            $targetId = $d['openid'] ?? '';
+            $userId = $d['openid'] ?? '';
+            break;
+        case 'GROUP_MSG_REJECT':
+            $sourceType = '群消息拒绝';
+            $targetId = $d['group_openid'] ?? '';
+            $userId = $d['op_member_openid'] ?? '';
+            break;
+        case 'GROUP_MSG_RECEIVE':
+            $sourceType = '群消息接收';
+            $targetId = $d['group_openid'] ?? '';
+            $userId = $d['op_member_openid'] ?? '';
+            break;
+        case 'SUBSCRIBE_MESSAGE_STATUS':
+            $sourceType = '订阅状态';
+            $targetId = $d['group_openid'] ?? ($d['openid'] ?? '');
+            $userId = $d['openid'] ?? ($d['op_member_openid'] ?? '');
+            break;
     }
 
     // 记录用户和群组（含昵称）
     if ($userId && defined('appid')) {
-        // 参照 ws_event_handler.php: 优先使用 author.username
-        $nickname = $d['author']['username'] ?? '';
+        // 参照 ws_event_handler.php: 优先使用 author.username, 其次 d.username (入群申请等事件)
+        $nickname = $d['author']['username'] ?? ($d['username'] ?? '');
         recordUser(appid, $userId, $nickname);
     }
-    if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '互动']) && defined('appid')) recordGroup(appid, $targetId);
+    if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请', '群消息拒绝', '群消息接收', '互动']) && defined('appid')) recordGroup(appid, $targetId);
 
     // 解析附件，正确识别图片/视频/语音/文件类型和URL
     $parsedMsg = parseMessageAttachment($raw);
