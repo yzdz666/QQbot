@@ -375,11 +375,12 @@ if (消息 == "测试撤回") {
 // ==================== 处理原生按钮点击（互动事件） ====================
 if (消息来源 == "互动") {
     $buttonId = raw["d"]["data"]["resolved"]["button_id"] ?? "";
-    $buttonData = raw["d"]["data"]["resolved"]["data"] ?? "";
-    
+    // 框架已将 button_data 提取到「消息」常量
+    $buttonData = 消息;
+
     // 调试日志
     wlog('[调试] 按钮点击 - ID: ' . $buttonId . ', Data: ' . $buttonData, appid);
-    
+
     // 根据按钮ID或按钮data响应
     $responseData = $buttonData ?: $buttonId;
     
