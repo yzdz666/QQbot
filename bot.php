@@ -2820,6 +2820,78 @@ function 修改子频道消息($channelId, $messageId, $data) {
 }
 
 // ============================================================================
+// 消息撤回 - 参照官方文档 reset.html
+// 4 种场景: 群聊 / 单聊(C2C) / 子频道 / 频道私信
+// 群聊/单聊: 2 分钟内可撤回; 群管理员可撤回成员消息
+// 频道私信: 仅可撤回机器人自己发送的私信
+// ============================================================================
+
+// ==================== 撤回子频道消息 (DELETE /channels/{channel_id}/messages/{message_id}) ====================
+function 撤回子频道消息($channelId, $messageId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 message_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/messages/{$messageId}", "DELETE", "");
+}
+
+// ==================== 撤回频道私信消息 (DELETE /dms/{guild_id}/messages/{message_id}) ====================
+// 仅可撤回机器人自己发送的私信
+function 撤回频道私信($guildId, $messageId) {
+    if (empty($guildId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 message_id 为空']);
+    }
+    return BOTAPI("/dms/{$guildId}/messages/{$messageId}", "DELETE", "");
+}
+
+// ==================== 撤回单聊消息 (DELETE /v2/users/{openid}/messages/{message_id}) ====================
+// 2 分钟内可撤回
+function 撤回单聊消息($userOpenid, $messageId) {
+    if (empty($userOpenid) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'user_openid 或 message_id 为空']);
+    }
+    return BOTAPI("/v2/users/{$userOpenid}/messages/{$messageId}", "DELETE", "");
+}
+
+// ==================== 撤回群聊消息 (DELETE /v2/groups/{group_openid}/messages/{message_id}) ====================
+// 2 分钟内可撤回; 群管理员可撤回成员消息
+function 撤回群聊消息($groupOpenid, $messageId) {
+    if (empty($groupOpenid) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 message_id 为空']);
+    }
+    return BOTAPI("/v2/groups/{$groupOpenid}/messages/{$messageId}", "DELETE", "");
+}
+
+// ==================== 获取通用 WSS 接入点 (GET /gateway) ====================
+// 无分片信息, 与 /gateway/bot(带分片) 不同
+function 获取通用网关() {
+    return BOTAPI("/gateway", "GET", "");
+}
+
+// ==================== 获取音视频/直播子频道在线成员数 (GET /channels/{channel_id}/online_nums) ====================
+function 获取在线成员数($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/online_nums", "GET", "");
+}
+
+// ==================== 拉取子频道消息列表 (GET /channels/{channel_id}/messages) ====================
+// 私域机器人接口, 支持分页
+// 参数:
+//   $channelId - 子频道 ID
+//   $query     - 查询参数 [before/after/limit]
+function 获取子频道消息列表($channelId, $query = []) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    $address = "/channels/{$channelId}/messages";
+    if (!empty($query) && is_array($query)) {
+        $address .= "?" . http_build_query($query);
+    }
+    return BOTAPI($address, "GET", "");
+}
+
+// ============================================================================
 // 群管理扩展 (Group Info / Bot State / Join Request List)
 // 参照 autogen: v2_groups_group_openid_info / bot_state / join_request_list
 // ============================================================================

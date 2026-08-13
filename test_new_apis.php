@@ -879,6 +879,61 @@ if ($call['method'] === 'POST' && strpos($call['address'], '/whitelist_users') !
 // ==================== 验证第二批 API 函数定义存在 ====================
 echo "\n========== 验证第二批 API 函数存在 ==========\n";
 
+// ==================== 测试第三批新增 API (消息撤回/通用网关/在线成员数/消息列表) ====================
+echo "\n========== 测试第三批新增 API (消息撤回等) ==========\n";
+
+// 撤回子频道消息 (DELETE /channels/{channel_id}/messages/{message_id})
+resetMock();
+撤回子频道消息('c1', 'm1');
+assertApiCall('撤回子频道消息', 'DELETE', '/channels/c1/messages/m1', $GLOBALS['__mock']['last_botapi']);
+assertEmptyParam('撤回子频道消息空参数', 撤回子频道消息('', 'm1'));
+
+// 撤回频道私信 (DELETE /dms/{guild_id}/messages/{message_id})
+resetMock();
+撤回频道私信('gid1', 'm1');
+assertApiCall('撤回频道私信', 'DELETE', '/dms/gid1/messages/m1', $GLOBALS['__mock']['last_botapi']);
+assertEmptyParam('撤回频道私信空参数', 撤回频道私信('', 'm1'));
+
+// 撤回单聊消息 (DELETE /v2/users/{openid}/messages/{message_id})
+resetMock();
+撤回单聊消息('u1', 'm1');
+assertApiCall('撤回单聊消息', 'DELETE', '/v2/users/u1/messages/m1', $GLOBALS['__mock']['last_botapi']);
+assertEmptyParam('撤回单聊消息空参数', 撤回单聊消息('', 'm1'));
+
+// 撤回群聊消息 (DELETE /v2/groups/{group_openid}/messages/{message_id})
+resetMock();
+撤回群聊消息('g1', 'm1');
+assertApiCall('撤回群聊消息', 'DELETE', '/v2/groups/g1/messages/m1', $GLOBALS['__mock']['last_botapi']);
+assertEmptyParam('撤回群聊消息空参数', 撤回群聊消息('', 'm1'));
+
+// 获取通用网关 (GET /gateway)
+resetMock();
+获取通用网关();
+assertApiCall('获取通用网关', 'GET', '/gateway', $GLOBALS['__mock']['last_botapi']);
+
+// 获取在线成员数 (GET /channels/{channel_id}/online_nums)
+resetMock();
+获取在线成员数('c1');
+assertApiCall('获取在线成员数', 'GET', '/channels/c1/online_nums', $GLOBALS['__mock']['last_botapi']);
+assertEmptyParam('获取在线成员数空参数', 获取在线成员数(''));
+
+// 获取子频道消息列表 (GET /channels/{channel_id}/messages)
+resetMock();
+获取子频道消息列表('c1');
+assertApiCall('获取子频道消息列表', 'GET', '/channels/c1/messages', $GLOBALS['__mock']['last_botapi']);
+resetMock();
+获取子频道消息列表('c1', ['limit' => 10, 'before' => 'm1']);
+$call = $GLOBALS['__mock']['last_botapi'];
+if (strpos($call['address'], 'limit=10') !== false && strpos($call['address'], 'before=m1') !== false) {
+    pass('获取子频道消息列表(带分页)');
+} else {
+    fail('获取子频道消息列表(带分页)', json_encode($call));
+}
+assertEmptyParam('获取子频道消息列表空参数', 获取子频道消息列表(''));
+
+// ==================== 验证第二批 API 函数定义存在 ====================
+echo "\n========== 验证第二批 API 函数存在 ==========\n";
+
 $batch2Apis = [
     '获取表态用户列表', '获取子频道消息', '修改子频道消息',
     '获取群信息', '获取机器人群状态', '获取入群申请列表',
@@ -886,6 +941,8 @@ $batch2Apis = [
     '执行审批策略', '修改审批策略白名单',
     '获取API权限列表', '申请API权限',
     '获取帖子列表', '获取帖子详情', '发表帖子', '删除帖子',
+    '撤回子频道消息', '撤回频道私信', '撤回单聊消息', '撤回群聊消息',
+    '获取通用网关', '获取在线成员数', '获取子频道消息列表',
 ];
 $missing3 = [];
 foreach ($batch2Apis as $api) {
@@ -894,9 +951,9 @@ foreach ($batch2Apis as $api) {
     }
 }
 if (empty($missing3)) {
-    pass('bot.php 含全部 ' . count($batch2Apis) . ' 个第二批新增API');
+    pass('bot.php 含全部 ' . count($batch2Apis) . ' 个第二/三批新增API');
 } else {
-    fail('bot.php 缺失第二批API', implode(', ', $missing3));
+    fail('bot.php 缺失第二/三批API', implode(', ', $missing3));
 }
 
 // ==================== 验证插件新增指令函数存在 ====================
