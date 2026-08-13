@@ -3043,3 +3043,73 @@ function 删除帖子($channelId, $threadId) {
     }
     return BOTAPI("/channels/{$channelId}/threads/{$threadId}", "DELETE", "");
 }
+
+// ============================================================================
+// 分片上传 (multipart/form-data) - 用于频道/子频道图片消息的二进制文件流上传
+// 参照官方文档: POST /channels/{channel_id}/messages (multipart/form-data)
+// 与图片()函数的 JSON+base64 方式不同，本函数使用 multipart 直传二进制文件
+// 适用于本地大文件上传，避免 base64 编码导致的体积膨胀(约+33%)与性能损耗
+// 支持两种入参:
+//   1. $file 为本地文件路径 -> 自动包装为 CURLFile 对象
+//   2. $file 为二进制字符串 -> 写入临时文件后上传
+// 参数:
+//   $channelId - 子频道 ID
+//   $file      - 本地文件路径 或 二进制数据
+//   $content   - 附加文字内容(可选)
+//   $msgId     - 被动回复消息 ID(可选)
+//   $filename  - 上传文件名(可选, 默认 auto.png)
+// 返回: API 原始响应
+// ============================================================================
+function 分片上传($channelId, $file, $content = '', $msgId = '', $filename = '') {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    if (empty($file)) {
+        return json_encode(['code' => -1, 'message' => 'file 为空']);
+    }
+
+    // 判断入参类型：本地文件路径 or 二进制数据
+    $isLocalFile = is_string($file) && is_file($file);
+    $tempFile = '';
+    if ($isLocalFile) {
+        $curlFile = new CURLFile($file, '', $filename ?: basename($file));
+    } else {
+        // 二进制数据写入临时文件
+        $tempFile = tempnam(sys_get_temp_dir(), 'bot_chunk_');
+        file_put_contents($tempFile, $file);
+        $curlFile = new CURLFile($tempFile, '', $filename ?: 'auto.png');
+    }
+
+    try {
+        // 组装 multipart 表单字段
+        $fields = [];
+        if ($content !== '') $fields['content'] = (string)$content;
+        if (!empty($msgId)) $fields['msg_id'] = (string)$msgId;
+        $fields['file_image'] = $curlFile;
+
+        // 构建完整 URL（与 BOTAPI 一致的环境选择）
+        $urls = [
+            "正式" => "https://api.sgroup.qq.com",
+            "沙箱" => "https://sandbox.api.sgroup.qq.com"
+        ];
+        $env = defined('type') ? type : '正式';
+        if (!isset($urls[$env])) $env = '正式';
+        $url = $urls[$env] . "/channels/{$channelId}/messages";
+
+        $header = ["Authorization: QQBot " . BOT凭证()];
+        $resp = curlMultipart($url, $header, $fields);
+
+        $data = json_decode($resp, true);
+        $messageId = $data['id'] ?? '';
+        $logContent = $isLocalFile ? ("[分片上传文件:" . basename($file) . "]") : "[分片上传二进制数据]";
+        if ($content !== '') $logContent .= " " . $content;
+        记录发送("分片上传图片", $channelId, $logContent, "图片", $messageId, $resp);
+        wlog("[分片上传] channel={$channelId} 响应: " . $resp, defined('appid') ? appid : null);
+        return $resp;
+    } finally {
+        // 清理临时文件
+        if ($tempFile !== '' && file_exists($tempFile)) {
+            @unlink($tempFile);
+        }
+    }
+}

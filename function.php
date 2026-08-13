@@ -325,6 +325,43 @@ function curl($url, $method, $headers, $params){
     return $response;
 }
 
+// ==================== multipart/form-data 分片上传请求函数 ====================
+// 用于上传文件(图片/视频/语音/文件)到 QQ Bot API，支持二进制文件流上传
+// 与 curl() 不同，本函数使用 multipart/form-data 编码，适用于大文件与二进制内容
+// 参数:
+//   $url     - 完整请求 URL
+//   $headers - 请求头数组（不含 Content-Type，由 curl 自动生成 boundary）
+//   $fields  - 表单字段数组，支持 CURLFile 对象或字符串值
+// 返回: 响应体字符串
+function curlMultipart($url, $headers, $fields) {
+    $url = str_replace(" ", "%20", $url);
+    if (empty($headers)) {
+        $headers = [];
+    } elseif (!is_array($headers)) {
+        parse_str($headers, $headers);
+    }
+    // 移除可能存在的 Content-Type，让 curl 自动设置 multipart boundary
+    $headers = array_values(array_filter($headers, function($h) {
+        return stripos($h, 'Content-Type:') !== 0;
+    }));
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_VERBOSE, 0);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    if (stristr($response, 'HTTP 404') || $response == '') {
+        return json_encode(['Error' => '请求错误']);
+    }
+    return $response;
+}
+
 // ==================== 签名验证 ====================
 
 function sign($payload, $seed){
