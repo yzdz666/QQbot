@@ -76,6 +76,12 @@ try {
         <span class="nav-badge"><?= $unreadMsgs > 99 ? '99+' : $unreadMsgs ?></span>
         <?php endif; ?>
       </a>
+      <a href="logs.php" class="nav-item <?= $currentPage === 'logs.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2H10L13 5V14H3V2Z" stroke="currentColor" stroke-width="1.5"/><path d="M5 6H11M5 8.5H11M5 11H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        系统日志
+      </a>
       <a href="plugins.php" class="nav-item <?= $currentPage === 'plugins.php' ? 'active' : '' ?>">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5 2H11V5.5C11 6.5 10.5 7 9.5 7H6.5C5.5 7 5 6.5 5 5.5V2Z" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 7V9.5C6.5 10.5 7 11 8 11C9 11 9.5 10.5 9.5 9.5V7" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="11" width="10" height="3" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>

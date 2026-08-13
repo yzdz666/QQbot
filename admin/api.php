@@ -330,8 +330,27 @@ switch ($action) {
         break;
 
     case 'clear_logs':
-        db()->execute("DELETE FROM system_logs");
+        $appid = $_POST['appid'] ?? '';
+        if (empty($appid)) {
+            db()->execute("DELETE FROM system_logs");
+        } else {
+            db()->execute("DELETE FROM system_logs WHERE appid = ?", [$appid]);
+        }
         json_response(['success' => true, 'message' => '日志已清空']);
+        break;
+
+    case 'log_count':
+        $appid = $_POST['appid'] ?? $_GET['appid'] ?? '';
+        try {
+            if (empty($appid)) {
+                $count = (int) db()->fetchColumn("SELECT COUNT(*) FROM system_logs");
+            } else {
+                $count = (int) db()->fetchColumn("SELECT COUNT(*) FROM system_logs WHERE appid = ?", [$appid]);
+            }
+            json_response(['success' => true, 'count' => $count]);
+        } catch (Exception $e) {
+            json_response(['success' => true, 'count' => 0]);
+        }
         break;
 
     case 'clear_events':
