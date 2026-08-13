@@ -844,6 +844,15 @@ function recordIncomingMessage($eventType, $raw) {
         }
         
         logMessage(appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE));
+
+        // 群聊消息: 自动获取群名称（参照官方文档 GET /v2/groups/{group_openid}/info）
+        if ($sourceType === '群聊' && !empty($targetId)) {
+            try {
+                fetchAndUpdateGroupInfo(appid, $targetId);
+            } catch (Exception $e) {
+                wlog('[群信息获取] 失败: ' . $e->getMessage(), appid);
+            }
+        }
     }
 }
 

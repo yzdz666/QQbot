@@ -583,6 +583,15 @@ if ($isBotMsg && $msgId) {
 
 logMessage($appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE));
 
+// 群聊消息: 自动获取群名称（参照官方文档 GET /v2/groups/{group_openid}/info）
+if (in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请'], true) && !empty($targetId)) {
+    try {
+        fetchAndUpdateGroupInfo($appid, $targetId);
+    } catch (Exception $e) {
+        wlog('[群信息获取] 失败: ' . $e->getMessage(), $appid);
+    }
+}
+
 // ==================== 获取插件配置 ====================
 // 与 index.php initAppContext 一致: 默认启用所有存在的插件, 除非被显式禁用
 $pluginConfig = [];

@@ -985,6 +985,104 @@ function fetchAndUpdateBotInfo($appid) {
     ];
 }
 
+/**
+ * 获取群信息并更新数据库
+ * 参照官方文档: GET /v2/groups/{group_openid}/info
+ * 返回群名称、群简介、群分类、群标签、群成员人数
+ *
+ * @param string $appid       机器人AppID
+ * @param string $groupOpenid 群OpenID
+ * @param bool   $force       是否强制刷新（忽略缓存）
+ * @return array              ['success'=>bool, 'data'=>..., 'message'=>...]
+ */
+function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
+    if (empty($appid) || empty($groupOpenid)) {
+        return ['success' => false, 'message' => 'appid 或 group_openid 为空'];
+    }
+
+    // 非强制刷新时，先检查数据库是否已有群名称
+    if (!$force) {
+        $existing = db()->fetch(
+            "SELECT group_name FROM groups WHERE appid = ? AND group_id = ?",
+            [$appid, $groupOpenid]
+        );
+        if ($existing && !empty($existing['group_name'])) {
+            return ['success' => true, 'message' => '已缓存', 'data' => ['group_name' => $existing['group_name']]];
+        }
+    }
+
+    $bot = getBot($appid);
+    if (!$bot) {
+        return ['success' => false, 'message' => '机器人不存在'];
+    }
+
+    // 第一步：获取 access_token
+    $tokenUrl = 'https://bots.qq.com/app/getAppAccessToken';
+    $postData = json_encode([
+        'appId'        => (string)$appid,
+        'clientSecret' => $bot['secret']
+    ]);
+    $tokenResp = curl($tokenUrl, 'POST', ['Content-Type: application/json'], $postData);
+    $tokenData = json_decode($tokenResp, true);
+
+    if (!$tokenData || !isset($tokenData['access_token'])) {
+        return ['success' => false, 'message' => '获取Access Token失败'];
+    }
+
+    $accessToken = $tokenData['access_token'];
+
+    // 第二步：调用获取群信息接口
+    $apiBase = ($bot['env'] === '沙箱')
+        ? 'https://sandbox.api.sgroup.qq.com'
+        : 'https://api.sgroup.qq.com';
+    $infoUrl = $apiBase . '/v2/groups/' . $groupOpenid . '/info';
+
+    $headers = [
+        'Authorization: QQBot ' . $accessToken,
+        'Content-Type: application/json'
+    ];
+
+    $infoResp = curl($infoUrl, 'GET', $headers, '');
+    $infoData = json_decode($infoResp, true);
+
+    if (!$infoData || isset($infoData['code'])) {
+        $errMsg = $infoData['message'] ?? $infoResp;
+        return ['success' => false, 'message' => '获取群信息失败: ' . $errMsg];
+    }
+
+    $groupName = $infoData['group_name'] ?? '';
+
+    // 第三步：存入数据库
+    db()->execute(
+        "INSERT OR IGNORE INTO groups (appid, group_id, group_name, remark, custom_avatar) VALUES (?, ?, '', '', '')",
+        [$appid, $groupOpenid]
+    );
+    if (!empty($groupName)) {
+        db()->execute(
+            "UPDATE groups SET group_name = ?, last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+            [$groupName, $appid, $groupOpenid]
+        );
+    } else {
+        db()->execute(
+            "UPDATE groups SET last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+            [$appid, $groupOpenid]
+        );
+    }
+
+    return [
+        'success' => true,
+        'message' => '获取成功',
+        'data' => [
+            'group_openid'       => $infoData['group_openid'] ?? $groupOpenid,
+            'group_name'         => $groupName,
+            'group_finger_memo'  => $infoData['group_finger_memo'] ?? '',
+            'group_class_text'   => $infoData['group_class_text'] ?? '',
+            'group_tags'         => $infoData['group_tags'] ?? [],
+            'group_member_num'   => $infoData['group_member_num'] ?? 0,
+        ]
+    ];
+}
+
 // ==================== 用户/群备注管理函数 ====================
 
 /**

@@ -992,6 +992,7 @@ if (!empty($bots)) {
         </div>
         <div id="chatTargetActions" style="display:none; gap:6px;">
           <button class="btn btn-outline btn-sm" onclick="showRemarkModal()">设置备注</button>
+          <button class="btn btn-outline btn-sm" id="btnGroupInfo" onclick="refreshGroupInfo()" style="display:none;">刷新群信息</button>
           <button class="btn btn-outline btn-sm" id="btnMuteManage" onclick="showMuteModal()" style="display:none;">禁言管理</button>
           <button class="btn btn-outline btn-sm" onclick="retractLastMsg()">撤回最后消息</button>
         </div>
@@ -1619,6 +1620,45 @@ function selectSession(targetId, sourceType, elem) {
     // 禁言管理按钮仅群聊显示
     var btnMute = document.getElementById('btnMuteManage');
     if (btnMute) btnMute.style.display = (sourceType === '群聊') ? 'inline-block' : 'none';
+    // 刷新群信息按钮仅群聊显示
+    var btnGroupInfo = document.getElementById('btnGroupInfo');
+    if (btnGroupInfo) btnGroupInfo.style.display = (sourceType === '群聊') ? 'inline-block' : 'none';
+}
+
+// ==================== 刷新群信息（群名称等） ====================
+function refreshGroupInfo() {
+    var botId = getCurrentBotId();
+    var targetId = currentTargetId;
+    if (!botId || !targetId) {
+        alert('请先选择机器人和群聊会话');
+        return;
+    }
+    var btn = document.getElementById('btnGroupInfo');
+    if (btn) { btn.disabled = true; btn.textContent = '刷新中...'; }
+    apiCall('api.php', {
+        action: 'group_get_info',
+        appid: botId,
+        group_openid: targetId
+    }, function(res) {
+        if (btn) { btn.disabled = false; btn.textContent = '刷新群信息'; }
+        if (res.success) {
+            var newName = res.data.group_name || '';
+            var memberNum = res.data.group_member_num || 0;
+            var memo = res.data.group_finger_memo || '';
+            var info = newName;
+            if (memberNum > 0) info += ' · ' + memberNum + '人';
+            if (memo) info += ' · ' + memo;
+            var nameEl = document.getElementById('chatTargetName');
+            if (nameEl && newName) nameEl.textContent = newName;
+            var infoEl = document.getElementById('chatTargetInfo');
+            if (infoEl) infoEl.textContent = info;
+            // 刷新会话列表
+            loadSessions();
+            alert('群信息刷新成功\n群名称: ' + newName + (memberNum ? '\n成员数: ' + memberNum : ''));
+        } else {
+            alert('刷新失败: ' + (res.message || '未知错误'));
+        }
+    });
 }
 
 // ==================== 加载消息 ====================

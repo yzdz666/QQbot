@@ -110,6 +110,17 @@ switch ($action) {
         json_response($result);
         break;
 
+    // ==================== 获取群信息（群名称等） ====================
+    case 'group_get_info':
+        $appid = trim($_POST['appid'] ?? '');
+        $groupOpenid = trim($_POST['group_openid'] ?? '');
+        if (empty($appid) || empty($groupOpenid)) {
+            json_response(['success' => false, 'message' => 'AppID和群OpenID不能为空']);
+        }
+        $result = fetchAndUpdateGroupInfo($appid, $groupOpenid, true);
+        json_response($result);
+        break;
+
     // ==================== 插件管理 ====================
     case 'plugin_toggle':
         $appid = $_POST['appid'] ?? '';
