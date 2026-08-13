@@ -27,6 +27,21 @@ if (!Auth::check()) {
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
+// 解析时长字符串: 30s / 10m / 1h / 7d → 秒数
+function parseDuration($str) {
+    $str = trim($str);
+    if (!preg_match('/^(\d+)\s*(s|m|h|d)$/i', $str, $m)) return false;
+    $val = intval($m[1]);
+    $unit = strtolower($m[2]);
+    switch ($unit) {
+        case 's': return $val;
+        case 'm': return $val * 60;
+        case 'h': return $val * 3600;
+        case 'd': return $val * 86400;
+    }
+    return false;
+}
+
 try {
     switch ($action) {
         // ==================== 获取会话列表 ====================
@@ -864,6 +879,163 @@ try {
             }
 
             $data = getRemarks($appid, $userArr, $groupArr);
+
+            json_response([
+                'code'    => 0,
+                'msg'     => 'success',
+                'success' => true,
+                'data'    => $data
+            ]);
+            break;
+
+        // ==================== 禁言成员 ====================
+        case 'mute_member':
+            $appid       = trim($_POST['appid'] ?? '');
+            $groupOpenid = trim($_POST['group_openid'] ?? $_POST['target_id'] ?? '');
+            $memberOpenid = trim($_POST['member_openid'] ?? $_POST['user_id'] ?? '');
+            $seconds     = intval($_POST['seconds'] ?? 0);
+            // 支持时长字符串: 30s / 10m / 1h / 7d
+            $durationStr = trim($_POST['duration'] ?? '');
+
+            if (empty($appid) || empty($groupOpenid) || empty($memberOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid、group_openid 或 member_openid 参数']);
+            }
+
+            // 解析时长字符串
+            if (!empty($durationStr)) {
+                $seconds = parseDuration($durationStr);
+                if ($seconds === false) {
+                    json_response(['code' => 400, 'msg' => '时长格式错误，支持: 30s/10m/1h/7d']);
+                }
+            }
+            if ($seconds <= 0) {
+                json_response(['code' => 400, 'msg' => '禁言时长必须大于0']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+
+            require_once(__DIR__ . '/../../bot.php');
+            $resp = 群禁言成员($groupOpenid, $memberOpenid, $seconds);
+            $data = json_decode($resp, true);
+
+            json_response([
+                'code'    => 0,
+                'msg'     => '禁言操作已执行',
+                'success' => true,
+                'data'    => $data
+            ]);
+            break;
+
+        // ==================== 解禁成员 ====================
+        case 'unmute_member':
+            $appid        = trim($_POST['appid'] ?? '');
+            $groupOpenid  = trim($_POST['group_openid'] ?? $_POST['target_id'] ?? '');
+            $memberOpenid = trim($_POST['member_openid'] ?? $_POST['user_id'] ?? '');
+
+            if (empty($appid) || empty($groupOpenid) || empty($memberOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid、group_openid 或 member_openid 参数']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+
+            require_once(__DIR__ . '/../../bot.php');
+            $resp = 群解禁成员($groupOpenid, $memberOpenid);
+            $data = json_decode($resp, true);
+
+            json_response([
+                'code'    => 0,
+                'msg'     => '解禁操作已执行',
+                'success' => true,
+                'data'    => $data
+            ]);
+            break;
+
+        // ==================== 批量禁言 ====================
+        case 'batch_mute':
+            $appid       = trim($_POST['appid'] ?? '');
+            $groupOpenid = trim($_POST['group_openid'] ?? $_POST['target_id'] ?? '');
+            $memberOpenids = $_POST['member_openids'] ?? $_POST['user_ids'] ?? '';
+            $seconds     = intval($_POST['seconds'] ?? 0);
+            $durationStr = trim($_POST['duration'] ?? '');
+
+            if (empty($appid) || empty($groupOpenid) || empty($memberOpenids)) {
+                json_response(['code' => 400, 'msg' => '缺少必要参数']);
+            }
+
+            if (is_string($memberOpenids)) {
+                $decoded = json_decode($memberOpenids, true);
+                $memberOpenids = is_array($decoded) ? $decoded : explode(',', $memberOpenids);
+            }
+            if (!is_array($memberOpenids) || count($memberOpenids) === 0) {
+                json_response(['code' => 400, 'msg' => 'member_openids 格式不正确']);
+            }
+
+            if (!empty($durationStr)) {
+                $seconds = parseDuration($durationStr);
+                if ($seconds === false) {
+                    json_response(['code' => 400, 'msg' => '时长格式错误']);
+                }
+            }
+            if ($seconds <= 0) {
+                json_response(['code' => 400, 'msg' => '禁言时长必须大于0']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+
+            require_once(__DIR__ . '/../../bot.php');
+            $resp = 群批量禁言($groupOpenid, $memberOpenids, $seconds);
+            $data = json_decode($resp, true);
+
+            json_response([
+                'code'    => 0,
+                'msg'     => '批量禁言操作已执行',
+                'success' => true,
+                'data'    => $data
+            ]);
+            break;
+
+        // ==================== 查询群禁言状态 ====================
+        case 'query_mute':
+            $appid       = trim($_GET['appid'] ?? $_POST['appid'] ?? '');
+            $groupOpenid = trim($_GET['group_openid'] ?? $_POST['group_openid'] ?? $_POST['target_id'] ?? '');
+
+            if (empty($appid) || empty($groupOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid 或 group_openid 参数']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+
+            require_once(__DIR__ . '/../../bot.php');
+            $resp = 查询群禁言状态($groupOpenid);
+            $data = json_decode($resp, true);
 
             json_response([
                 'code'    => 0,

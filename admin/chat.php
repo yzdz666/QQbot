@@ -992,6 +992,7 @@ if (!empty($bots)) {
         </div>
         <div id="chatTargetActions" style="display:none; gap:6px;">
           <button class="btn btn-outline btn-sm" onclick="showRemarkModal()">设置备注</button>
+          <button class="btn btn-outline btn-sm" id="btnMuteManage" onclick="showMuteModal()" style="display:none;">禁言管理</button>
           <button class="btn btn-outline btn-sm" onclick="retractLastMsg()">撤回最后消息</button>
         </div>
       </div>
@@ -1055,6 +1056,62 @@ if (!empty($bots)) {
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeRemarkModal()">取消</button>
       <button class="btn btn-primary" id="remarkSaveBtn" onclick="saveRemark()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 禁言管理模态框 ==================== -->
+<div class="modal-overlay" id="muteModal" style="display:none;">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">禁言管理</div>
+    <div class="modal-body" style="padding:16px;">
+      <!-- 禁言操作区 -->
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>禁言成员</label>
+        <input type="text" id="muteMemberInput" class="form-control" placeholder="成员 openid（可从消息右键复制）" style="margin-bottom:8px;">
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <select id="muteDurationSelect" class="form-control" style="width:auto; min-width:100px;">
+            <option value="60">1分钟</option>
+            <option value="600">10分钟</option>
+            <option value="3600" selected>1小时</option>
+            <option value="21600">6小时</option>
+            <option value="43200">12小时</option>
+            <option value="86400">1天</option>
+            <option value="604800">7天</option>
+            <option value="custom">自定义</option>
+          </select>
+          <input type="text" id="muteDurationCustom" class="form-control" placeholder="如 30s/10m/1h/7d" style="display:none; flex:1; min-width:120px;">
+          <button class="btn btn-primary btn-sm" onclick="doMuteMember()">禁言</button>
+          <button class="btn btn-outline btn-sm" onclick="doUnmuteMember()">解禁</button>
+        </div>
+      </div>
+      <!-- 批量禁言区 -->
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>批量禁言（每行一个 openid，单次最多10人）</label>
+        <textarea id="batchMuteInput" class="form-control" rows="3" placeholder="成员 openid 1&#10;成员 openid 2" style="font-family:monospace; font-size:12px;"></textarea>
+        <div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+          <select id="batchMuteDurationSelect" class="form-control" style="width:auto; min-width:100px;">
+            <option value="60">1分钟</option>
+            <option value="600">10分钟</option>
+            <option value="3600" selected>1小时</option>
+            <option value="43200">12小时</option>
+            <option value="86400">1天</option>
+            <option value="604800">7天</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="doBatchMute()">批量禁言</button>
+        </div>
+      </div>
+      <!-- 当前禁言状态 -->
+      <div class="form-group">
+        <label>当前禁言列表</label>
+        <button class="btn btn-outline btn-sm" onclick="loadMuteStatus()" style="margin-bottom:8px;">刷新禁言状态</button>
+        <div id="muteStatusList" style="max-height:200px; overflow-y:auto; font-size:13px;">
+          <div style="color:var(--text-secondary); padding:8px;">点击"刷新禁言状态"查看</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeMuteModal()">关闭</button>
     </div>
   </div>
 </div>
@@ -1559,6 +1616,9 @@ function selectSession(targetId, sourceType, elem) {
     loadMessages(targetId, sourceType);
     document.getElementById('chatInputArea').style.display = 'flex';
     document.getElementById('chatTargetActions').style.display = 'flex';
+    // 禁言管理按钮仅群聊显示
+    var btnMute = document.getElementById('btnMuteManage');
+    if (btnMute) btnMute.style.display = (sourceType === '群聊') ? 'inline-block' : 'none';
 }
 
 // ==================== 加载消息 ====================
@@ -2294,6 +2354,11 @@ function buildMsgHtml(m, botId) {
     if (!m.is_retracted) {
         html += '<button class="chat-msg-action-btn" onclick="retractMsg(\'' + escapeAttr(m.appid || botId || '') + '\',\'' + escapeAttr(m.msg_id || '') + '\',\'' + escapeAttr(m.target_id || '') + '\')">撤回</button>';
     }
+    // 群聊接收消息显示禁言/解禁按钮
+    if (!isSent && m.user_id && currentSession && currentSession.source_type === '群聊') {
+        html += '<button class="chat-msg-action-btn" onclick="quickMuteMember(this)" data-user-id="' + escapeAttr(m.user_id) + '" data-target-id="' + escapeAttr(m.target_id || '') + '">禁言</button>';
+        html += '<button class="chat-msg-action-btn" onclick="quickUnmuteMember(this)" data-user-id="' + escapeAttr(m.user_id) + '" data-target-id="' + escapeAttr(m.target_id || '') + '">解禁</button>';
+    }
     html += '<button class="chat-msg-action-btn" onclick="copyText(this)" data-text="' + escapeAttr(m.content || '') + '">复制</button>';
     html += '</div>';
 
@@ -2773,6 +2838,221 @@ function retractLastMsg() {
     });
 }
 
+// ==================== 禁言管理 ====================
+
+function showMuteModal() {
+    if (!currentSession) return;
+    if (currentSession.source_type !== '群聊') {
+        alert('禁言管理仅支持群聊会话');
+        return;
+    }
+    document.getElementById('muteModal').style.display = 'flex';
+    // 自动加载禁言状态
+    loadMuteStatus();
+}
+
+function closeMuteModal() {
+    document.getElementById('muteModal').style.display = 'none';
+}
+
+// 获取禁言时长（秒）
+function getMuteDuration(selectId, customId) {
+    var sel = document.getElementById(selectId);
+    var val = sel ? sel.value : '3600';
+    if (val === 'custom') {
+        var customInput = document.getElementById(customId);
+        if (customInput) customInput.style.display = 'block';
+        return null; // 返回null表示需要自定义输入
+    }
+    var customInput = document.getElementById(customId);
+    if (customInput) customInput.style.display = 'none';
+    return parseInt(val);
+}
+
+// 监听下拉框变化
+document.getElementById('muteDurationSelect').addEventListener('change', function() {
+    var customInput = document.getElementById('muteDurationCustom');
+    if (this.value === 'custom') {
+        customInput.style.display = 'block';
+    } else {
+        customInput.style.display = 'none';
+    }
+});
+
+// 禁言单个成员
+function doMuteMember() {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var memberOpenid = document.getElementById('muteMemberInput').value.trim();
+    if (!memberOpenid) { alert('请输入成员 openid'); return; }
+
+    var seconds = getMuteDuration('muteDurationSelect', 'muteDurationCustom');
+    if (seconds === null) {
+        var customVal = document.getElementById('muteDurationCustom').value.trim();
+        if (!customVal) { alert('请输入自定义时长'); return; }
+        // 传递时长字符串让后端解析
+        apiCall('api/chat_api.php?action=mute_member', {
+            appid: botId,
+            group_openid: currentSession.target_id,
+            member_openid: memberOpenid,
+            duration: customVal
+        }, muteCallback);
+        return;
+    }
+    apiCall('api/chat_api.php?action=mute_member', {
+        appid: botId,
+        group_openid: currentSession.target_id,
+        member_openid: memberOpenid,
+        seconds: seconds
+    }, muteCallback);
+}
+
+// 解禁单个成员
+function doUnmuteMember() {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var memberOpenid = document.getElementById('muteMemberInput').value.trim();
+    if (!memberOpenid) { alert('请输入成员 openid'); return; }
+    apiCall('api/chat_api.php?action=unmute_member', {
+        appid: botId,
+        group_openid: currentSession.target_id,
+        member_openid: memberOpenid
+    }, muteCallback);
+}
+
+// 批量禁言
+function doBatchMute() {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var text = document.getElementById('batchMuteInput').value.trim();
+    if (!text) { alert('请输入成员 openid'); return; }
+    var ids = text.split('\n').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+    if (ids.length === 0) { alert('请输入至少一个成员 openid'); return; }
+    if (ids.length > 10) { alert('单次最多禁言10人'); return; }
+    var seconds = parseInt(document.getElementById('batchMuteDurationSelect').value) || 3600;
+    apiCall('api/chat_api.php?action=batch_mute', {
+        appid: botId,
+        group_openid: currentSession.target_id,
+        member_openids: JSON.stringify(ids),
+        seconds: seconds
+    }, muteCallback);
+}
+
+// 禁言操作回调
+function muteCallback(res) {
+    if (res.success) {
+        alert(res.message || '操作成功');
+        loadMuteStatus();
+    } else {
+        alert(res.message || '操作失败');
+    }
+}
+
+// 加载禁言状态
+function loadMuteStatus() {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var listEl = document.getElementById('muteStatusList');
+    listEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">加载中...</div>';
+    apiCall('api/chat_api.php?action=query_mute', {
+        appid: botId,
+        group_openid: currentSession.target_id
+    }, function(res) {
+        if (res.success && res.data) {
+            var data = res.data;
+            var html = '';
+            // 全员禁言状态
+            if (data.global_rule) {
+                var mode = data.global_rule.mode || 'none';
+                var modeText = { 'none': '未开启', 'all': '全员禁言' }[mode] || mode;
+                html += '<div style="padding:6px 8px; border-bottom:1px solid var(--border);"><strong>全员禁言:</strong> ' + escapeHtml(modeText) + '</div>';
+            }
+            // 成员禁言列表
+            var members = data.members || [];
+            if (members.length === 0) {
+                html += '<div style="color:var(--text-secondary); padding:8px;">暂无被禁言的成员</div>';
+            } else {
+                members.forEach(function(m) {
+                    var oid = m.member_openid || m.openid || '未知';
+                    var expire = m.mute_expire_at || '';
+                    html += '<div style="padding:6px 8px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">';
+                    html += '<span style="word-break:break-all;">' + escapeHtml(oid) + (expire ? ' <span style="color:var(--text-secondary); font-size:11px;">至 ' + escapeHtml(expire) + '</span>' : '') + '</span>';
+                    html += '<button class="btn btn-outline btn-sm" style="padding:2px 8px; font-size:11px;" onclick="unmuteFromList(\'' + escapeAttr(oid) + '\')">解禁</button>';
+                    html += '</div>';
+                });
+            }
+            listEl.innerHTML = html;
+        } else {
+            listEl.innerHTML = '<div style="color:var(--danger); padding:8px;">' + escapeHtml(res.message || '查询失败') + '</div>';
+        }
+    });
+}
+
+// 从禁言列表中解禁
+function unmuteFromList(memberOpenid) {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) return;
+    if (!confirm('确定解禁 ' + memberOpenid + ' ？')) return;
+    apiCall('api/chat_api.php?action=unmute_member', {
+        appid: botId,
+        group_openid: currentSession.target_id,
+        member_openid: memberOpenid
+    }, muteCallback);
+}
+
+// 消息快捷禁言
+function quickMuteMember(btn) {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var userId = btn.getAttribute('data-user-id');
+    var targetId = btn.getAttribute('data-target-id');
+    if (!userId) { alert('无法获取成员 openid'); return; }
+    var duration = prompt('请输入禁言时长（分钟），默认60分钟：', '60');
+    if (duration === null) return;
+    var minutes = parseInt(duration) || 60;
+    var seconds = minutes * 60;
+    apiCall('api/chat_api.php?action=mute_member', {
+        appid: botId,
+        group_openid: targetId || currentSession.target_id,
+        member_openid: userId,
+        seconds: seconds
+    }, function(res) {
+        if (res.success) {
+            alert('已禁言 ' + userId + ' ' + minutes + ' 分钟');
+        } else {
+            alert(res.message || '禁言失败');
+        }
+    });
+}
+
+// 消息快捷解禁
+function quickUnmuteMember(btn) {
+    if (!currentSession) return;
+    var botId = getCurrentBotId();
+    if (!botId) { alert('请先选择机器人'); return; }
+    var userId = btn.getAttribute('data-user-id');
+    var targetId = btn.getAttribute('data-target-id');
+    if (!userId) { alert('无法获取成员 openid'); return; }
+    if (!confirm('确定解禁 ' + userId + ' ？')) return;
+    apiCall('api/chat_api.php?action=unmute_member', {
+        appid: botId,
+        group_openid: targetId || currentSession.target_id,
+        member_openid: userId
+    }, function(res) {
+        if (res.success) {
+            alert('已解禁 ' + userId);
+        } else {
+            alert(res.message || '解禁失败');
+        }
+    });
+}
+
 // ==================== 复制文本 ====================
 function copyText(btn) {
     var text = btn.getAttribute('data-text');
@@ -3230,6 +3510,9 @@ document.getElementById('groupAvatarInput').addEventListener('input', function()
 // 点击遮罩层关闭
 document.getElementById('remarkModal').addEventListener('click', function(e) {
     if (e.target === this) closeRemarkModal();
+});
+document.getElementById('muteModal').addEventListener('click', function(e) {
+    if (e.target === this) closeMuteModal();
 });
 
 function saveRemark() {
