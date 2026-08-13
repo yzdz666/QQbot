@@ -270,6 +270,239 @@ switch ($eventType) {
         define('用户', '');
         break;
 
+    // ==================== 频道/子频道变动事件 (GUILDS, 参照官方文档) ====================
+    case 'GUILD_CREATE':
+        // 机器人加入频道
+        define('消息来源', '频道创建');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[机器人加入频道]');
+        define('来源', $d['id'] ?? '');
+        define('用户', $d['owner_id'] ?? '');
+        break;
+
+    case 'GUILD_DELETE':
+        // 机器人离开频道
+        define('消息来源', '频道删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[机器人离开频道]');
+        define('来源', $d['id'] ?? '');
+        define('用户', $d['owner_id'] ?? '');
+        break;
+
+    case 'CHANNEL_CREATE':
+        // 子频道创建
+        define('消息来源', '子频道创建');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[子频道创建]');
+        define('来源', $d['id'] ?? ($d['guild_id'] ?? ''));
+        define('用户', '');
+        break;
+
+    case 'CHANNEL_UPDATE':
+        // 子频道更新
+        define('消息来源', '子频道更新');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[子频道更新]');
+        define('来源', $d['id'] ?? ($d['guild_id'] ?? ''));
+        define('用户', '');
+        break;
+
+    case 'CHANNEL_DELETE':
+        // 子频道删除
+        define('消息来源', '子频道删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[子频道删除]');
+        define('来源', $d['id'] ?? ($d['guild_id'] ?? ''));
+        define('用户', '');
+        break;
+
+    // ==================== 频道成员事件 (GUILD_MEMBERS) ====================
+    case 'GUILD_MEMBER_ADD':
+        // 频道成员加入
+        define('消息来源', '频道成员增加');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[频道成员加入]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['user']['id'] ?? '');
+        break;
+
+    case 'GUILD_MEMBER_UPDATE':
+        // 频道成员资料更新（含禁言/解禁状态变化）
+        // d.user.id: 成员ID; d.guild_id: 频道ID; d.roles: 角色列表; d.mute_end_timestamp: 禁言结束时间戳
+        define('消息来源', '频道成员更新');
+        define('事件ID', $raw['id'] ?? '');
+        $muteTs = $d['mute_end_timestamp'] ?? '0';
+        define('消息', '[频道成员更新] 禁言结束:' . $muteTs);
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['user']['id'] ?? '');
+        break;
+
+    case 'GUILD_MEMBER_REMOVE':
+        // 频道成员退出
+        define('消息来源', '频道成员移除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[频道成员退出]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['user']['id'] ?? '');
+        break;
+
+    // ==================== 消息删除事件 ====================
+    case 'MESSAGE_DELETE':
+        // 频道私域消息删除
+        define('消息来源', '消息删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[消息删除]');
+        define('来源', $d['channel_id'] ?? ($d['guild_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'PUBLIC_MESSAGE_DELETE':
+        // 频道公域消息删除
+        define('消息来源', '公域消息删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[公域消息删除]');
+        define('来源', $d['channel_id'] ?? ($d['guild_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'DIRECT_MESSAGE_DELETE':
+        // 频道私信删除
+        define('消息来源', '私信删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[频道私信删除]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    // ==================== 消息审核事件 (MESSAGE_AUDIT) ====================
+    case 'MESSAGE_AUDIT_PASS':
+        // 消息审核通过
+        define('消息来源', '消息审核通过');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[消息审核通过]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'MESSAGE_AUDIT_REJECT':
+        // 消息审核不通过
+        define('消息来源', '消息审核拒绝');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[消息审核不通过]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    // ==================== 论坛事件 (FORUMS_EVENT, 公域) ====================
+    case 'OPEN_FORUM_THREAD_CREATE':
+        // 论坛主题创建
+        define('消息来源', '论坛主题创建');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛主题创建] ' . ($d['content'] ?? ''));
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_THREAD_UPDATE':
+        // 论坛主题更新
+        define('消息来源', '论坛主题更新');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛主题更新]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_THREAD_DELETE':
+        // 论坛主题删除
+        define('消息来源', '论坛主题删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛主题删除]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_POST_CREATE':
+        // 论坛回帖创建
+        define('消息来源', '论坛回帖创建');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛回帖创建] ' . ($d['content'] ?? ''));
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_POST_DELETE':
+        // 论坛回帖删除
+        define('消息来源', '论坛回帖删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛回帖删除]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_REPLY_CREATE':
+        // 论坛评论回复创建
+        define('消息来源', '论坛评论创建');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛评论回复创建] ' . ($d['content'] ?? ''));
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    case 'OPEN_FORUM_REPLY_DELETE':
+        // 论坛评论回复删除
+        define('消息来源', '论坛评论删除');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛评论回复删除]');
+        define('来源', $d['guild_id'] ?? '');
+        define('用户', $d['author_id'] ?? '');
+        break;
+
+    // ==================== 音频/直播事件 (AUDIO_ACTION / AUDIO_OR_LIVE_CHANNEL_MEMBER) ====================
+    case 'AUDIO_START':
+        // 音频开始播放
+        define('消息来源', '音频开始');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[音频开始播放]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', '');
+        break;
+
+    case 'AUDIO_FINISH':
+        // 音频播放结束
+        define('消息来源', '音频结束');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[音频播放结束]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', '');
+        break;
+
+    case 'AUDIO_ON_MIC':
+        // 上麦
+        define('消息来源', '上麦');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[成员上麦]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'AUDIO_OFF_MIC':
+        // 下麦
+        define('消息来源', '下麦');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[成员下麦]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'AUDIO_OR_LIVE_CHANNEL_MEMBER_ENTER':
+        // 音频/直播频道成员进入
+        define('消息来源', '音视频成员进入');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[音视频频道成员进入]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
     default:
         fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] 未处理的事件类型: {$eventType}\n");
         exit(0);

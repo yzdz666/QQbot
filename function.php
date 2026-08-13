@@ -309,6 +309,9 @@ function curl($url, $method, $headers, $params){
         case "PUT" : curl_setopt($ch, CURLOPT_URL, $url);
                      curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
                      curl_setopt($ch, CURLOPT_POSTFIELDS, $requestString); break;
+        case "PATCH": curl_setopt($ch, CURLOPT_URL, $url);
+                      curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PATCH");
+                      curl_setopt($ch, CURLOPT_POSTFIELDS, $requestString); break;
         case "DELETE": curl_setopt($ch, CURLOPT_URL, $url);
                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
                        curl_setopt($ch, CURLOPT_POSTFIELDS, $requestString); break;

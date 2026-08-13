@@ -1949,3 +1949,135 @@ function 获取机器人成员($groupOpenid) {
     if (empty($botOpenid)) return null;
     return 获取群成员($groupOpenid, $botOpenid);
 }
+
+// ==================== 管理员判断 (基于 bots 表 owner_ids 字段) ====================
+// 参照官方文档: 机器人拥有者可在管理后台「机器人设置-管理员」配置
+// owner_ids 为 JSON 数组，存储拥有管理员权限的用户 openid
+// 参数:
+//   $userId - 待检测的用户 openid，默认取当前事件「用户」常量
+// 返回: true=是管理员, false=非管理员
+function 是否管理员($userId = null) {
+    if ($userId === null && defined('用户')) {
+        $userId = 用户;
+    }
+    if (empty($userId) || !defined('appid')) {
+        return false;
+    }
+    $bot = getBot(appid);
+    if (!$bot) {
+        return false;
+    }
+    $ownerIdsRaw = $bot['owner_ids'] ?? '[]';
+    $ownerIds = json_decode($ownerIdsRaw, true);
+    if (!is_array($ownerIds)) {
+        return false;
+    }
+    return in_array((string)$userId, array_map('strval', $ownerIds), true);
+}
+
+// ==================== 设置机器人自定义菜单 (PUT /v2/menu) ====================
+// 参照官方文档: 自定义菜单（单聊场景下的"快捷菜单"面板）
+// 支持的菜单项类型:
+//   send_message - 发送消息按钮 (字段: name, send_message, 可选 icon)
+//   link         - 链接跳转按钮 (字段: name, link，link 必须 https://)
+//   switch       - 开关按钮 (字段: name, switch:{switch_id, default})
+//   menu         - 折叠子菜单 (字段: name, sub_menu_items:[...])
+// 参数:
+//   $menuData - 菜单结构数组，如 ["items" => [...]] 或 ["menu" => ["items" => [...]]]
+// 返回: API 原始响应
+function 设置菜单($menuData) {
+    // 兼容两种传入格式: ["items"=>[...]] 或 ["menu"=>["items"=>[...]]]
+    if (isset($menuData['menu'])) {
+        $payload = $menuData;
+    } else {
+        $payload = ['menu' => $menuData];
+    }
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/v2/menu", "PUT", $json);
+    wlog("[设置菜单] 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ==================== 获取机器人自定义菜单 (GET /v2/menu) ====================
+// 返回: 当前已设置的菜单结构（JSON 字符串）
+function 获取菜单() {
+    return BOTAPI("/v2/menu", "GET", "");
+}
+
+// ==================== 删除机器人自定义菜单 (DELETE /v2/menu) ====================
+function 删除菜单() {
+    return BOTAPI("/v2/menu", "DELETE", "");
+}
+
+// ==================== 频道指定成员禁言 (PATCH /guilds/{guild_id}/members/{user_id}/mute) ====================
+// 参照官方文档: 频道指定成员禁言（需机器人被添加为频道管理员）
+// 参数:
+//   $guildId  - 频道 ID
+//   $userId   - 被禁言成员的 user_id
+//   $seconds  - 禁言时长（秒），传 0 表示解除禁言
+// 返回: API 原始响应
+function 禁言成员($guildId, $userId, $seconds) {
+    if (empty($guildId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 user_id 为空']);
+    }
+    $json = json_encode(['mute_seconds' => (string)$seconds], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}/mute", "PATCH", $json);
+}
+
+// ==================== 频道解除成员禁言 ====================
+// 禁言成员的快捷封装，seconds=0 即解除禁言
+function 解禁成员($guildId, $userId) {
+    return 禁言成员($guildId, $userId, 0);
+}
+
+// ==================== 频道批量成员禁言 (PATCH /guilds/{guild_id}/mute) ====================
+// 参照官方文档: 频道批量成员禁言（同样可用于批量解除禁言，seconds=0）
+// 参数:
+//   $guildId  - 频道 ID
+//   $userIds  - 成员 user_id 数组
+//   $seconds  - 禁言时长（秒），0 表示解除禁言
+function 批量禁言($guildId, $userIds, $seconds) {
+    if (empty($guildId) || empty($userIds) || !is_array($userIds)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 user_ids 为空']);
+    }
+    $json = json_encode([
+        'mute_seconds' => (string)$seconds,
+        'user_ids' => array_values($userIds)
+    ], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/mute", "PATCH", $json);
+}
+
+// ==================== 频道批量解除禁言 ====================
+function 批量解禁($guildId, $userIds) {
+    return 批量禁言($guildId, $userIds, 0);
+}
+
+// ==================== 频道全员禁言 (PATCH /guilds/{guild_id}/mute) ====================
+// 不传 user_ids 即对整个频道禁言
+// 参数:
+//   $guildId  - 频道 ID
+//   $seconds  - 禁言时长（秒），0 表示解除全员禁言
+function 全员禁言($guildId, $seconds) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    $json = json_encode(['mute_seconds' => (string)$seconds], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/mute", "PATCH", $json);
+}
+
+// ==================== 频道解除全员禁言 ====================
+function 解除全员禁言($guildId) {
+    return 全员禁言($guildId, 0);
+}
+
+// ==================== 频道移除成员 (DELETE /guilds/{guild_id}/members/{user_id}) ====================
+// 参照官方文档: 删除频道成员（踢出成员，需管理员权限）
+// 参数:
+//   $guildId  - 频道 ID
+//   $userId   - 被移除成员的 user_id
+function 踢出成员($guildId, $userId) {
+    if (empty($guildId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 user_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}", "DELETE", "");
+}
