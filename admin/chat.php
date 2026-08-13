@@ -1643,19 +1643,50 @@ function refreshGroupInfo() {
     }, function(res) {
         if (btn) { btn.disabled = false; btn.textContent = '刷新群信息'; }
         if (res.success) {
-            var newName = res.data.group_name || '';
-            var memberNum = res.data.group_member_num || 0;
-            var memo = res.data.group_finger_memo || '';
-            var info = newName;
-            if (memberNum > 0) info += ' · ' + memberNum + '人';
-            if (memo) info += ' · ' + memo;
+            var d = res.data || {};
+            var newName = d.group_name || '';
+            var memberNum = d.group_member_num || 0;
+            var memo = d.group_finger_memo || '';
+            var classText = d.group_class_text || '';
+            var tags = d.group_tags || '';
+
+            // 更新顶部标题区
             var nameEl = document.getElementById('chatTargetName');
             if (nameEl && newName) nameEl.textContent = newName;
+
+            // 更新副信息行
+            var infoParts = ['群聊 · ' + targetId];
+            if (memberNum > 0) infoParts.push(memberNum + '人');
+            if (classText) infoParts.push('分类:' + classText);
+            if (memo) infoParts.push('简介:' + memo);
+            if (tags) infoParts.push('标签:' + tags);
             var infoEl = document.getElementById('chatTargetInfo');
-            if (infoEl) infoEl.textContent = info;
+            if (infoEl) infoEl.textContent = infoParts.join(' · ');
+
+            // 更新群详情卡片
+            var detailEl = document.getElementById('chatGroupDetail');
+            if (detailEl) {
+                var detailHtml = '<div style="margin-top:8px; padding:8px 12px; background:var(--bg-alt); border-radius:6px; font-size:13px;">';
+                if (newName) detailHtml += '<div><b>群名称:</b> ' + escapeHtml(newName) + '</div>';
+                if (memberNum > 0) detailHtml += '<div><b>成员数:</b> ' + memberNum + '</div>';
+                if (memo) detailHtml += '<div><b>群简介:</b> ' + escapeHtml(memo) + '</div>';
+                if (classText) detailHtml += '<div><b>群分类:</b> ' + escapeHtml(classText) + '</div>';
+                if (tags) {
+                    var tagArr = String(tags).split(',').filter(function(t){return t.trim();});
+                    if (tagArr.length > 0) {
+                        detailHtml += '<div><b>群标签:</b> ';
+                        tagArr.forEach(function(t){ detailHtml += '<span class="badge" style="margin-right:4px;">' + escapeHtml(t.trim()) + '</span>'; });
+                        detailHtml += '</div>';
+                    }
+                }
+                detailHtml += '</div>';
+                detailEl.innerHTML = detailHtml;
+                detailEl.style.display = 'block';
+            }
+
             // 刷新会话列表
             loadSessions();
-            alert('群信息刷新成功\n群名称: ' + newName + (memberNum ? '\n成员数: ' + memberNum : ''));
+            alert('群信息刷新成功\n群名称: ' + newName + (memberNum ? '\n成员数: ' + memberNum : '') + (memo ? '\n群简介: ' + memo : '') + (classText ? '\n群分类: ' + classText : '') + (tags ? '\n群标签: ' + tags : ''));
         } else {
             alert('刷新失败: ' + (res.message || '未知错误'));
         }

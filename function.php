@@ -1037,14 +1037,21 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         return ['success' => false, 'message' => 'appid 或 group_openid 为空'];
     }
 
-    // 非强制刷新时，先检查数据库是否已有群名称
+    // 非强制刷新时，先检查数据库是否已有完整的群信息（含简介/分类/标签/成员数）
     if (!$force) {
         $existing = db()->fetch(
-            "SELECT group_name FROM groups WHERE appid = ? AND group_id = ?",
+            "SELECT group_name, group_finger_memo, group_class_text, group_tags, group_member_num FROM groups WHERE appid = ? AND group_id = ?",
             [$appid, $groupOpenid]
         );
-        if ($existing && !empty($existing['group_name'])) {
-            return ['success' => true, 'message' => '已缓存', 'data' => ['group_name' => $existing['group_name']]];
+        // 仅当群名称 AND 详细字段（成员数/简介/分类/标签）均已存在时才命中缓存
+        // 避免仅有 group_name 而缺少其他字段时跳过 API 调用
+        if ($existing && !empty($existing['group_name']) && (
+            !empty($existing['group_finger_memo']) ||
+            !empty($existing['group_class_text']) ||
+            !empty($existing['group_tags']) ||
+            intval($existing['group_member_num']) > 0
+        )) {
+            return ['success' => true, 'message' => '已缓存', 'data' => $existing];
         }
     }
 
