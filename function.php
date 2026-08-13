@@ -1051,23 +1051,21 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
     }
 
     $groupName = $infoData['group_name'] ?? '';
+    $fingerMemo = $infoData['group_finger_memo'] ?? '';
+    $classText = $infoData['group_class_text'] ?? '';
+    $tags = $infoData['group_tags'] ?? [];
+    $tagsStr = is_array($tags) ? implode(',', $tags) : (string)$tags;
+    $memberNum = intval($infoData['group_member_num'] ?? 0);
 
     // 第三步：存入数据库
     db()->execute(
         "INSERT OR IGNORE INTO groups (appid, group_id, group_name, remark, custom_avatar) VALUES (?, ?, '', '', '')",
         [$appid, $groupOpenid]
     );
-    if (!empty($groupName)) {
-        db()->execute(
-            "UPDATE groups SET group_name = ?, last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
-            [$groupName, $appid, $groupOpenid]
-        );
-    } else {
-        db()->execute(
-            "UPDATE groups SET last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
-            [$appid, $groupOpenid]
-        );
-    }
+    db()->execute(
+        "UPDATE groups SET group_name = ?, group_finger_memo = ?, group_class_text = ?, group_tags = ?, group_member_num = ?, last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+        [$groupName, $fingerMemo, $classText, $tagsStr, $memberNum, $appid, $groupOpenid]
+    );
 
     return [
         'success' => true,
@@ -1075,10 +1073,10 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         'data' => [
             'group_openid'       => $infoData['group_openid'] ?? $groupOpenid,
             'group_name'         => $groupName,
-            'group_finger_memo'  => $infoData['group_finger_memo'] ?? '',
-            'group_class_text'   => $infoData['group_class_text'] ?? '',
-            'group_tags'         => $infoData['group_tags'] ?? [],
-            'group_member_num'   => $infoData['group_member_num'] ?? 0,
+            'group_finger_memo'  => $fingerMemo,
+            'group_class_text'   => $classText,
+            'group_tags'         => $tags,
+            'group_member_num'   => $memberNum,
         ]
     ];
 }

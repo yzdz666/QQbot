@@ -101,12 +101,18 @@ try {
             foreach ($sessions as &$session) {
                 if ($session['source_type'] === '群聊') {
                     $group = db()->fetch(
-                        "SELECT group_name, remark, custom_avatar FROM groups WHERE appid = ? AND group_id = ?",
+                        "SELECT group_name, remark, custom_avatar, group_finger_memo, group_class_text, group_tags, group_member_num FROM groups WHERE appid = ? AND group_id = ?",
                         [$appid, $session['target_id']]
                     );
                     $session['name'] = $group ? (!empty($group['remark']) ? $group['remark'] : $group['group_name']) : '';
                     $session['remark'] = $group ? ($group['remark'] ?? '') : '';
                     $session['custom_avatar'] = $group ? ($group['custom_avatar'] ?? '') : '';
+                    // 群详细信息
+                    $session['group_name'] = $group ? ($group['group_name'] ?? '') : '';
+                    $session['group_finger_memo'] = $group ? ($group['group_finger_memo'] ?? '') : '';
+                    $session['group_class_text'] = $group ? ($group['group_class_text'] ?? '') : '';
+                    $session['group_tags'] = $group ? ($group['group_tags'] ?? '') : '';
+                    $session['group_member_num'] = $group ? intval($group['group_member_num'] ?? 0) : 0;
                 } else {
                     $user = db()->fetch(
                         "SELECT nickname, remark FROM users WHERE appid = ? AND user_id = ?",
@@ -417,15 +423,25 @@ try {
             $targetName = '';
             $targetRemark = '';
             $targetAvatar = '';
+            $groupInfo = null;
             if (!empty($sourceType) && !empty($targetId)) {
                 if ($sourceType === '群聊') {
                     $group = db()->fetch(
-                        "SELECT group_name, remark, custom_avatar FROM groups WHERE appid = ? AND group_id = ?",
+                        "SELECT group_name, remark, custom_avatar, group_finger_memo, group_class_text, group_tags, group_member_num FROM groups WHERE appid = ? AND group_id = ?",
                         [$appid, $targetId]
                     );
                     $targetName = $group ? $group['group_name'] : '';
                     $targetRemark = $group ? ($group['remark'] ?? '') : '';
                     $targetAvatar = $group ? ($group['custom_avatar'] ?? '') : '';
+                    if ($group) {
+                        $groupInfo = [
+                            'group_name'         => $group['group_name'] ?? '',
+                            'group_finger_memo'  => $group['group_finger_memo'] ?? '',
+                            'group_class_text'   => $group['group_class_text'] ?? '',
+                            'group_tags'         => $group['group_tags'] ?? '',
+                            'group_member_num'   => intval($group['group_member_num'] ?? 0),
+                        ];
+                    }
                 } else {
                     $user = db()->fetch(
                         "SELECT nickname, remark FROM users WHERE appid = ? AND user_id = ?",
@@ -447,7 +463,8 @@ try {
                         'custom_avatar' => $targetAvatar,
                         'source_type' => $sourceType,
                         'target_id' => $targetId,
-                        'total' => $total
+                        'total' => $total,
+                        'group_info' => $groupInfo,
                     ],
                     'messages' => $messages
                 ]

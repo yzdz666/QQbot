@@ -225,6 +225,10 @@ class Database {
             'groups' => [
                 'remark'         => "ALTER TABLE groups ADD COLUMN remark TEXT DEFAULT ''",
                 'custom_avatar'  => "ALTER TABLE groups ADD COLUMN custom_avatar TEXT DEFAULT ''",
+                'group_finger_memo'  => "ALTER TABLE groups ADD COLUMN group_finger_memo TEXT DEFAULT ''",
+                'group_class_text'   => "ALTER TABLE groups ADD COLUMN group_class_text TEXT DEFAULT ''",
+                'group_tags'         => "ALTER TABLE groups ADD COLUMN group_tags TEXT DEFAULT ''",
+                'group_member_num'   => "ALTER TABLE groups ADD COLUMN group_member_num INTEGER DEFAULT 0",
             ],
             'bots' => [
                 'robot_qq'  => "ALTER TABLE bots ADD COLUMN robot_qq TEXT DEFAULT ''",

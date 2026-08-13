@@ -594,6 +594,33 @@ function detectFileUrlFromContent($url) {
           </tr>
         </thead>
         <tbody>
+          <?php
+          // 预加载本页所有群名称映射，避免每条消息单独查询
+          $pageGroupNames = [];
+          $pageGroupAppids = [];
+          foreach ($messages as $msg) {
+              $tid = $msg['target_id'] ?? '';
+              $mAppid = $msg['appid'] ?? '';
+              if ($tid && $mAppid) {
+                  $pageGroupAppids[$mAppid][$tid] = true;
+              }
+          }
+          if (!empty($pageGroupAppids)) {
+              foreach ($pageGroupAppids as $gAppid => $gIds) {
+                  $ids = array_keys($gIds);
+                  $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                  try {
+                      $rows = db()->fetchAll(
+                          "SELECT group_id, group_name, group_finger_memo, group_class_text, group_tags, group_member_num FROM groups WHERE appid = ? AND group_id IN ($placeholders)",
+                          array_merge([$gAppid], $ids)
+                      );
+                      foreach ($rows as $r) {
+                          $pageGroupNames[$gAppid . '|' . $r['group_id']] = $r;
+                      }
+                  } catch (Exception $e) {}
+              }
+          }
+          ?>
           <?php foreach ($messages as $msg):
             $isRecv      = ($msg['direction'] === '接收');
             $content     = trim($msg['content'] ?? '');
@@ -813,7 +840,29 @@ function detectFileUrlFromContent($url) {
                 <?= htmlspecialchars($sourceType) ?>
               <?php endif; ?>
             </td>
-            <td><?= htmlspecialchars($targetId) ?></td>
+            <td>
+              <?php
+              $groupKey = $msgAppid . '|' . $targetId;
+              if ($sourceType === '群聊' && isset($pageGroupNames[$groupKey])) {
+                  $gn = $pageGroupNames[$groupKey];
+                  $gname = $gn['group_name'] ?? '';
+                  if ($gname) {
+                      echo '<div style="font-weight:600;">' . htmlspecialchars($gname) . '</div>';
+                      echo '<div class="text-muted" style="font-size:11px;word-break:break-all;">' . htmlspecialchars($targetId) . '</div>';
+                      if (!empty($gn['group_member_num'])) {
+                          echo '<span class="text-muted" style="font-size:11px;">成员:' . intval($gn['group_member_num']) . '</span> ';
+                      }
+                      if (!empty($gn['group_class_text'])) {
+                          echo '<span class="text-muted" style="font-size:11px;">分类:' . htmlspecialchars($gn['group_class_text']) . '</span>';
+                      }
+                  } else {
+                      echo '<span style="word-break:break-all;">' . htmlspecialchars($targetId) . '</span>';
+                  }
+              } else {
+                  echo '<span style="word-break:break-all;">' . htmlspecialchars($targetId) . '</span>';
+              }
+              ?>
+            </td>
             <td><span class="msg-content-type <?= htmlspecialchars($contentTypeCls) ?>"><?= htmlspecialchars($contentTypeLabel) ?></span></td>
             <td>
               <?php if ($isFileUrl): ?>

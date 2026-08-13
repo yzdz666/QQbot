@@ -121,6 +121,203 @@ switch ($action) {
         json_response($result);
         break;
 
+    // ==================== 指令面板管理 ====================
+    case 'panel_list':
+        $appid = trim($_POST['appid'] ?? '');
+        $scope = trim($_POST['scope'] ?? 'group');
+        $cursor = trim($_POST['cursor'] ?? '');
+        $limit = intval($_POST['limit'] ?? 20);
+        if (empty($appid)) {
+            json_response(['success' => false, 'message' => 'AppID不能为空']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 查询面板列表($scope, $cursor, $limit);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '查询失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    case 'panel_create':
+        $appid = trim($_POST['appid'] ?? '');
+        $panelData = $_POST['panel_data'] ?? '';
+        if (empty($appid) || empty($panelData)) {
+            json_response(['success' => false, 'message' => 'AppID和面板数据不能为空']);
+        }
+        $decoded = json_decode($panelData, true);
+        if (!is_array($decoded)) {
+            json_response(['success' => false, 'message' => '面板数据JSON格式错误']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 创建指令面板($decoded);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '创建失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    case 'panel_update':
+        $appid = trim($_POST['appid'] ?? '');
+        $panelId = trim($_POST['panel_id'] ?? '');
+        $panelData = $_POST['panel_data'] ?? '';
+        if (empty($appid) || empty($panelId) || empty($panelData)) {
+            json_response(['success' => false, 'message' => 'AppID、面板ID和数据不能为空']);
+        }
+        $decoded = json_decode($panelData, true);
+        if (!is_array($decoded)) {
+            json_response(['success' => false, 'message' => '面板数据JSON格式错误']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 修改指令面板($panelId, $decoded);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '修改失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    case 'panel_delete':
+        $appid = trim($_POST['appid'] ?? '');
+        $panelId = trim($_POST['panel_id'] ?? '');
+        if (empty($appid) || empty($panelId)) {
+            json_response(['success' => false, 'message' => 'AppID和面板ID不能为空']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 删除指令面板($panelId);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '删除失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    // ==================== 自定义菜单管理 ====================
+    case 'menu_get':
+        $appid = trim($_POST['appid'] ?? '');
+        if (empty($appid)) {
+            json_response(['success' => false, 'message' => 'AppID不能为空']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 获取菜单();
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '查询失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    case 'menu_set':
+        $appid = trim($_POST['appid'] ?? '');
+        $menuData = $_POST['menu_data'] ?? '';
+        if (empty($appid) || empty($menuData)) {
+            json_response(['success' => false, 'message' => 'AppID和菜单数据不能为空']);
+        }
+        $decoded = json_decode($menuData, true);
+        if (!is_array($decoded)) {
+            json_response(['success' => false, 'message' => '菜单数据JSON格式错误']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 设置菜单($decoded);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '设置失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
+    case 'menu_delete':
+        $appid = trim($_POST['appid'] ?? '');
+        if (empty($appid)) {
+            json_response(['success' => false, 'message' => 'AppID不能为空']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 删除菜单();
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '删除失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
     // ==================== 插件管理 ====================
     case 'plugin_toggle':
         $appid = $_POST['appid'] ?? '';

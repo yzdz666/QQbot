@@ -94,6 +94,18 @@ try {
         </span>
         指令测试
       </a>
+      <a href="panels.php" class="nav-item <?= $currentPage === 'panels.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+        </span>
+        指令面板
+      </a>
+      <a href="menu.php" class="nav-item <?= $currentPage === 'menu.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="12" x2="10" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="13" cy="12" r="1.5" fill="currentColor"/></svg>
+        </span>
+        自定义菜单
+      </a>
       <div class="nav-section">开发</div>
       <a href="aidev.php" class="nav-item <?= $currentPage === 'aidev.php' ? 'active' : '' ?>">
         <span class="nav-icon">

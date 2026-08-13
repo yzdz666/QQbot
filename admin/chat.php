@@ -988,6 +988,7 @@ if (!empty($bots)) {
           <div style="min-width:0;">
             <h3 id="chatTargetName">选择一个会话</h3>
             <div class="chat-info" id="chatTargetInfo"></div>
+            <div id="chatGroupDetail" style="display:none;"></div>
           </div>
         </div>
         <div id="chatTargetActions" style="display:none; gap:6px;">
@@ -1696,8 +1697,43 @@ function loadMessages(targetId, sourceType) {
             // 显示昵称（优先备注）
             var displayName = info.remark || info.name || targetId;
             document.getElementById('chatTargetName').textContent = displayName;
-            document.getElementById('chatTargetInfo').textContent =
-                (info.source_type || '') + ' · ' + targetId + (info.total ? ' · 共' + info.total + '条消息' : '');
+            // 显示聊天详情：群聊显示群名称/简介/分类/标签/成员数
+            var infoParts = [(info.source_type || '') + ' · ' + targetId];
+            if (info.total) infoParts.push('共' + info.total + '条消息');
+            var gi = info.group_info;
+            if (sourceType === '群聊' && gi) {
+                if (gi.group_member_num > 0) infoParts.push(gi.group_member_num + '人');
+                if (gi.group_class_text) infoParts.push('分类:' + gi.group_class_text);
+                if (gi.group_finger_memo) infoParts.push('简介:' + gi.group_finger_memo);
+                if (gi.group_tags) infoParts.push('标签:' + gi.group_tags);
+            }
+            document.getElementById('chatTargetInfo').textContent = infoParts.join(' · ');
+
+            // 群聊时在详情区显示完整群信息卡片
+            var detailEl = document.getElementById('chatGroupDetail');
+            if (detailEl) {
+                if (sourceType === '群聊' && gi) {
+                    var detailHtml = '<div style="margin-top:8px; padding:8px 12px; background:var(--bg-alt); border-radius:6px; font-size:13px;">';
+                    if (gi.group_name) detailHtml += '<div><b>群名称:</b> ' + escapeHtml(gi.group_name) + '</div>';
+                    if (gi.group_member_num > 0) detailHtml += '<div><b>成员数:</b> ' + gi.group_member_num + '</div>';
+                    if (gi.group_finger_memo) detailHtml += '<div><b>群简介:</b> ' + escapeHtml(gi.group_finger_memo) + '</div>';
+                    if (gi.group_class_text) detailHtml += '<div><b>群分类:</b> ' + escapeHtml(gi.group_class_text) + '</div>';
+                    if (gi.group_tags) {
+                        var tags = gi.group_tags.split(',').filter(function(t){return t.trim();});
+                        if (tags.length > 0) {
+                            detailHtml += '<div><b>群标签:</b> ';
+                            tags.forEach(function(t){ detailHtml += '<span class="badge" style="margin-right:4px;">' + escapeHtml(t.trim()) + '</span>'; });
+                            detailHtml += '</div>';
+                        }
+                    }
+                    detailHtml += '</div>';
+                    detailEl.innerHTML = detailHtml;
+                    detailEl.style.display = 'block';
+                } else {
+                    detailEl.style.display = 'none';
+                    detailEl.innerHTML = '';
+                }
+            }
 
             // 显示聊天头部头像
             var headerAvatar = document.getElementById('chatHeaderAvatar');
