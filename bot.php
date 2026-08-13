@@ -1504,24 +1504,27 @@ function 确认互动($eventId, $body = '') {
     return $resp;
 }
 
-// ==================== 处理入群申请 (POST /v2/groups/{group_openid}/members/{member_openid}/operate) ====================
-// 参照 QQ Bot API 官方文档: 群成员操作接口
-// 用于同意/拒绝用户入群申请 (GROUP_JOIN_REQUEST 事件)
+// ==================== 处理入群申请 (POST /v2/groups/{group_openid}/approval_join_request/{member_openid}) ====================
+// 参照官方文档: v2_groups_group_openid_approval_join_request_member_openid.post
 // 参数:
-//   $groupOpenid  - 群 openid (来源)
-//   $memberOpenid - 申请者 openid (用户)
+//   $groupOpenid  - 群 openid
+//   $memberOpenid - 申请入群的成员 openid
 //   $approve      - true=同意, false=拒绝
-//   $reason       - 拒绝理由 (可选)
-function 处理入群申请($groupOpenid, $memberOpenid, $approve, $reason = '') {
+//   $reason       - 拒绝原因 (仅拒绝时有效, 可选)
+//   $blacklist    - 是否同时加入黑名单 (可选)
+function 处理入群申请($groupOpenid, $memberOpenid, $approve, $reason = '', $blacklist = false) {
     if (empty($groupOpenid) || empty($memberOpenid)) {
         return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
     }
-    $data = ["approve" => $approve];
+    $data = ["approve" => (bool)$approve];
     if (!$approve && !empty($reason)) {
         $data["reason"] = $reason;
     }
+    if ($blacklist) {
+        $data["blacklist"] = true;
+    }
     $json = json_encode($data, JSON_UNESCAPED_UNICODE);
-    $resp = BOTAPI("/v2/groups/{$groupOpenid}/members/{$memberOpenid}/operate", "POST", $json);
+    $resp = BOTAPI("/v2/groups/{$groupOpenid}/approval_join_request/{$memberOpenid}", "POST", $json);
     return $resp;
 }
 
@@ -2080,4 +2083,891 @@ function 踢出成员($guildId, $userId) {
         return json_encode(['code' => -1, 'message' => 'guild_id 或 user_id 为空']);
     }
     return BOTAPI("/guilds/{$guildId}/members/{$userId}", "DELETE", "");
+}
+
+// ==================== 群聊禁言 - 设置群成员禁言 (POST /v2/groups/{group_openid}/restrict_chat_setting) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_restrict_chat_setting.post.html
+// 机器人需拥有群管理员身份。单次设置不能超过10个成员。
+// 参数:
+//   $groupOpenid - 群 OpenID
+//   $members     - 禁言操作列表，每项: ["op"=>"add|update|del", "member_openid"=>"xxx", "mute_expire_at"=>"RFC3339时间"]
+//                  op: add 增加禁言, update 更新禁言到期时间, del 解除禁言
+//                  mute_expire_at: 禁言到期时间(RFC3339格式)，op=del 时可传空串立即解除
+// 返回: API 原始响应（成功返回 {}）
+function 设置群成员禁言($groupOpenid, $members) {
+    if (empty($groupOpenid) || empty($members) || !is_array($members)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 members 为空']);
+    }
+    if (count($members) > 10) {
+        return json_encode(['code' => -1, 'message' => '单次设置不能超过10个成员']);
+    }
+    $json = json_encode(['members' => array_values($members)], JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/v2/groups/{$groupOpenid}/restrict_chat_setting", "POST", $json);
+    wlog("[设置群成员禁言] group={$groupOpenid} 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ==================== 群聊禁言 - 查询群禁言状态 (GET /v2/groups/{group_openid}/restrict_chat_setting) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_restrict_chat_setting.get.html
+// 返回: global_rule(全员禁言配置 mode/schedule_rules/recurring_rules) + members(禁言中的用户列表)
+function 查询群禁言状态($groupOpenid) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    return BOTAPI("/v2/groups/{$groupOpenid}/restrict_chat_setting", "GET", "");
+}
+
+// ==================== 群聊禁言 - 封装: 禁言单个群成员 ====================
+// 将秒数转为 RFC3339 格式的到期时间，调用 设置群成员禁言(op=add)
+// 参数:
+//   $groupOpenid  - 群 OpenID
+//   $memberOpenid - 被禁言成员的 openid（只能操作普通成员，不能操作群主/管理员/机器人）
+//   $seconds      - 禁言时长（秒），0 表示立即解除
+function 群禁言成员($groupOpenid, $memberOpenid, $seconds) {
+    if (empty($groupOpenid) || empty($memberOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
+    }
+    if ($seconds <= 0) {
+        return 群解禁成员($groupOpenid, $memberOpenid);
+    }
+    $expireAt = date('c', time() + intval($seconds)); // RFC3339 格式
+    $members = [['op' => 'add', 'member_openid' => $memberOpenid, 'mute_expire_at' => $expireAt]];
+    return 设置群成员禁言($groupOpenid, $members);
+}
+
+// ==================== 群聊禁言 - 封装: 解除单个群成员禁言 ====================
+function 群解禁成员($groupOpenid, $memberOpenid) {
+    if (empty($groupOpenid) || empty($memberOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
+    }
+    $members = [['op' => 'del', 'member_openid' => $memberOpenid, 'mute_expire_at' => '']];
+    return 设置群成员禁言($groupOpenid, $members);
+}
+
+// ==================== 群聊禁言 - 封装: 批量禁言群成员 ====================
+// 单次最多10个成员（API限制），超过自动分批
+function 群批量禁言($groupOpenid, $memberOpenids, $seconds) {
+    if (empty($groupOpenid) || empty($memberOpenids) || !is_array($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openids 为空']);
+    }
+    if ($seconds <= 0) {
+        return 群批量解禁($groupOpenid, $memberOpenids);
+    }
+    $expireAt = date('c', time() + intval($seconds));
+    $memberOpenids = array_values($memberOpenids);
+    $results = [];
+    // 每10个一批
+    foreach (array_chunk($memberOpenids, 10) as $batch) {
+        $members = [];
+        foreach ($batch as $oid) {
+            $members[] = ['op' => 'add', 'member_openid' => $oid, 'mute_expire_at' => $expireAt];
+        }
+        $results[] = 设置群成员禁言($groupOpenid, $members);
+    }
+    // 单批直接返回，多批返回汇总
+    if (count($results) === 1) return $results[0];
+    return json_encode(['code' => 0, 'message' => 'batch done', 'results' => $results], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 群聊禁言 - 封装: 批量解除禁言 ====================
+function 群批量解禁($groupOpenid, $memberOpenids) {
+    if (empty($groupOpenid) || empty($memberOpenids) || !is_array($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openids 为空']);
+    }
+    $memberOpenids = array_values($memberOpenids);
+    $results = [];
+    foreach (array_chunk($memberOpenids, 10) as $batch) {
+        $members = [];
+        foreach ($batch as $oid) {
+            $members[] = ['op' => 'del', 'member_openid' => $oid, 'mute_expire_at' => ''];
+        }
+        $results[] = 设置群成员禁言($groupOpenid, $members);
+    }
+    if (count($results) === 1) return $results[0];
+    return json_encode(['code' => 0, 'message' => 'batch done', 'results' => $results], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 指令面板 - 创建 (POST /v2/panels) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels.post.html
+// 支持 c2c/group/channel/dm 四种场景。一个机器人最多20个面板。
+// 参数 $data 结构:
+//   scope: c2c|group|channel|dm (必填)
+//   target_type: all|specific (c2c/group 支持 specific，channel/dm 仅 all)
+//   user_openids: []string (c2c+specific 时有效，最多20个)
+//   group_openids: []string (group+specific 时有效，最多20个)
+//   panel: {items:[{name,desc,type:command|link,only_admin,link}], remark, version} (items最多20个)
+// 返回: {"panel_id":"p_xxx"}
+function 创建指令面板($data) {
+    if (empty($data) || !is_array($data)) {
+        return json_encode(['code' => -1, 'message' => '面板数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/v2/panels", "POST", $json);
+    wlog("[创建指令面板] 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ==================== 指令面板 - 查询列表 (GET /v2/panels) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels.get.html
+// 参数:
+//   $scope  - 生效场景 c2c|group|channel|dm (必填)
+//   $cursor - 分页游标(可选)
+//   $limit  - 每页条数(可选,默认20,最大50)
+function 查询面板列表($scope, $cursor = '', $limit = 20) {
+    if (empty($scope)) {
+        return json_encode(['code' => -1, 'message' => 'scope 为空']);
+    }
+    $query = "scope=" . urlencode($scope) . "&limit=" . intval($limit);
+    if ($cursor !== '') {
+        $query .= "&cursor=" . urlencode($cursor);
+    }
+    return BOTAPI("/v2/panels?{$query}", "GET", "");
+}
+
+// ==================== 指令面板 - 查询详情 (GET /v2/panels/{panel_id}) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.get.html
+function 查询面板详情($panelId) {
+    if (empty($panelId)) {
+        return json_encode(['code' => -1, 'message' => 'panel_id 为空']);
+    }
+    return BOTAPI("/v2/panels/{$panelId}", "GET", "");
+}
+
+// ==================== 指令面板 - 修改 (PUT /v2/panels/{panel_id}) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.put.html
+// 参数 $data: panel 配置内容(同创建时的 panel 字段结构)
+function 修改指令面板($panelId, $data) {
+    if (empty($panelId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'panel_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/v2/panels/{$panelId}", "PUT", $json);
+}
+
+// ==================== 指令面板 - 删除 (DELETE /v2/panels/{panel_id}) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.delete.html
+function 删除指令面板($panelId) {
+    if (empty($panelId)) {
+        return json_encode(['code' => -1, 'message' => 'panel_id 为空']);
+    }
+    return BOTAPI("/v2/panels/{$panelId}", "DELETE", "");
+}
+
+// ==================== 指令面板 - 修改关联对象 (PUT /v2/panels/{panel_id}/target) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id_target.put.html
+// 用于增删面板关联的用户/群 openid(仅 target_type=specific 的面板支持)
+// 参数 $data: 关联对象配置
+function 修改面板关联对象($panelId, $data) {
+    if (empty($panelId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'panel_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/v2/panels/{$panelId}/target", "PUT", $json);
+}
+
+// ==================== 入群审批策略 - 创建 (POST /v2/groups/join_approval_strategy) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy.post.html
+// 一个机器人最多20个策略。机器人需群管理员身份才生效。
+// 参数 $data:
+//   group_openids: []string (与 group_ids 二选一，最多100个)
+//   group_ids: []uint64 (与 group_openids 互斥)
+//   is_enable: "on"|"off" (默认 on)
+//   expire_at: RFC3339格式过期时间(不传默认一年)
+//   remark: 备注(最多255汉字)
+// 返回: {"strategy_id":"st_xxx","is_enable":"on","expire_at":"..."}
+function 创建入群审批策略($data) {
+    if (empty($data) || !is_array($data)) {
+        return json_encode(['code' => -1, 'message' => '策略数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/v2/groups/join_approval_strategy", "POST", $json);
+    wlog("[创建入群审批策略] 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ==================== 入群审批策略 - 查询列表 (GET /v2/groups/join_approval_strategy) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy.get.html
+// 参数:
+//   $cursor - 分页游标(可选)
+//   $limit  - 每页条数(可选,默认20,最大100)
+function 查询入群审批策略列表($cursor = '', $limit = 20) {
+    $query = "limit=" . intval($limit);
+    if ($cursor !== '') {
+        $query .= "&cursor=" . urlencode($cursor);
+    }
+    return BOTAPI("/v2/groups/join_approval_strategy?{$query}", "GET", "");
+}
+
+// ==================== 入群审批策略 - 修改 (PATCH /v2/groups/join_approval_strategy/{strategy_id}) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy_strategy_id.patch.html
+function 修改入群审批策略($strategyId, $data) {
+    if (empty($strategyId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'strategy_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/v2/groups/join_approval_strategy/{$strategyId}", "PATCH", $json);
+}
+
+// ==================== 入群审批策略 - 删除 (DELETE /v2/groups/join_approval_strategy/{strategy_id}) ====================
+function 删除入群审批策略($strategyId) {
+    if (empty($strategyId)) {
+        return json_encode(['code' => -1, 'message' => 'strategy_id 为空']);
+    }
+    return BOTAPI("/v2/groups/join_approval_strategy/{$strategyId}", "DELETE", "");
+}
+
+// ============================================================================
+// 频道信息 (Guild) - 参照 https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/guild-controller.html
+// ============================================================================
+
+// ==================== 获取频道详情 (GET /guilds/{guild_id}) ====================
+function 获取频道详情($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}", "GET", "");
+}
+
+// ==================== 修改频道信息 (PATCH /guilds/{guild_id}) ====================
+// 参数 $data: name / icon / message_notify (/.guild) 任意子集
+function 修改频道信息($guildId, $data) {
+    if (empty($guildId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}", "PATCH", $json);
+}
+
+// ==================== 获取机器人加入的频道列表 (GET /users/@me/guilds) ====================
+// 参数 $before / $after 互斥, $limit 1-100 默认 100
+function 获取机器人频道列表($before = '', $after = '', $limit = 100) {
+    $query = "limit=" . max(1, min(100, intval($limit)));
+    if ($before !== '') $query .= "&before=" . urlencode($before);
+    elseif ($after !== '') $query .= "&after=" . urlencode($after);
+    return BOTAPI("/users/@me/guilds?{$query}", "GET", "");
+}
+
+// ============================================================================
+// 频道成员 (Member) - 参照 user-controller.html
+// ============================================================================
+
+// ==================== 获取频道成员详情 (GET /guilds/{guild_id}/members/{user_id}) ====================
+function 获取频道成员($guildId, $userId) {
+    if (empty($guildId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 user_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}", "GET", "");
+}
+
+// ==================== 获取频道成员列表 (GET /guilds/{guild_id}/members) ====================
+// 参数 $after 上次回包最后一个 member 的 user_id, 首次填 0; $limit 1-400 默认 1
+function 获取频道成员列表($guildId, $after = '0', $limit = 1) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    $query = "limit=" . max(1, min(400, intval($limit))) . "&after=" . urlencode($after);
+    return BOTAPI("/guilds/{$guildId}/members?{$query}", "GET", "");
+}
+
+// ==================== 获取身份组成员列表 (GET /guilds/{guild_id}/roles/{role_id}/members) ====================
+// 参数 $startIndex 上次回包 next, 首次填 0; $limit 1-400 默认 1
+function 获取身份组成员列表($guildId, $roleId, $startIndex = '0', $limit = 1) {
+    if (empty($guildId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 role_id 为空']);
+    }
+    $query = "limit=" . max(1, min(400, intval($limit))) . "&start_index=" . urlencode($startIndex);
+    return BOTAPI("/guilds/{$guildId}/roles/{$roleId}/members?{$query}", "GET", "");
+}
+
+// ==================== 删除频道成员 (DELETE /guilds/{guild_id}/members/{user_id}) ====================
+// $addBlacklist bool 是否同时加入黑名单
+// $deleteHistoryMsgDays int 0=不撤回 / 3,7,15,30=固定天数 / -1=撤回全部
+function 移除频道成员($guildId, $userId, $addBlacklist = false, $deleteHistoryMsgDays = 0) {
+    if (empty($guildId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 user_id 为空']);
+    }
+    $data = [
+        'add_blacklist' => $addBlacklist ? true : false,
+        'delete_history_msg_days' => intval($deleteHistoryMsgDays),
+    ];
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}", "DELETE", $json);
+}
+
+// ============================================================================
+// 身份组 (Role) - 参照 role-controller.html
+// ============================================================================
+
+// ==================== 获取身份组列表 (GET /guilds/{guild_id}/roles) ====================
+function 获取身份组列表($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/roles", "GET", "");
+}
+
+// ==================== 创建身份组 (POST /guilds/{guild_id}/roles) ====================
+// 参数 $data: name(名称) / color(ARGB HEX 转十进制) / hoist(0 否 1 是) 任意子集但至少一个
+function 创建身份组($guildId, $data) {
+    if (empty($guildId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/roles", "POST", $json);
+}
+
+// ==================== 修改身份组 (PATCH /guilds/{guild_id}/roles/{role_id}) ====================
+function 修改身份组($guildId, $roleId, $data) {
+    if (empty($guildId) || empty($roleId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/roles/{$roleId}", "PATCH", $json);
+}
+
+// ==================== 删除身份组 (DELETE /guilds/{guild_id}/roles/{role_id}) ====================
+function 删除身份组($guildId, $roleId) {
+    if (empty($guildId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/roles/{$roleId}", "DELETE", "");
+}
+
+// ==================== 增加成员身份组 (PUT /guilds/{guild_id}/members/{user_id}/roles/{role_id}) ====================
+// 参数 $channelId: 仅当 role_id=5 (子频道管理员) 时需指定子频道
+function 增加成员身份组($guildId, $userId, $roleId, $channelId = '') {
+    if (empty($guildId) || empty($userId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $data = [];
+    if (!empty($channelId)) {
+        $data['channel'] = ['id' => $channelId];
+    }
+    $json = empty($data) ? '' : json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}/roles/{$roleId}", "PUT", $json);
+}
+
+// ==================== 删除成员身份组 (DELETE /guilds/{guild_id}/members/{user_id}/roles/{role_id}) ====================
+function 删除成员身份组($guildId, $userId, $roleId, $channelId = '') {
+    if (empty($guildId) || empty($userId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $data = [];
+    if (!empty($channelId)) {
+        $data['channel'] = ['id' => $channelId];
+    }
+    $json = empty($data) ? '' : json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/members/{$userId}/roles/{$roleId}", "DELETE", $json);
+}
+
+// ============================================================================
+// 子频道 (Channel) - 参照 channel-controller.html
+// ============================================================================
+
+// ==================== 获取子频道列表 (GET /guilds/{guild_id}/channels) ====================
+function 获取子频道列表($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/channels", "GET", "");
+}
+
+// ==================== 获取子频道详情 (GET /channels/{channel_id}) ====================
+function 获取子频道详情($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}", "GET", "");
+}
+
+// ==================== 创建子频道 (POST /guilds/{guild_id}/channels) ====================
+// 参数 $data: name / type / sub_type / position / parent_id / private_type / private_user_ids / speak_permission / application_id
+function 创建子频道($guildId, $data) {
+    if (empty($guildId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/channels", "POST", $json);
+}
+
+// ==================== 修改子频道 (PATCH /channels/{channel_id}) ====================
+function 修改子频道($channelId, $data) {
+    if (empty($channelId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}", "PATCH", $json);
+}
+
+// ==================== 删除子频道 (DELETE /channels/{channel_id}) ====================
+function 删除子频道($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}", "DELETE", "");
+}
+
+// ============================================================================
+// 公告 (Announces) - 参照 announces-controller.html
+// ============================================================================
+
+// ==================== 创建频道全局公告 (POST /guilds/{guild_id}/announces) ====================
+// 参数 $data:
+//   message_id (string, 选填) 消息 id; 有值时优先创建消息类型公告
+//   channel_id (string, 选填) 子频道 id; message_id 有值则必填
+//   announces_type (uint32, 选填) 0=成员公告 1=欢迎公告
+//   recommend_channels ([]RecommendChannel, 选填) 推荐子频道列表 [{channel_id, introduce}]
+function 创建频道公告($guildId, $data) {
+    if (empty($guildId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/announces", "POST", $json);
+}
+
+// ==================== 删除频道全局公告 (DELETE /guilds/{guild_id}/announces/{message_id}) ====================
+// message_id=all 时不校验直接删除全部
+function 删除频道公告($guildId, $messageId = 'all') {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/announces/{$messageId}", "DELETE", "");
+}
+
+// ============================================================================
+// 音频 (Audio) - 参照 audio-controller.html
+// ============================================================================
+
+// ==================== 音频控制 (POST /channels/{channel_id}/audio) ====================
+// 参数 $status: 0=开始播放(需 audio_url, text 可选) 1=暂停 2=继续 3=停止
+// 参数 $audioUrl: 音频 url (status=0 时必填)
+// 参数 $text: 状态文本 (status=0 时可选, 其他状态不传)
+function 音频控制($channelId, $status, $audioUrl = '', $text = '') {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    $data = ['status' => intval($status)];
+    if (intval($status) === 0) {
+        if (!empty($audioUrl)) $data['audio_url'] = $audioUrl;
+        if (!empty($text)) $data['text'] = $text;
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/audio", "POST", $json);
+}
+
+// ==================== 机器人上麦 (PUT /channels/{channel_id}/mic) ====================
+function 机器人上麦($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/mic", "PUT", "");
+}
+
+// ==================== 机器人下麦 (DELETE /channels/{channel_id}/mic) ====================
+function 机器人下麦($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/mic", "DELETE", "");
+}
+
+// ============================================================================
+// 子频道权限 (Permissions) - 参照 permissions-controller.html
+// ============================================================================
+
+// ==================== 获取子频道用户权限 (GET /channels/{channel_id}/members/{user_id}/permissions) ====================
+function 获取子频道用户权限($channelId, $userId) {
+    if (empty($channelId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/members/{$userId}/permissions", "GET", "");
+}
+
+// ==================== 获取子频道身份组权限 (GET /channels/{channel_id}/roles/{role_id}/permissions) ====================
+function 获取子频道身份组权限($channelId, $roleId) {
+    if (empty($channelId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/roles/{$roleId}/permissions", "GET", "");
+}
+
+// ==================== 修改子频道用户权限 (PUT /channels/{channel_id}/members/{user_id}/permissions) ====================
+// 参数 $add / $remove: 位图字符串(十进制) 表示赋予/删除的权限 (1=可查看 2=可管理 4=可发言)
+// 注意: 不支持修改"可管理子频道"权限
+function 修改子频道用户权限($channelId, $userId, $add = '', $remove = '') {
+    if (empty($channelId) || empty($userId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $data = [];
+    if ($add !== '') $data['add'] = (string)$add;
+    if ($remove !== '') $data['remove'] = (string)$remove;
+    if (empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'add/remove 至少传一个']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/members/{$userId}/permissions", "PUT", $json);
+}
+
+// ==================== 修改子频道身份组权限 (PUT /channels/{channel_id}/roles/{role_id}/permissions) ====================
+function 修改子频道身份组权限($channelId, $roleId, $add = '', $remove = '') {
+    if (empty($channelId) || empty($roleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $data = [];
+    if ($add !== '') $data['add'] = (string)$add;
+    if ($remove !== '') $data['remove'] = (string)$remove;
+    if (empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'add/remove 至少传一个']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/roles/{$roleId}/permissions", "PUT", $json);
+}
+
+// ============================================================================
+// 频道消息频率设置 (MessageSetting) - 参照 mute-controller.html
+// ============================================================================
+
+// ==================== 获取频道消息频率设置 (GET /guilds/{guild_id}/message/setting) ====================
+function 获取频道消息频率($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/message/setting", "GET", "");
+}
+
+// ============================================================================
+// 日程 (Schedule) - 参照 schedule-controller.html
+// ============================================================================
+
+// ==================== 获取日程列表 (GET /channels/{channel_id}/schedules) ====================
+// 参数 $since: 起始时间戳(ms), 不传返回当天日程
+function 获取日程列表($channelId, $since = 0) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    $query = $since > 0 ? "?since=" . intval($since) : "";
+    return BOTAPI("/channels/{$channelId}/schedules{$query}", "GET", "");
+}
+
+// ==================== 获取日程详情 (GET /channels/{channel_id}/schedules/{schedule_id}) ====================
+function 获取日程详情($channelId, $scheduleId) {
+    if (empty($channelId) || empty($scheduleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/schedules/{$scheduleId}", "GET", "");
+}
+
+// ==================== 创建日程 (POST /channels/{channel_id}/schedules) ====================
+// 参数 $schedule: 日程对象 (name, description, start_timestamp, end_timestamp, jump_channel_id, remind_type)
+function 创建日程($channelId, $schedule) {
+    if (empty($channelId) || empty($schedule)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode(['schedule' => $schedule], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/schedules", "POST", $json);
+}
+
+// ==================== 修改日程 (PATCH /channels/{channel_id}/schedules/{schedule_id}) ====================
+function 修改日程($channelId, $scheduleId, $schedule) {
+    if (empty($channelId) || empty($scheduleId) || empty($schedule)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    $json = json_encode(['schedule' => $schedule], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/schedules/{$scheduleId}", "PATCH", $json);
+}
+
+// ==================== 删除日程 (DELETE /channels/{channel_id}/schedules/{schedule_id}) ====================
+function 删除日程($channelId, $scheduleId) {
+    if (empty($channelId) || empty($scheduleId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/schedules/{$scheduleId}", "DELETE", "");
+}
+
+// ============================================================================
+// 子频道消息发送 (POST /channels/{channel_id}/messages) - 参照 post_messages.html
+// ============================================================================
+
+// ==================== 发送子频道消息 (POST /channels/{channel_id}/messages) ====================
+// 参数 $data:
+//   content (string, 选填) 文本内容
+//   embed (object, 选填) embed 消息
+//   ark (object, 选填) ark 消息
+//   message_reference (object, 选填) 引用消息对象
+//   image (string, 选填) 图片 URL(域名需报备)
+//   msg_id (string, 选填) 被动回复的消息 ID(取自 AT_MESSAGE_CREATE 事件 d.id, 5 分钟有效)
+//   event_id (string, 选填) 被动回复事件 ID
+//   markdown (object, 选填) markdown 消息对象
+// content/embed/ark/image/markdown 至少传一个
+function 发送子频道消息($channelId, $data) {
+    if (empty($channelId) || empty($data) || !is_array($data)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或数据为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $resp = BOTAPI("/channels/{$channelId}/messages", "POST", $json);
+    wlog("[发送子频道消息] channel={$channelId} 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ==================== 发送子频道文本消息 (快捷封装) ====================
+function 发送子频道文字($channelId, $content, $msgId = '') {
+    if (empty($channelId) || $content === '') {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 content 为空']);
+    }
+    $data = ['content' => $content];
+    if (!empty($msgId)) $data['msg_id'] = $msgId;
+    return 发送子频道消息($channelId, $data);
+}
+
+// ==================== 发送子频道图片消息 (快捷封装, 通过 URL) ====================
+function 发送子频道图片($channelId, $imageUrl, $msgId = '') {
+    if (empty($channelId) || empty($imageUrl)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 image_url 为空']);
+    }
+    $data = ['image' => $imageUrl];
+    if (!empty($msgId)) $data['msg_id'] = $msgId;
+    return 发送子频道消息($channelId, $data);
+}
+
+// ============================================================================
+// 精华消息 (Pins Message) - 公告的替代方案 (子频道公告已废弃)
+// ============================================================================
+
+// ==================== 获取精华消息列表 (GET /channels/{channel_id}/pins) ====================
+function 获取精华消息($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/pins", "GET", "");
+}
+
+// ==================== 添加精华消息 (PUT /channels/{channel_id}/pins/{message_id}) ====================
+function 添加精华消息($channelId, $messageId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/pins/{$messageId}", "PUT", "");
+}
+
+// ==================== 删除精华消息 (DELETE /channels/{channel_id}/pins/{message_id}) ====================
+function 删除精华消息($channelId, $messageId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => '参数为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/pins/{$messageId}", "DELETE", "");
+}
+
+// ============================================================================
+// 频道私信会话管理 (Dms) - 参照 dms-controller.html
+// ============================================================================
+
+// ==================== 创建频道私信会话 (POST /users/@me/dms) ====================
+// 参数 $guildId: 用于创建私信会话的频道 ID
+// 返回: { guild_id: "#CHANNEL_ID", ... } 实际是私信会话 ID
+function 创建频道私信($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    $json = json_encode(['source_guild_id' => $guildId], JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/users/@me/dms", "POST", $json);
+}
+
+// ============================================================================
+// 表情表态用户列表 (Reactions - GET) - 参照 reaction/list-user.html
+// ============================================================================
+
+// ==================== 获取表情表态用户列表 (GET /channels/{channel_id}/messages/{message_id}/reactions/{type}/{id}) ====================
+// 参数:
+//   $channelId - 子频道 ID
+//   $messageId - 消息 ID
+//   $type      - 表情类型 (1=系统表情, 2=自定义表情)
+//   $emojiId   - 表情 ID
+//   $cookie    - 翻页 cookie (上次返回的 cookie, 首次为空)
+function 获取表态用户列表($channelId, $messageId, $type, $emojiId, $cookie = '') {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 message_id 为空']);
+    }
+    $address = "/channels/{$channelId}/messages/{$messageId}/reactions/{$type}/{$emojiId}";
+    if (!empty($cookie)) {
+        $address .= "?cookie=" . urlencode($cookie);
+    }
+    return BOTAPI($address, "GET", "");
+}
+
+// ============================================================================
+// 子频道消息管理 (GET/PATCH) - 参照 message/get.html, message/patch.html
+// ============================================================================
+
+// ==================== 获取指定子频道消息 (GET /channels/{channel_id}/messages/{message_id}) ====================
+function 获取子频道消息($channelId, $messageId) {
+    if (empty($channelId) || empty($messageId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 message_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/messages/{$messageId}", "GET", "");
+}
+
+// ==================== 修改子频道消息 (PATCH /channels/{channel_id}/messages/{message_id}) ====================
+// 用于修改已发送的 markdown 消息 (仅 markdown 类型消息可修改)
+function 修改子频道消息($channelId, $messageId, $data) {
+    if (empty($channelId) || empty($messageId) || empty($data)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id, message_id 或 data 为空']);
+    }
+    if (!is_array($data)) {
+        return json_encode(['code' => -1, 'message' => 'data 必须为数组']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/messages/{$messageId}", "PATCH", $json);
+}
+
+// ============================================================================
+// 群管理扩展 (Group Info / Bot State / Join Request List)
+// 参照 autogen: v2_groups_group_openid_info / bot_state / join_request_list
+// ============================================================================
+
+// ==================== 获取群信息 (GET /v2/groups/{group_openid}/info) ====================
+function 获取群信息($groupOpenid) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    return BOTAPI("/v2/groups/{$groupOpenid}/info", "GET", "");
+}
+
+// ==================== 获取机器人群内状态 (GET /v2/groups/{group_openid}/bot_state) ====================
+function 获取机器人群状态($groupOpenid) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    return BOTAPI("/v2/groups/{$groupOpenid}/bot_state", "GET", "");
+}
+
+// ==================== 获取入群申请列表 (GET /v2/groups/{group_openid}/join_request_list) ====================
+// 参数:
+//   $groupOpenid - 群 openid
+//   $cursor      - 翻页游标 (首次为空)
+//   $limit       - 每页数量 (默认 20)
+function 获取入群申请列表($groupOpenid, $cursor = '', $limit = 20) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    $address = "/v2/groups/{$groupOpenid}/join_request_list?limit=" . intval($limit);
+    if (!empty($cursor)) {
+        $address .= "&cursor=" . urlencode($cursor);
+    }
+    return BOTAPI($address, "GET", "");
+}
+
+// ============================================================================
+// 语音子频道成员 (Voice Members) - 参照 channel/voice.html
+// ============================================================================
+
+// ==================== 获取语音子频道成员列表 (GET /channels/{channel_id}/voice/members) ====================
+function 获取语音成员($channelId) {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/voice/members", "GET", "");
+}
+
+// ============================================================================
+// 入群审批策略扩展 (Execute / Whitelist)
+// 参照 autogen: join_approval_strategy execute / whitelist_users
+// ============================================================================
+
+// ==================== 执行入群审批策略 (POST /v2/groups/join_approval_strategy/{strategy_id}/execute) ====================
+// 全量扫描并审批, 异步执行约 10 分钟
+function 执行审批策略($strategyId) {
+    if (empty($strategyId)) {
+        return json_encode(['code' => -1, 'message' => 'strategy_id 为空']);
+    }
+    return BOTAPI("/v2/groups/join_approval_strategy/{$strategyId}/execute", "POST", "");
+}
+
+// ==================== 修改审批策略白名单 (POST /v2/groups/join_approval_strategy/{strategy_id}/whitelist_users) ====================
+// 参数:
+//   $strategyId - 策略 ID
+//   $data       - { op: "add"|"del", whitelist_users: ["号码1","号码2",...] } 单次最多 1 万
+function 修改审批策略白名单($strategyId, $data) {
+    if (empty($strategyId) || empty($data) || !is_array($data)) {
+        return json_encode(['code' => -1, 'message' => 'strategy_id 或 data 为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/v2/groups/join_approval_strategy/{$strategyId}/whitelist_users", "POST", $json);
+}
+
+// ============================================================================
+// API 权限申请 (Api Permission) - 参照 api-permission/get.html, api-permission/post.html
+// ============================================================================
+
+// ==================== 获取 API 权限列表 (GET /guilds/{guild_id}/api_permission) ====================
+// 返回机器人可申请的 API 权限列表
+function 获取API权限列表($guildId) {
+    if (empty($guildId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 为空']);
+    }
+    return BOTAPI("/guilds/{$guildId}/api_permission", "GET", "");
+}
+
+// ==================== 申请 API 权限 (POST /guilds/{guild_id}/api_permission/demand) ====================
+// 参数:
+//   $guildId    - 频道 ID
+//   $channelId  - 子频道 ID (用于接收权限申请结果的事件)
+//   $apiIdentify - 权限标识 { path: "/channels/{channel_id}/messages", method: "GET" }
+function 申请API权限($guildId, $channelId, $apiIdentify) {
+    if (empty($guildId) || empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'guild_id 或 channel_id 为空']);
+    }
+    if (empty($apiIdentify) || !is_array($apiIdentify)) {
+        return json_encode(['code' => -1, 'message' => 'api_identify 为空或非数组']);
+    }
+    $data = [
+        'channel_id' => $channelId,
+        'api_identify' => $apiIdentify,
+    ];
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/guilds/{$guildId}/api_permission/demand", "POST", $json);
+}
+
+// ============================================================================
+// 论坛帖子 (Forum Threads) - 参照 forum/list.html, forum/get.html, forum/create.html, forum/delete.html
+// ============================================================================
+
+// ==================== 获取论坛帖子列表 (GET /channels/{channel_id}/threads) ====================
+// 参数:
+//   $channelId - 论坛子频道 ID
+//   $cursor    - 翻页游标 (首次为空)
+function 获取帖子列表($channelId, $cursor = '') {
+    if (empty($channelId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 为空']);
+    }
+    $address = "/channels/{$channelId}/threads";
+    if (!empty($cursor)) {
+        $address .= "?cursor=" . urlencode($cursor);
+    }
+    return BOTAPI($address, "GET", "");
+}
+
+// ==================== 获取论坛帖子详情 (GET /channels/{channel_id}/threads/{thread_id}) ====================
+function 获取帖子详情($channelId, $threadId) {
+    if (empty($channelId) || empty($threadId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 thread_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/threads/{$threadId}", "GET", "");
+}
+
+// ==================== 发表论坛帖子 (PUT /channels/{channel_id}/threads) ====================
+// 参数 $data: { title: "...", content: "...", format: 0|1|2|3|4 }
+function 发表帖子($channelId, $data) {
+    if (empty($channelId) || empty($data) || !is_array($data)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 data 为空']);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+    return BOTAPI("/channels/{$channelId}/threads", "PUT", $json);
+}
+
+// ==================== 删除论坛帖子 (DELETE /channels/{channel_id}/threads/{thread_id}) ====================
+function 删除帖子($channelId, $threadId) {
+    if (empty($channelId) || empty($threadId)) {
+        return json_encode(['code' => -1, 'message' => 'channel_id 或 thread_id 为空']);
+    }
+    return BOTAPI("/channels/{$channelId}/threads/{$threadId}", "DELETE", "");
 }

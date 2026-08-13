@@ -503,6 +503,42 @@ switch ($eventType) {
         define('用户', $d['user_id'] ?? '');
         break;
 
+    case 'AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT':
+        // 音频/直播频道成员离开
+        define('消息来源', '音视频成员离开');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[音视频频道成员离开]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['user_id'] ?? '');
+        break;
+
+    case 'C2C_MSG_REJECT':
+        // 用户关闭主动消息推送
+        define('消息来源', '用户拒绝消息');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[用户关闭主动消息]');
+        define('来源', $d['openid'] ?? '');
+        define('用户', $d['openid'] ?? '');
+        break;
+
+    case 'C2C_MSG_RECEIVE':
+        // 用户开启主动消息推送
+        define('消息来源', '用户接收消息');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[用户开启主动消息]');
+        define('来源', $d['openid'] ?? '');
+        define('用户', $d['openid'] ?? '');
+        break;
+
+    case 'FORUM_PUBLISH_AUDIT_RESULT':
+        // 论坛发表审核结果 (私域)
+        define('消息来源', '论坛发表审核');
+        define('事件ID', $raw['id'] ?? '');
+        define('消息', '[论坛发表审核结果]');
+        define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
+        define('用户', $d['author_id'] ?? ($d['user_id'] ?? ''));
+        break;
+
     default:
         fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] 未处理的事件类型: {$eventType}\n");
         exit(0);

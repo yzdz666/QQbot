@@ -625,6 +625,41 @@ function Main($raw) {
             define("用户", $raw["d"]["user_id"] ?? '');
             break;
 
+        case "AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT":
+            define("消息来源", "音视频成员离开");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[音视频频道成员离开]");
+            define("来源", $raw["d"]["guild_id"] ?? ($raw["d"]["channel_id"] ?? ''));
+            define("用户", $raw["d"]["user_id"] ?? '');
+            break;
+
+        case "C2C_MSG_REJECT":
+            // 用户关闭主动消息推送 (单聊场景)
+            define("消息来源", "用户拒绝消息");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[用户关闭主动消息]");
+            define("来源", $raw["d"]["openid"] ?? '');
+            define("用户", $raw["d"]["openid"] ?? '');
+            break;
+
+        case "C2C_MSG_RECEIVE":
+            // 用户开启主动消息推送 (单聊场景)
+            define("消息来源", "用户接收消息");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[用户开启主动消息]");
+            define("来源", $raw["d"]["openid"] ?? '');
+            define("用户", $raw["d"]["openid"] ?? '');
+            break;
+
+        case "FORUM_PUBLISH_AUDIT_RESULT":
+            // 论坛发表审核结果 (私域)
+            define("消息来源", "论坛发表审核");
+            define("事件ID", $raw["id"] ?? '');
+            define("消息", "[论坛发表审核结果]");
+            define("来源", $raw["d"]["guild_id"] ?? ($raw["d"]["channel_id"] ?? ''));
+            define("用户", $raw["d"]["author_id"] ?? ($raw["d"]["user_id"] ?? ''));
+            break;
+
         default:
             return;
     }
@@ -740,6 +775,31 @@ function recordIncomingMessage($eventType, $raw) {
             $sourceType = '群消息接收';
             $targetId = $d['group_openid'] ?? '';
             $userId = $d['op_member_openid'] ?? '';
+            break;
+        case 'C2C_MSG_REJECT':
+            $sourceType = '用户拒绝消息';
+            $targetId = $d['openid'] ?? '';
+            $userId = $d['openid'] ?? '';
+            break;
+        case 'C2C_MSG_RECEIVE':
+            $sourceType = '用户接收消息';
+            $targetId = $d['openid'] ?? '';
+            $userId = $d['openid'] ?? '';
+            break;
+        case 'AUDIO_OR_LIVE_CHANNEL_MEMBER_ENTER':
+            $sourceType = '音视频成员进入';
+            $targetId = $d['guild_id'] ?? ($d['channel_id'] ?? '');
+            $userId = $d['user_id'] ?? '';
+            break;
+        case 'AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT':
+            $sourceType = '音视频成员离开';
+            $targetId = $d['guild_id'] ?? ($d['channel_id'] ?? '');
+            $userId = $d['user_id'] ?? '';
+            break;
+        case 'FORUM_PUBLISH_AUDIT_RESULT':
+            $sourceType = '论坛发表审核';
+            $targetId = $d['guild_id'] ?? ($d['channel_id'] ?? '');
+            $userId = $d['author_id'] ?? ($d['user_id'] ?? '');
             break;
         case 'SUBSCRIBE_MESSAGE_STATUS':
             $sourceType = '订阅状态';
