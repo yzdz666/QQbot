@@ -1119,7 +1119,7 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
             'group_name'         => $groupName,
             'group_finger_memo'  => $fingerMemo,
             'group_class_text'   => $classText,
-            'group_tags'         => $tags,
+            'group_tags'         => $tagsStr,
             'group_member_num'   => $memberNum,
         ]
     ];

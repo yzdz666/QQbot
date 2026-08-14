@@ -1629,7 +1629,7 @@ function selectSession(targetId, sourceType, elem) {
 // ==================== 刷新群信息（群名称等） ====================
 function refreshGroupInfo() {
     var botId = getCurrentBotId();
-    var targetId = currentTargetId;
+    var targetId = currentSession ? currentSession.target_id : '';
     if (!botId || !targetId) {
         alert('请先选择机器人和群聊会话');
         return;
