@@ -3,6 +3,8 @@
 
 :root {
   --bg: #f8f9fa;
+  --bg-alt: #f1f3f5;
+  --bg-secondary: #e9ecef;
   --card-bg: #ffffff;
   --text: #1a1a1a;
   --text-secondary: #6c757d;
@@ -12,6 +14,7 @@
   --primary: #333333;
   --primary-hover: #555555;
   --success: #28a745;
+  --success-color: #28a745;
   --danger: #dc3545;
   --warning: #ffc107;
   --info: #17a2b8;
@@ -178,6 +181,14 @@ body {
   margin-bottom: 6px;
   font-weight: 500;
 }
+/* .form-label: 独立使用的表单标签（与 .form-control 配套） */
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
 .form-control {
   width: 100%;
   padding: 9px 12px;
@@ -197,6 +208,26 @@ body {
 .form-control::placeholder { color: var(--text-muted); }
 textarea.form-control { resize: vertical; min-height: 80px; }
 select.form-control { cursor: pointer; }
+/* .form-input: .form-control 的别名，兼容菜单/面板页面 */
+.form-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--card-bg);
+  transition: var(--transition);
+  font-family: inherit;
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(51,51,51,0.08);
+}
+.form-input::placeholder { color: var(--text-muted); }
+textarea.form-input { resize: vertical; min-height: 80px; }
+select.form-input { cursor: pointer; }
 .form-hint {
   font-size: 12px;
   color: var(--text-muted);
@@ -348,6 +379,7 @@ select.form-control { cursor: pointer; }
 .badge-success { background: #e8f5e9; color: #2e7d32; }
 .badge-danger { background: #ffebee; color: #c62828; }
 .badge-warning { background: #fff8e1; color: #f57f17; }
+.badge-warn { background: #fff8e1; color: #f57f17; }  /* badge-warning 别名 */
 .badge-info { background: #e3f2fd; color: #1565c0; }
 .badge-secondary { background: #f5f5f5; color: #616161; }
 
@@ -452,11 +484,43 @@ select.form-control { cursor: pointer; }
   justify-content: center;
   z-index: 2000;
 }
+/* .modal 兼容两种用法:
+   1. 作为内容容器（与 .modal-overlay 配套，老用法）
+   2. 作为遮罩层（panels.php 用法: display:flex 居中 .modal-content）*/
 .modal {
   background: var(--card-bg);
   border-radius: var(--radius);
   width: 480px;
   max-width: 90%;
+  max-height: 90vh;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 当 .modal 被当作遮罩层使用时（style="display:flex"），重置为全屏遮罩 */
+.modal[style*="display: flex"],
+.modal[style*="display:flex"] {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45);
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+}
+/* .modal-content: 模态框内容容器（panels.php 用法）*/
+.modal-content {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  width: 480px;
+  max-width: 100%;
   max-height: 90vh;
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   display: flex;
@@ -475,7 +539,11 @@ select.form-control { cursor: pointer; }
   font-size: 16px;
   font-weight: 600;
   flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
+.modal-header h3 { font-size: 16px; font-weight: 600; margin: 0; }
 .modal-footer {
   padding: 12px 20px;
   border-top: 1px solid var(--border);
@@ -484,6 +552,19 @@ select.form-control { cursor: pointer; }
   gap: 8px;
   flex-shrink: 0;
 }
+/* .modal-close: 右上角关闭按钮 */
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  transition: var(--transition);
+  font-family: inherit;
+}
+.modal-close:hover { color: var(--text); }
 
 /* ==================== 空状态 ==================== */
 .empty-state {
@@ -497,6 +578,13 @@ select.form-control { cursor: pointer; }
   opacity: 0.3;
 }
 .empty-state p { font-size: 14px; }
+/* .empty-tip: 轻量空状态提示（菜单/面板页面用）*/
+.empty-tip {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
 
 /* ==================== 加载 ==================== */
 .loading {
@@ -650,6 +738,22 @@ select.form-control { cursor: pointer; }
   .table th, .table td { padding: 8px; }
   /* 模态框在手机上全宽 */
   .modal { width: 95%; max-width: 95%; }
+  .modal-content { width: 100%; max-width: 100%; max-height: 92vh; }
+  .modal[style*="display: flex"],
+  .modal[style*="display:flex"] { padding: 8px; }
+  /* 手机端表单内联布局改为堆叠 */
+  .card > div[style*="display:flex"][style*="gap:12px"][style*="align-items:flex-end"],
+  .card > div[style*="display: flex"][style*="gap: 12px"][style*="align-items: flex-end"] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  /* 手机端面板/菜单编辑器内的内联 flex 容器换行 */
+  .card [style*="display:flex"][style*="gap:8px"][style*="align-items:center"],
+  .card [style*="display: flex"][style*="gap: 8px"][style*="align-items: center"] {
+    flex-wrap: wrap;
+  }
+  /* 手机端按钮组不溢出 */
+  .card .btn-sm { min-width: auto; }
   /* 消息日志按钮在手机上适配 */
   .btn.btn-outline.btn-sm {
     padding: 6px 10px;

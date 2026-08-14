@@ -211,6 +211,33 @@ switch ($action) {
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
+    // ==================== 指令面板 - 查询详情 (GET /v2/panels/{panel_id}) ====================
+    case 'panel_detail':
+        $appid = trim($_POST['appid'] ?? '');
+        $panelId = trim($_POST['panel_id'] ?? '');
+        if (empty($appid) || empty($panelId)) {
+            json_response(['success' => false, 'message' => 'AppID和面板ID不能为空']);
+        }
+        $bot = getBot($appid);
+        if (!$bot) {
+            json_response(['success' => false, 'message' => '机器人不存在']);
+        }
+        if (!defined('appid')) define('appid', $bot['appid']);
+        if (!defined('secret')) define('secret', $bot['secret']);
+        if (!defined('type')) define('type', $bot['env']);
+        if (!defined('消息来源')) define('消息来源', '');
+        if (!defined('来源')) define('来源', '');
+        if (!defined('消息ID')) define('消息ID', '');
+        if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
+        $resp = 查询面板详情($panelId);
+        $data = json_decode($resp, true);
+        if (isset($data['code']) && $data['code'] != 0) {
+            json_response(['success' => false, 'message' => $data['message'] ?? '查询详情失败', 'raw' => $resp]);
+        }
+        json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
+        break;
+
     case 'panel_delete':
         $appid = trim($_POST['appid'] ?? '');
         $panelId = trim($_POST['panel_id'] ?? '');

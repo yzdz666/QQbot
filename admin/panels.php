@@ -170,7 +170,7 @@ function loadPanels() {
       listEl.innerHTML = '<div class="empty-tip text-muted" style="text-align:center;padding:30px;">暂无面板，点击「创建面板」新建</div>';
       return;
     }
-    var html = '<table class="table"><thead><tr>'
+    var html = '<div class="table-responsive"><table class="table"><thead><tr>'
       + '<th>面板ID</th><th>备注 (remark)</th><th>场景</th><th>范围</th><th>元素数</th><th>版本</th><th>更新时间</th><th>操作</th>'
       + '</tr></thead><tbody>';
     records.forEach(function(p){
@@ -185,15 +185,15 @@ function loadPanels() {
         + '<td><span class="badge ' + (p.target_type==='specific'?'badge-warn':'') + '">' + escapeHtml(p.target_type||'') + '</span></td>'
         + '<td>' + items.length + '</td>'
         + '<td>v' + (p.version||0) + '</td>'
-        + '<td style="font-size:12px;">' + escapeHtml(p.updated_at||p.created_at||'') + '</td>'
-        + '<td>'
+        + '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(p.updated_at||p.created_at||'') + '</td>'
+        + '<td style="white-space:nowrap;">'
         + '<button class="btn btn-sm btn-outline" onclick="viewPanelDetail(\''+pid+'\')">详情</button> '
         + '<button class="btn btn-sm btn-primary" onclick="editPanel(\''+pid+'\')">编辑</button> '
         + '<button class="btn btn-sm btn-danger" onclick="deletePanel(\''+pid+'\')">删除</button>'
         + '</td>'
         + '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     listEl.innerHTML = html;
   });
 }

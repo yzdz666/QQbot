@@ -186,7 +186,7 @@ if (is_array($loadAvg) && count($loadAvg) >= 1) {
             <?= $isRecv ? '&#8595;' : '&#8593;' ?>
           </div>
           <div class="msg-content">
-            <div class="msg-meta" style="display:flex; justify-content:space-between; gap:8px;">
+            <div class="msg-meta" style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
               <span>
                 <span class="badge <?= $isRecv ? 'badge-info' : 'badge-success' ?>"><?= htmlspecialchars($msg['direction']) ?></span>
                 <?= htmlspecialchars($sourceType) ?>

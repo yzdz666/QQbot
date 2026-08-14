@@ -160,7 +160,7 @@ function formatFileSize($bytes)
               </span>
             </td>
             <?php endif; ?>
-            <td class="text-right">
+            <td class="text-right" style="white-space:nowrap;">
               <button class="btn btn-outline btn-sm" onclick='openEditModal(<?= $nameJs ?>)'>编辑</button>
               <button class="btn btn-danger btn-sm" onclick='deletePluginConfirm(<?= $nameJs ?>)'>删除</button>
             </td>
