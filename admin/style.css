@@ -107,6 +107,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   border-right: 1px solid var(--line);
   position: fixed;
   inset: 0 auto 0 0;
+  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
