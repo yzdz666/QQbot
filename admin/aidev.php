@@ -28,12 +28,16 @@ try {
     height: calc(100vh - 130px);
     min-height: 400px;
 }
+/* 两列都允许内部滚动，避免长插件把整页撑到几千像素 */
+.aidev-layout > * { min-height: 0; }
 
 /* AI配置面板 */
 .ai-config-panel {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 .ai-config-card {
     background: var(--card-bg);
@@ -85,6 +89,7 @@ try {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
 }
 .code-panel-header {
     padding: 12px 20px;
@@ -103,8 +108,10 @@ try {
 }
 .code-panel-body {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     position: relative;
+    overscroll-behavior: contain;
 }
 .code-editor {
     width: 100%;
@@ -124,7 +131,7 @@ try {
 .code-preview {
     background: #fafafa;
     padding: 16px;
-    min-height: 400px;
+    min-height: 100%;
     font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 13px;
     line-height: 1.6;
@@ -132,6 +139,10 @@ try {
     word-break: break-all;
     overflow: auto;
 }
+
+/* 插件文件选择 */
+#pluginSelect { height: 34px; padding: 0 8px; }
+.form-hint.is-editing { color: var(--brand); }
 
 /* 插件名称输入 */
 .plugin-name-row {
@@ -239,8 +250,11 @@ try {
         grid-template-columns: 1fr;
         height: auto;
     }
+    .ai-config-panel { overflow: visible; }
     .code-panel-body {
         min-height: 300px;
+        max-height: 70vh;
+        overflow: auto;
     }
 }
 </style>
@@ -278,14 +292,21 @@ try {
       </div>
     </div>
 
-    <!-- 插件名称 -->
+    <!-- 插件文件 -->
     <div class="ai-config-card">
-      <div class="card-header">插件信息</div>
+      <div class="card-header">插件文件</div>
       <div class="card-body">
+        <div class="form-group">
+          <label for="pluginSelect">读取已有插件</label>
+          <select id="pluginSelect" class="form-control" onchange="selectExistingPlugin()">
+            <option value="">新建插件…</option>
+          </select>
+          <div class="form-hint" id="pluginSelectHint">可从 plugin/ 读取现有插件，直接让 AI 改写</div>
+        </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label>插件名称</label>
+          <label for="pluginName">插件名称</label>
           <input type="text" id="pluginName" class="form-control" placeholder="例如: weather（仅字母/数字/下划线）">
-          <div class="form-hint">保存后将创建 plugin/插件名.php</div>
+          <div class="form-hint" id="pluginNameHint">保存后写入 plugin/插件名.php</div>
         </div>
       </div>
     </div>
@@ -356,6 +377,7 @@ try {
 (function() {
     var generatedCode = '';
     var chatHistory = [];
+    var editingPlugin = '';
 
     // ==================== 通用 AJAX ====================
     function apiCall(url, data, callback) {
@@ -426,6 +448,99 @@ try {
         document.getElementById('aiRequirement').value = templates[type] || '';
     };
 
+    // ==================== 已有插件列表 ====================
+    function formatSize(bytes) {
+        if (!bytes && bytes !== 0) return '';
+        if (bytes < 1024) return bytes + ' B';
+        return (bytes / 1024).toFixed(1) + ' KB';
+    }
+
+    function refreshPluginList(keepValue) {
+        var sel = document.getElementById('pluginSelect');
+        if (!sel) return;
+        var current = keepValue || sel.value || '';
+        apiCall('api/aidev_api.php?action=list_plugins', {}, function(res) {
+            if (res.code !== 0 || !res.data) {
+                document.getElementById('pluginSelectHint').textContent = '读取 plugin/ 目录失败：' + (res.msg || '未知错误');
+                return;
+            }
+            var items = res.data.items || [];
+            var html = '<option value="">新建插件…</option>';
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                html += '<option value="' + escapeHtml(it.name) + '">' + escapeHtml(it.file) +
+                        '（' + formatSize(it.size) + ' · ' + escapeHtml(it.mtime) + '）</option>';
+            }
+            sel.innerHTML = html;
+            if (current) sel.value = current;
+            var hint = document.getElementById('pluginSelectHint');
+            if (!res.data.dir_writable) {
+                hint.textContent = 'plugin/ 目录当前不可写，保存会失败，请检查目录权限';
+                hint.style.color = 'var(--danger)';
+            } else if (!editingPlugin) {
+                hint.textContent = '可从 plugin/ 读取现有插件，直接让 AI 改写（共 ' + items.length + ' 个）';
+                hint.style.color = '';
+            }
+        });
+    }
+
+    function setEditState(editing, info) {
+        editingPlugin = editing ? (info && info.plugin_name ? info.plugin_name : '') : '';
+        var nameHint = document.getElementById('pluginNameHint');
+        var selectHint = document.getElementById('pluginSelectHint');
+        var saveBtn = document.getElementById('savePluginBtn');
+        if (editingPlugin) {
+            nameHint.textContent = '正在改写 plugin/' + editingPlugin + '.php，保存将覆盖原文件（自动备份到 data/plugin_backups/）';
+            nameHint.classList.add('is-editing');
+            selectHint.textContent = '已载入 ' + editingPlugin + '.php' + (info && info.mtime ? '（最后修改 ' + info.mtime + '）' : '');
+            selectHint.style.color = '';
+            if (saveBtn) saveBtn.textContent = '覆盖保存插件';
+        } else {
+            nameHint.textContent = '保存后写入 plugin/插件名.php';
+            nameHint.classList.remove('is-editing');
+            if (saveBtn) saveBtn.textContent = '保存为插件';
+        }
+    }
+
+    // ==================== 读取已有插件 ====================
+    window.selectExistingPlugin = function() {
+        var sel = document.getElementById('pluginSelect');
+        var name = sel.value;
+        if (!name) {
+            setEditState(false);
+            document.getElementById('pluginName').value = '';
+            return;
+        }
+        var status = document.getElementById('genStatus');
+        status.style.display = 'flex';
+        status.className = 'gen-status generating';
+        document.getElementById('genStatusIcon').innerHTML = '<span class="loading"></span>';
+        document.getElementById('genStatusText').textContent = '正在读取 plugin/' + name + '.php…';
+
+        apiCall('api/aidev_api.php?action=load_plugin', { plugin_name: name }, function(res) {
+            if (res.code === 0 && res.data) {
+                generatedCode = res.data.code || '';
+                document.getElementById('pluginName').value = res.data.plugin_name;
+                setEditState(true, res.data);
+                renderCode(generatedCode);
+                document.getElementById('copyCodeBtn').style.display = 'inline-flex';
+                var saveBtn = document.getElementById('savePluginBtn');
+                saveBtn.style.display = 'inline-flex';
+                saveBtn.textContent = '覆盖保存插件';
+                status.className = 'gen-status success';
+                document.getElementById('genStatusIcon').innerHTML = '&#10003;';
+                document.getElementById('genStatusText').textContent = '已载入 ' + res.data.file + '（' + formatSize(res.data.size) + '），可让 AI 直接改写';
+                addHistory('assistant', '已载入已有插件 ' + res.data.file);
+            } else {
+                status.className = 'gen-status error';
+                document.getElementById('genStatusIcon').innerHTML = '&#10007;';
+                document.getElementById('genStatusText').textContent = res.msg || res.message || '读取失败';
+                sel.value = '';
+                setEditState(false);
+            }
+        });
+    };
+
     // ==================== 生成插件 ====================
     window.generatePlugin = function() {
         var requirement = document.getElementById('aiRequirement').value.trim();
@@ -441,10 +556,18 @@ try {
         document.getElementById('genStatusIcon').innerHTML = '<span class="loading"></span>';
         document.getElementById('genStatusText').textContent = '正在调用AI生成代码，请稍候...';
 
-        apiCall('api/aidev_api.php?action=generate', {
+        var payload = {
             prompt: requirement,
             plugin_name: document.getElementById('pluginName').value.trim()
-        }, function(res) {
+        };
+        // 已载入已有插件时，把原代码作为改写上下文
+        if (editingPlugin && generatedCode) payload.base_code = generatedCode;
+
+        document.getElementById('genStatusText').textContent = editingPlugin
+            ? '正在按现有插件 ' + editingPlugin + '.php 改写，请稍候...'
+            : '正在调用AI生成代码，请稍候...';
+
+        apiCall('api/aidev_api.php?action=generate', payload, function(res) {
             btn.disabled = false;
             btn.textContent = '生成插件代码';
 
@@ -513,12 +636,16 @@ try {
 
     // ==================== 保存插件 ====================
     window.savePlugin = function() {
-        var pluginName = document.getElementById('pluginName').value.trim();
+        var pluginName = document.getElementById('pluginName').value.trim().replace(/\.php$/i, '');
         if (!pluginName) { alert('请输入插件名称'); return; }
         if (!/^[\w\-\u4e00-\u9fff\u3400-\u4dbf]+$/.test(pluginName)) { alert('插件名只允许字母、数字、下划线、横杠和中文'); return; }
         if (!generatedCode) { alert('没有可保存的代码'); return; }
 
-        if (!confirm('确定要将代码保存为插件「' + pluginName + '.php」吗？\n已有同名文件将被覆盖。')) return;
+        var isOverwrite = editingPlugin && pluginName === editingPlugin;
+        var tip = isOverwrite
+            ? '确定要覆盖 plugin/' + pluginName + '.php 吗？\n原文件会自动备份到 data/plugin_backups/。'
+            : '确定要将代码保存为插件「' + pluginName + '.php」吗？\n已有同名文件将被覆盖。';
+        if (!confirm(tip)) return;
 
         var btn = document.getElementById('savePluginBtn');
         btn.disabled = true;
@@ -529,10 +656,15 @@ try {
             code: generatedCode
         }, function(res) {
             btn.disabled = false;
-            btn.textContent = '保存为插件';
+            btn.textContent = editingPlugin && pluginName === editingPlugin ? '覆盖保存插件' : '保存为插件';
             if (res.code === 0) {
-                alert('插件保存成功!');
+                var d = res.data || {};
+                alert(d.overwritten
+                    ? '已覆盖 plugin/' + pluginName + '.php\n原文件备份：data/plugin_backups/' + (d.backup || '')
+                    : '插件保存成功：plugin/' + pluginName + '.php');
+                setEditState(true, { plugin_name: pluginName });
                 addHistory('assistant', '插件已保存为 ' + pluginName + '.php');
+                refreshPluginList(pluginName);
             } else {
                 alert(res.msg || res.message || '保存失败');
             }
@@ -579,6 +711,7 @@ try {
 
     // ==================== 初始化 ====================
     updateAiStatus();
+    refreshPluginList();
 })();
 </script>
 

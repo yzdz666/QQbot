@@ -19,6 +19,31 @@ if (!Auth::check()) {
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+/**
+ * 插件目录绝对路径
+ */
+function aidev_plugin_dir() {
+    return dirname(__DIR__, 2) . '/plugin/';
+}
+
+/**
+ * 插件名校验：字母、数字、下划线、横杠、中文，禁止路径分隔符
+ */
+function aidev_valid_name($name) {
+    return (bool)preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+$/u', $name);
+}
+
+/**
+ * 允许用户直接输入 xxx.php，统一去掉扩展名
+ */
+function aidev_normalize_name($name) {
+    $name = trim($name);
+    if (preg_match('/\.php$/i', $name)) {
+        $name = substr($name, 0, -4);
+    }
+    return $name;
+}
+
 try {
     switch ($action) {
         // ==================== 获取 AI 配置 ====================
@@ -102,9 +127,13 @@ try {
         case 'generate':
             $prompt = trim($_POST['prompt'] ?? '');
             $appid = trim($_POST['appid'] ?? '');
+            $baseCode = trim($_POST['base_code'] ?? '');
 
             if (empty($prompt)) {
                 json_response(['code' => 400, 'msg' => '请输入插件描述']);
+            }
+            if ($baseCode !== '' && strlen($baseCode) > 131072) {
+                json_response(['code' => 400, 'msg' => '现有插件代码超过 128KB，无法作为改写上下文']);
             }
 
             // 获取 AI 配置
@@ -172,14 +201,22 @@ try {
 - 不要使用 exit/die
 PROMPT;
 
+            $userContent = "用户需求：\n" . $prompt . "\n\n";
+            if ($baseCode !== '') {
+                $userContent .= "=== 现有插件代码开始 ===\n" . $baseCode . "\n=== 现有插件代码结束 ===\n\n";
+                $userContent .= "请在这份现有插件的基础上改写：保留用户没有要求改动的指令与功能，不要删减无关逻辑，输出改写后的完整插件文件。";
+            } else {
+                $userContent .= "请生成插件代码。";
+            }
+
             $requestBody = json_encode([
                 'model' => $model,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => "用户需求：\n" . $prompt . "\n请生成插件代码。"]
+                    ['role' => 'user', 'content' => $userContent]
                 ],
                 'temperature' => 0.3,
-                'max_tokens' => 4096
+                'max_tokens' => $baseCode !== '' ? 8192 : 4096
             ]);
 
             // 使用直接 curl 调用，带完整错误处理
@@ -251,9 +288,66 @@ PROMPT;
             ]);
             break;
 
+        // ==================== 列出 plugin/ 下的插件 ====================
+        case 'list_plugins':
+            $dir = aidev_plugin_dir();
+            $items = [];
+            if (is_dir($dir)) {
+                foreach ((array)glob($dir . '*.php') as $file) {
+                    $items[] = [
+                        'name'  => basename($file, '.php'),
+                        'file'  => basename($file),
+                        'size'  => (int)filesize($file),
+                        'mtime' => date('Y-m-d H:i', (int)filemtime($file)),
+                    ];
+                }
+            }
+            usort($items, function ($a, $b) {
+                return strcmp($a['name'], $b['name']);
+            });
+            json_response([
+                'code' => 0,
+                'msg'  => 'ok',
+                'data' => [
+                    'items'        => $items,
+                    'dir_writable' => is_dir($dir) ? is_writable($dir) : false,
+                ],
+            ]);
+            break;
+
+        // ==================== 读取已有插件源码 ====================
+        case 'load_plugin':
+            $name = aidev_normalize_name($_POST['plugin_name'] ?? '');
+            if (!aidev_valid_name($name)) {
+                json_response(['code' => 400, 'msg' => '插件名不合法']);
+            }
+            $file = aidev_plugin_dir() . $name . '.php';
+            if (!is_file($file)) {
+                json_response(['code' => 404, 'msg' => '插件不存在：' . $name . '.php']);
+            }
+            if (filesize($file) > 512 * 1024) {
+                json_response(['code' => 400, 'msg' => '插件超过 512KB，无法在编辑器中打开']);
+            }
+            $code = file_get_contents($file);
+            if ($code === false) {
+                json_response(['code' => 500, 'msg' => '读取插件失败，请检查文件权限']);
+            }
+            json_response([
+                'code' => 0,
+                'msg'  => 'ok',
+                'data' => [
+                    'plugin_name' => $name,
+                    'file'        => $name . '.php',
+                    'code'        => $code,
+                    'size'        => strlen($code),
+                    'mtime'       => date('Y-m-d H:i', (int)filemtime($file)),
+                ],
+            ]);
+            break;
+
         // ==================== 保存生成的插件 ====================
         case 'save':
-            $pluginName = trim($_POST['plugin_name'] ?? '');
+            $pluginName = aidev_normalize_name($_POST['plugin_name'] ?? '');
             $pluginCode = $_POST['code'] ?? '';
             $appid = trim($_POST['appid'] ?? '');
 
@@ -274,16 +368,51 @@ PROMPT;
                 }
             }
 
-            $pluginDir = __DIR__ . '/../../plugin/';
-            if (!is_dir($pluginDir)) {
-                mkdir($pluginDir, 0777, true);
+            $pluginDir = aidev_plugin_dir();
+            if (!is_dir($pluginDir) && !@mkdir($pluginDir, 0755, true)) {
+                json_response(['code' => 500, 'msg' => 'plugin/ 目录不存在且创建失败']);
+            }
+            if (!is_writable($pluginDir)) {
+                json_response(['code' => 500, 'msg' => 'plugin/ 目录不可写，请给 PHP 运行用户写权限']);
             }
 
             $filePath = $pluginDir . $pluginName . '.php';
+            $existed = is_file($filePath);
 
-            // 写入文件
-            if (file_put_contents($filePath, $pluginCode) === false) {
-                json_response(['code' => 500, 'msg' => '写入插件文件失败']);
+            // 覆盖已有插件前先备份到 data/plugin_backups/（data 目录已禁止外部访问）
+            $backupName = '';
+            if ($existed) {
+                if (!is_writable($filePath)) {
+                    json_response(['code' => 500, 'msg' => '插件文件不可写：plugin/' . $pluginName . '.php']);
+                }
+                $backupDir = dirname(__DIR__, 2) . '/data/plugin_backups/';
+                if (!is_dir($backupDir)) {
+                    @mkdir($backupDir, 0755, true);
+                }
+                if (is_dir($backupDir) && is_writable($backupDir)) {
+                    $backupName = $pluginName . '-' . date('YmdHis') . '.php';
+                    @copy($filePath, $backupDir . $backupName);
+                    // 每个插件只保留最近 20 份
+                    $olds = glob($backupDir . $pluginName . '-*.php') ?: [];
+                    if (count($olds) > 20) {
+                        sort($olds);
+                        foreach (array_slice($olds, 0, count($olds) - 20) as $oldFile) {
+                            @unlink($oldFile);
+                        }
+                    }
+                }
+            }
+
+            // 原子写入：先写临时文件再替换，避免中断后留下半个插件
+            $tmpPath = $filePath . '.tmp';
+            if (file_put_contents($tmpPath, $pluginCode, LOCK_EX) === false || !@rename($tmpPath, $filePath)) {
+                @unlink($tmpPath);
+                json_response(['code' => 500, 'msg' => '写入插件文件失败，请检查 plugin/ 目录权限']);
+            }
+            @chmod($filePath, 0644);
+            // 清掉 OPcache，保存后立即生效
+            if (function_exists('opcache_invalidate')) {
+                @opcache_invalidate($filePath, true);
             }
 
             // 如果指定了 appid，自动启用插件
@@ -304,7 +433,9 @@ PROMPT;
                 'data' => [
                     'plugin_name' => $pluginName,
                     'file' => $pluginName . '.php',
-                    'enabled' => !empty($appid)
+                    'enabled' => !empty($appid),
+                    'overwritten' => $existed,
+                    'backup' => $backupName,
                 ]
             ]);
             break;

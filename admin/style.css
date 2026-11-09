@@ -892,15 +892,18 @@ select.form-control, select.form-input { cursor: pointer; }
 .flex-wrap { flex-wrap: wrap; }
 .hide-sm { display: inline; }
 
-/* 旧侧栏切换按钮与遮罩（移动端保留遮罩） */
+/* 移动端侧栏遮罩：必须位于侧栏（z-index:100）之下，否则会盖住菜单导致点不动 */
 .sidebar-overlay {
   display: none;
   position: fixed;
   inset: 0;
   background: rgba(25, 30, 26, .38);
-  z-index: 999;
+  z-index: 90;
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
 }
 .sidebar-overlay.active { display: block; }
+body.nav-open { overflow: hidden; }
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 1200px) {
@@ -925,10 +928,17 @@ select.form-control, select.form-input { cursor: pointer; }
   .sidebar {
     width: 248px;
     transform: translateX(-100%);
-    transition: transform .22s ease;
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
     box-shadow: 12px 0 32px rgba(25, 30, 26, .12);
+    overscroll-behavior: contain;
   }
-  .sidebar.open { transform: translateX(0); }
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform .22s ease;
+  }
+  .sidebar .nav-menu { overscroll-behavior: contain; }
   .main-content { margin-left: 0; padding: 0 12px 28px; }
   .topbar { margin: 0 -12px 14px; padding: 0 12px; height: 50px; }
   .mobile-menu-btn { display: inline-flex; width: 34px; height: 34px; }

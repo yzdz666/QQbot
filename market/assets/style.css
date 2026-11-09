@@ -490,6 +490,14 @@ table.data td { overflow-wrap: anywhere; }
 .tab.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
 .sidebar-toggle { display: none; }
 
+/* 市场后台移动端遮罩：位于侧栏（z-index:60）之下，点击可收起 */
+.admin-side-overlay {
+  display: none; position: fixed; inset: 0; z-index: 55;
+  background: rgba(28, 33, 29, .36);
+}
+.admin-side-overlay.active { display: block; }
+body.admin-nav-open { overflow: hidden; }
+
 /* ---------------- 页脚 ---------------- */
 .site-footer { border-top: 1px solid var(--line); padding: 20px 0 34px; color: var(--ink-3); font-size: 12px; background: var(--paper); }
 .site-footer .inner { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

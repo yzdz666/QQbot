@@ -19,8 +19,9 @@ $pendingCount = (int)MarketDB::pdo()->query("SELECT COUNT(*) FROM versions WHERE
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body class="admin-body">
+<div class="admin-side-overlay" id="adminSideOverlay"></div>
 <div class="admin-layout">
-  <aside class="admin-side">
+  <aside class="admin-side" id="adminSide">
     <a class="brand" href="index.php">
       <span class="brand-mark">官</span>
       <span><?= market_h($siteName) ?><small>REVIEW CONSOLE</small></span>
@@ -40,7 +41,7 @@ $pendingCount = (int)MarketDB::pdo()->query("SELECT COUNT(*) FROM versions WHERE
   </aside>
   <div class="admin-main">
     <header class="admin-top">
-      <button class="sidebar-toggle" type="button" id="adminSideToggle" aria-label="菜单">☰</button>
+      <button class="sidebar-toggle" type="button" id="adminSideToggle" aria-label="打开菜单" aria-controls="adminSide" aria-expanded="false">☰</button>
       <h1><?= market_h($pageTitle) ?></h1>
       <?php if ($pendingCount > 0): ?>
         <span class="badge badge-warn"><?= $pendingCount ?> 个版本待审核</span>

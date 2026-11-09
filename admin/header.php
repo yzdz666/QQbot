@@ -107,7 +107,7 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="layout">
-  <div class="sidebar">
+  <aside class="sidebar" id="adminSidebar">
     <a href="index.php" class="brand">
       <span class="brand-mark">官</span>
       <span class="brand-text"><strong>官鸡机器人</strong><small>后台控制台</small></span>
@@ -228,11 +228,11 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
       <span class="foot-name"><?= htmlspecialchars($admin['username'] ?? 'admin') ?></span>
       <a class="foot-logout" href="api.php?action=logout">退出</a>
     </div>
-  </div>
+  </aside>
   <div class="main-content">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="mobile-menu-btn" type="button" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
+        <button class="mobile-menu-btn" type="button" id="mobileMenuBtn" onclick="toggleSidebar()" aria-label="打开菜单" aria-controls="adminSidebar" aria-expanded="false">☰</button>
         <div class="breadcrumb">
           <span class="breadcrumb-root">控制台</span>
           <span class="breadcrumb-sep">/</span>
