@@ -136,7 +136,7 @@ function 更新请求(string $url, int $timeout = 20, int $maxBytes = 2097152, a
  *
  * @return array{ok:bool,status:int,size:int,error:string}
  */
-function 更新下载文件(string $url, string $dest, int $timeout = 180, int $maxBytes = 更新单包上限): array {
+function 更新下载文件(string $url, string $dest, int $timeout = 300, int $maxBytes = 更新单包上限): array {
     if (!preg_match('#^https?://#i', $url)) {
         return ['ok' => false, 'status' => 0, 'size' => 0, 'error' => '仅支持 http/https 地址'];
     }
@@ -155,8 +155,10 @@ function 更新下载文件(string $url, string $dest, int $timeout = 180, int $
     curl_setopt($ch, CURLOPT_MAXREDIRS, 6);
     curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 25);
     curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+    curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 1024);
+    curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, 60);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_USERAGENT, 'GuanjiBot-Updater/1.0');
@@ -173,6 +175,7 @@ function 更新下载文件(string $url, string $dest, int $timeout = 180, int $
     });
     $ok = curl_exec($ch);
     $err = curl_error($ch);
+    $errno = curl_errno($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
     curl_close($ch);
@@ -183,7 +186,18 @@ function 更新下载文件(string $url, string $dest, int $timeout = 180, int $
     }
     if ($ok === false) {
         @unlink($dest);
-        return ['ok' => false, 'status' => $status, 'size' => $written, 'error' => $err !== '' ? $err : '下载失败'];
+        $msg = $err;
+        if ($msg === '') {
+            $msg = '传输中断（curl #' . $errno . '）';
+        }
+        if ($errno === 28) {
+            $msg = '下载超时，可尝试填写下载加速源';
+        } elseif ($errno === 6) {
+            $msg = '无法解析下载地址，请检查 DNS 或使用加速源';
+        } elseif ($errno === 7) {
+            $msg = '无法连接下载服务器，可尝试填写下载加速源';
+        }
+        return ['ok' => false, 'status' => $status, 'size' => $written, 'error' => $msg];
     }
     if ($status >= 400) {
         @unlink($dest);
@@ -522,10 +536,24 @@ function 更新应用(string $srcDir, string $tag = ''): array {
         $done[] = $rel;
     }
 
-    // 3. 记录状态
-    $ver = 更新当前版本();
-    if ($ver === '0.0.0' && $tag !== '') {
+    // 3. 记录状态（版本取安装包内的定义，避免 OPcache 读到旧文件）
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
+    }
+    clearstatcache(true);
+    $ver = '';
+    $版本文件 = rtrim($srcDir, '/') . '/admin/version.php';
+    if (is_file($版本文件)) {
+        $info = @include $版本文件;
+        if (is_array($info) && !empty($info['version'])) {
+            $ver = (string)$info['version'];
+        }
+    }
+    if ($ver === '') {
         $ver = 更新规范版本($tag);
+    }
+    if ($ver === '') {
+        $ver = 更新当前版本();
     }
     更新写状态([
         'version' => $ver,
