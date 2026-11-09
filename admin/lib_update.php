@@ -59,6 +59,10 @@ function 更新保存配置(string $key, string $value): void {
 function 更新当前版本(): string {
     $file = APP_ROOT . 'admin/version.php';
     if (is_file($file)) {
+        // OPcache 可能缓存旧文件，读取前强制失效
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($file, true);
+        }
         $info = @include $file;
         if (is_array($info) && !empty($info['version'])) {
             return (string)$info['version'];
