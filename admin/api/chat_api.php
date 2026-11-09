@@ -648,6 +648,16 @@ try {
                 json_response(['code' => 404, 'msg' => '机器人不存在']);
             }
 
+            // 官方 20261026：群聊文本/Markdown 支持 <qqbot-at-everyone />，机器人需为群管理员且每群每天 1 次
+            if (is_string($content) && preg_match('/<qqbot-at-everyone\s*\/?>/i', $content)) {
+                if ($sourceType !== '群聊') {
+                    json_response(['code' => 400, 'msg' => '@全体成员仅支持群聊消息，单聊会被平台拒绝']);
+                }
+                if ($hasUpload || !in_array($msgType, ['text', 'markdown', 'md'], true)) {
+                    json_response(['code' => 400, 'msg' => '@全体成员只能用于文本或 Markdown 消息']);
+                }
+            }
+
             // 设置全局常量上下文
             if (!defined('appid')) define('appid', $bot['appid']);
             if (!defined('secret')) define('secret', $bot['secret']);
@@ -717,12 +727,14 @@ try {
                         break;
                     case 'markdown':
                     case 'md':
+                        // 官方 20260810：force_verify_image_resource 开启后图片转存失败会中止发送
+                        $forceVerify = !empty($_POST['force_verify']) && $_POST['force_verify'] !== '0';
                         // 携带 ref_msg_id 时以引用形式发送 (官方 message_reference)
                         $refMsgId = trim($_POST['ref_msg_id'] ?? '');
                         if ($refMsgId !== '') {
-                            $resp = 引用MD($refMsgId, $content);
+                            $resp = 引用MD($refMsgId, $content, null, null, $forceVerify);
                         } else {
-                            $resp = MD($content);
+                            $resp = MD($content, null, null, $forceVerify);
                         }
                         break;
                     case 'image':
@@ -792,13 +804,25 @@ try {
                         break;
                     case 'tuwen':
                         // 图文卡片消息 - 使用 图文卡片() 函数
+                        // 官方 20261028 图文卡片(msg_type=8)：标题/描述/图片/跳转四个字段全部必填
                         $tuwenTitle = trim($_POST['title'] ?? '');
                         $tuwenDesc = trim($_POST['desc'] ?? '');
                         $tuwenImg = trim($_POST['img'] ?? '');
                         $tuwenLink = trim($_POST['link'] ?? '');
-                        $tuwenPrompt = trim($_POST['prompt'] ?? '');
-                        if (empty($tuwenTitle) && empty($tuwenDesc) && empty($tuwenImg)) {
-                            json_response(['code' => 400, 'msg' => '图文卡片至少需要标题、描述或图片']);
+                        if ($tuwenTitle === '' || $tuwenDesc === '' || $tuwenImg === '' || $tuwenLink === '') {
+                            json_response(['code' => 400, 'msg' => '图文卡片需要填写标题、描述、图片 URL、跳转链接']);
+                        }
+                        if (mb_strlen($tuwenTitle, 'UTF-8') > 50) {
+                            json_response(['code' => 400, 'msg' => '图文卡片标题最多 50 个字']);
+                        }
+                        if (mb_strlen($tuwenDesc, 'UTF-8') > 200) {
+                            json_response(['code' => 400, 'msg' => '图文卡片描述最多 200 个字']);
+                        }
+                        if (!preg_match('#^https://#i', $tuwenImg) || !preg_match('#^https://#i', $tuwenLink)) {
+                            json_response(['code' => 400, 'msg' => '图文卡片的图片 URL 与跳转链接必须使用 https://']);
+                        }
+                        if (strlen($tuwenImg) > 1024 || strlen($tuwenLink) > 1024) {
+                            json_response(['code' => 400, 'msg' => '图文卡片链接长度不能超过 1024 个字符']);
                         }
                         if (!function_exists('图文卡片')) {
                             json_response(['code' => 500, 'msg' => '图文卡片函数不存在']);

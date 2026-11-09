@@ -1126,12 +1126,13 @@ function 引用图片($msgId, $image, $content = null, $logMedia = null) {
     return $resp;
 }
 
-// 引用发送 Markdown: 引用MD($msgId, $md, $keyboard = null, $style = null)
+// 引用发送 Markdown: 引用MD($msgId, $md, $keyboard = null, $style = null, $forceVerify = false)
 // 官方 msg_type=2 + markdown 对象(content必填), 传 markdown 后 content 必须为空(本函数不传content)
 // $keyboard 支持键盘模板ID(短形式); $style 与 MD() 一致
-function 引用MD($msgId, $md, $keyboard = null, $style = null) {
+function 引用MD($msgId, $md, $keyboard = null, $style = null, $forceVerify = false) {
     $mdObj = ["content" => $md];
     if ($style !== null && is_array($style)) $mdObj["style"] = $style;
+    if ($forceVerify) $mdObj["force_verify_image_resource"] = true;
     $payload = [
         "msg_type" => 2,
         "markdown" => $mdObj,
@@ -1139,7 +1140,7 @@ function 引用MD($msgId, $md, $keyboard = null, $style = null) {
     ];
     if ($keyboard !== null) $payload["keyboard"] = ["id" => $keyboard];
     $resp = 引用发送($payload, "发送引用MD", "引用MD", $md);
-    if ($resp === null) return MD($md, $keyboard, $style);
+    if ($resp === null) return MD($md, $keyboard, $style, $forceVerify);
     return $resp;
 }
 
@@ -1216,7 +1217,7 @@ function 发送响应引用IDX($resp) {
 }
 
 // ==================== MD函数（已升级，支持style参数） ====================
-function MD($md, $keyboard = null, $style = null) {
+function MD($md, $keyboard = null, $style = null, $forceVerify = false) {
    $json = [
        "msg_type" => 2,
        "msg_seq" => rand(1, 9999),
@@ -1228,6 +1229,11 @@ function MD($md, $keyboard = null, $style = null) {
    // 添加 style 参数支持
    if ($style !== null && is_array($style)) {
        $json["markdown"]["style"] = $style;
+   }
+
+   // 官方 20260810：开启后图片转存失败会中断发送（默认关闭）
+   if ($forceVerify) {
+       $json["markdown"]["force_verify_image_resource"] = true;
    }
    
    if ($keyboard !== null) {
@@ -1687,11 +1693,15 @@ function 推送图片到群($groupOpenid, $image) {
 }
 
 // ==================== 生成分享链接 ====================
-function 分享链接($groupOpenid) {
-    $json = json_encode([
-        "group_openid" => $groupOpenid
-    ]);
-    $resp = BOTAPI("/v2/generate_url_link", "POST", $json);
+// 官方 20260916 修正：请求体只有可选 callback_data（≤32 字符），
+// 返回 { data: { url: "https://qun.qq.com/qunpro/robot/qunshare?..." } }
+function 分享链接($callbackData = '') {
+    $data = [];
+    $callbackData = trim((string)$callbackData);
+    if ($callbackData !== '') {
+        $data['callback_data'] = mb_substr($callbackData, 0, 32, 'UTF-8');
+    }
+    $resp = BOTAPI("/v2/generate_url_link", "POST", json_encode($data, JSON_UNESCAPED_UNICODE));
     return json_decode($resp, true);
 }
 
@@ -1888,21 +1898,26 @@ function 确认互动($eventId, $body = '') {
 // ==================== 处理入群申请 (POST /v2/groups/{group_openid}/approval_join_request/{member_openid}) ====================
 // 参照官方文档: v2_groups_group_openid_approval_join_request_member_openid.post
 // 参数:
-//   $groupOpenid  - 群 openid
-//   $memberOpenid - 申请入群的成员 openid
-//   $approve      - true=同意, false=拒绝
-//   $reason       - 拒绝原因 (仅拒绝时有效, 可选)
-//   $blacklist    - 是否同时加入黑名单 (可选)
-function 处理入群申请($groupOpenid, $memberOpenid, $approve, $reason = '', $blacklist = false) {
+//   $groupOpenid   - 群 openid
+//   $memberOpenid  - 申请入群的成员 openid
+//   $approve       - true=同意, false=拒绝
+//   $reason        - 拒绝理由 (仅拒绝时有效, 可选)
+//   $blacklist     - 是否同时加入黑名单 (仅拒绝时有效, 可选)
+//   $joinRequestId - 申请ID (官方建议回传, 可选)
+// 官方请求体: op=approve|decline · join_request_id · reject_reason · add_to_member_blacklist
+function 处理入群申请($groupOpenid, $memberOpenid, $approve, $reason = '', $blacklist = false, $joinRequestId = '') {
     if (empty($groupOpenid) || empty($memberOpenid)) {
         return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
     }
-    $data = ["approve" => (bool)$approve];
-    if (!$approve && !empty($reason)) {
-        $data["reason"] = $reason;
+    $data = ["op" => $approve ? "approve" : "decline"];
+    if (trim((string)$joinRequestId) !== '') {
+        $data["join_request_id"] = (string)$joinRequestId;
     }
-    if ($blacklist) {
-        $data["blacklist"] = true;
+    if (!$approve && trim((string)$reason) !== '') {
+        $data["reject_reason"] = (string)$reason;
+    }
+    if (!$approve && $blacklist) {
+        $data["add_to_member_blacklist"] = true;
     }
     $json = json_encode($data, JSON_UNESCAPED_UNICODE);
     $resp = BOTAPI("/v2/groups/{$groupOpenid}/approval_join_request/{$memberOpenid}", "POST", $json);
@@ -1986,6 +2001,26 @@ function 图片尺寸($imageSource) {
 
 // ==================== 图文卡片回复 (msg_type=8, 对应Python reply_tuwen) ====================
 function 图文卡片($title, $description, $pic_url, $url) {
+    // 官方 20261028：四个字段全部必填；标题 1-50、描述 1-200、链接必须 HTTPS 且 ≤1024
+    $title = trim((string)$title);
+    $description = trim((string)$description);
+    $pic_url = trim((string)$pic_url);
+    $url = trim((string)$url);
+    if ($title === '' || $description === '' || $pic_url === '' || $url === '') {
+        return json_encode(['code' => 400, 'message' => '图文卡片需要标题、描述、图片 URL、跳转链接'], JSON_UNESCAPED_UNICODE);
+    }
+    if (mb_strlen($title, 'UTF-8') > 50) {
+        return json_encode(['code' => 400, 'message' => '图文卡片标题最多 50 个字'], JSON_UNESCAPED_UNICODE);
+    }
+    if (mb_strlen($description, 'UTF-8') > 200) {
+        return json_encode(['code' => 400, 'message' => '图文卡片描述最多 200 个字'], JSON_UNESCAPED_UNICODE);
+    }
+    if (!preg_match('#^https://#i', $pic_url) || !preg_match('#^https://#i', $url)) {
+        return json_encode(['code' => 400, 'message' => '图文卡片的图片 URL 与跳转链接必须使用 https://'], JSON_UNESCAPED_UNICODE);
+    }
+    if (strlen($pic_url) > 1024 || strlen($url) > 1024) {
+        return json_encode(['code' => 400, 'message' => '图文卡片链接长度不能超过 1024 个字符'], JSON_UNESCAPED_UNICODE);
+    }
     $json = [
         "msg_type" => 8,
         "msg_seq" => mt_rand(1, 99999),
@@ -3640,4 +3675,238 @@ function 上传分片到预签名URL($presignedUrl, $data, $timeout = 60) {
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     return $status;
+}
+
+// ============================================================================
+// 官方 20261021 新增：素材管理（Markdown 图片素材）
+// POST /v2/media-images/prepare   申请上传（md5/sha1 登记）
+// PUT  <presigned_url>            直传图片二进制（Content-Type 必须与申请一致）
+// POST /v2/media-images/complete  完成上传，返回 qqbot-media:// 引用
+// GET  /v2/media-images           查询有效图片（cursor 翻页）
+// DELETE /v2/media-images/{id}/delete
+// 限制：单张 ≤10MB，png/jpeg/gif/webp，单机器人最多 100 张
+// ============================================================================
+
+/**
+ * 素材错误码转中文提示
+ */
+function 素材错误提示($code, $fallback = '') {
+    $map = [
+        40035001 => '图片格式不支持：仅支持 png / jpeg / gif / webp，且扩展名需与 Content-Type 一致',
+        40035002 => '图片超过大小上限（单张 10MB）',
+        40035003 => '上传任务不存在或已过期（有效期 4 小时），请重新上传',
+        40035006 => '平台处理失败，请稍后重试',
+        40035007 => '素材数量已达上限（每个机器人 100 张），请先删除不用的图片',
+        40035008 => '图片不存在或已被删除',
+        40035009 => '图片已过期或被删除，引用链接不再可用',
+        40035010 => '引用链接无效，或不属于当前机器人',
+    ];
+    $code = (int)$code;
+    if (isset($map[$code])) return $map[$code];
+    return $fallback !== '' ? $fallback : '素材操作失败';
+}
+
+/**
+ * PUT 直传素材到预签名 URL
+ * 预签名 URL 指向对象存储，不能携带 QQ Bot Authorization 头；
+ * 返回 ETag（即文件 MD5，去掉引号），供 complete 阶段校验。
+ *
+ * @return array{ok:bool,status:int,etag:string,error:string}
+ */
+function 素材直传($presignedUrl, $fileData, $contentType, $timeout = 90) {
+    $result = ['ok' => false, 'status' => 0, 'etag' => '', 'error' => ''];
+    if (!preg_match('#^https?://#i', (string)$presignedUrl)) {
+        $result['error'] = '预签名上传地址无效';
+        return $result;
+    }
+    if (!is_string($fileData) || $fileData === '') {
+        $result['error'] = '文件内容为空';
+        return $result;
+    }
+
+    $etag = '';
+    $ch = curl_init($presignedUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PUT',
+        CURLOPT_POSTFIELDS     => $fileData,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: ' . $contentType,
+            'Content-Length: ' . strlen($fileData),
+            'Expect:',
+        ],
+        CURLOPT_HEADERFUNCTION => function ($ch, $header) use (&$etag) {
+            if (stripos($header, 'ETag:') === 0) {
+                $etag = trim(substr($header, 5));
+            }
+            return strlen($header);
+        },
+    ]);
+    $body = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($status >= 200 && $status < 300) {
+        $etag = preg_replace('#^W/#i', '', trim($etag));
+        $result['ok'] = true;
+        $result['status'] = $status;
+        $result['etag'] = trim($etag, "\" \t\n\r");
+        return $result;
+    }
+    $result['status'] = $status;
+    $result['error'] = $error !== '' ? $error : ('HTTP ' . $status . ($body !== '' ? '：' . mb_substr((string)$body, 0, 200, 'UTF-8') : ''));
+    return $result;
+}
+
+/**
+ * 上传一张素材图片
+ *
+ * @param string $fileData   二进制内容
+ * @param string $fileName   文件名（含扩展名）
+ * @param string $contentType image/png|image/jpeg|image/gif|image/webp
+ * @return array success=true 时含 image_id/url/ttl/preview_url；失败含 code/message
+ */
+function 素材上传($fileData, $fileName, $contentType) {
+    if (!is_string($fileData) || $fileData === '') {
+        return ['success' => false, 'code' => -1, 'message' => '文件内容为空'];
+    }
+    $allowed = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+    $contentType = strtolower(trim((string)$contentType));
+    if (!isset($allowed[$contentType])) {
+        return ['success' => false, 'code' => 40035001, 'message' => '仅支持 png / jpeg / gif / webp 图片'];
+    }
+    $size = strlen($fileData);
+    if ($size > 10 * 1024 * 1024) {
+        return ['success' => false, 'code' => 40035002, 'message' => '图片超过 10MB 上限'];
+    }
+
+    $fileName = trim((string)$fileName);
+    if ($fileName === '') $fileName = 'image.' . $allowed[$contentType];
+    // 强制扩展名与 Content-Type 一致（平台会校验）
+    $base = pathinfo($fileName, PATHINFO_FILENAME);
+    $base = preg_replace('/[^\p{L}\p{N}_\-\.]+/u', '_', $base);
+    if ($base === '' || $base === null) $base = 'image';
+    $fileName = mb_substr($base, 0, 80, 'UTF-8') . '.' . $allowed[$contentType];
+
+    $md5 = md5($fileData);
+    $sha1 = sha1($fileData);
+
+    $prepare = BOTAPI('/v2/media-images/prepare', 'POST', json_encode([
+        'file_name'    => $fileName,
+        'file_size'    => $size,
+        'content_type' => $contentType,
+        'md5'          => $md5,
+        'sha1'         => $sha1,
+    ], JSON_UNESCAPED_UNICODE));
+    $prep = json_decode($prepare, true);
+    if (!is_array($prep) || empty($prep['upload_id']) || empty($prep['presigned_url'])) {
+        $code = is_array($prep) ? (int)($prep['code'] ?? -1) : -1;
+        $msg  = is_array($prep) ? (string)($prep['message'] ?? '') : '';
+        return ['success' => false, 'code' => $code, 'message' => 素材错误提示($code, $msg !== '' ? $msg : '申请上传失败'), 'raw' => $prepare];
+    }
+
+    $put = 素材直传($prep['presigned_url'], $fileData, $contentType);
+    if (empty($put['ok'])) {
+        return ['success' => false, 'code' => -1, 'message' => '图片直传失败：' . $put['error'], 'stage' => 'put'];
+    }
+
+    $etag = $put['etag'] !== '' ? $put['etag'] : $md5;
+    $complete = BOTAPI('/v2/media-images/complete', 'POST', json_encode([
+        'upload_id' => (string)$prep['upload_id'],
+        'md5'       => $etag,
+    ], JSON_UNESCAPED_UNICODE));
+    $done = json_decode($complete, true);
+    if (!is_array($done) || empty($done['url']) || empty($done['image_id'])) {
+        $code = is_array($done) ? (int)($done['code'] ?? -1) : -1;
+        $msg  = is_array($done) ? (string)($done['message'] ?? '') : '';
+        return ['success' => false, 'code' => $code, 'message' => 素材错误提示($code, $msg !== '' ? $msg : '完成上传失败'), 'raw' => $complete];
+    }
+
+    return [
+        'success'     => true,
+        'image_id'    => (string)$done['image_id'],
+        'url'         => (string)$done['url'],
+        'ttl'         => (int)($done['ttl'] ?? 7776000),
+        'preview_url' => (string)($done['preview_url'] ?? ''),
+        'file_name'   => $fileName,
+        'size'        => $size,
+        'content_type'=> $contentType,
+        'expires_in'  => (int)($prep['expires_in'] ?? 0),
+    ];
+}
+
+/**
+ * 查询当前机器人的有效素材图片
+ *
+ * @return array success=true 时含 images / next_cursor / total
+ */
+function 素材列表($cursor = '') {
+    $address = '/v2/media-images';
+    if (trim((string)$cursor) !== '') {
+        $address .= '?cursor=' . rawurlencode(trim((string)$cursor));
+    }
+    $resp = BOTAPI($address, 'GET', '');
+    $data = json_decode($resp, true);
+    if (!is_array($data) || (!isset($data['images']) && isset($data['code']) && (int)$data['code'] !== 0)) {
+        $code = is_array($data) ? (int)($data['code'] ?? -1) : -1;
+        $msg  = is_array($data) ? (string)($data['message'] ?? '') : '';
+        return ['success' => false, 'code' => $code, 'message' => 素材错误提示($code, $msg !== '' ? $msg : '获取素材列表失败'), 'raw' => $resp];
+    }
+    $images = [];
+    foreach (($data['images'] ?? []) as $img) {
+        if (!is_array($img)) continue;
+        $images[] = [
+            'image_id'    => (string)($img['image_id'] ?? ''),
+            'url'         => (string)($img['url'] ?? ''),
+            'file_name'   => (string)($img['file_name'] ?? ''),
+            'preview_url' => (string)($img['preview_url'] ?? ''),
+            'created_at'  => (int)($img['created_at'] ?? 0),
+            'expires_at'  => (int)($img['expires_at'] ?? 0),
+        ];
+    }
+    return [
+        'success'     => true,
+        'images'      => $images,
+        'next_cursor' => (string)($data['next_cursor'] ?? ''),
+        'total'       => (int)($data['total'] ?? count($images)),
+    ];
+}
+
+/**
+ * 删除素材图片（释放 100 张配额）
+ */
+function 素材删除($imageId) {
+    $imageId = trim((string)$imageId);
+    if ($imageId === '' || !preg_match('/^[A-Za-z0-9_\-]+$/', $imageId)) {
+        return ['success' => false, 'code' => -1, 'message' => 'image_id 无效'];
+    }
+    $resp = BOTAPI('/v2/media-images/' . rawurlencode($imageId) . '/delete', 'DELETE', '');
+    $trim = trim((string)$resp);
+    $data = json_decode($trim, true);
+    if (is_array($data) && isset($data['code']) && (int)$data['code'] !== 0) {
+        $code = (int)$data['code'];
+        return ['success' => false, 'code' => $code, 'message' => 素材错误提示($code, (string)($data['message'] ?? '删除失败')), 'raw' => $resp];
+    }
+    // 成功时官方返回空 JSON 对象 {}
+    return ['success' => true, 'image_id' => $imageId];
+}
+
+/**
+ * 生成 Markdown 图片引用
+ * @param string $url  素材 url 或普通图片地址
+ * @param string $alt  说明文字
+ * @param int    $w    可选宽度(px)
+ * @param int    $h    可选高度(px)
+ */
+function 素材Markdown($url, $alt = '', $w = 0, $h = 0) {
+    $alt = trim((string)$alt);
+    $size = '';
+    if ($w > 0) $size .= ' #' . (int)$w . 'px';
+    if ($h > 0) $size .= ' #' . (int)$h . 'px';
+    return '![' . $alt . $size . '](' . trim((string)$url) . ')';
 }

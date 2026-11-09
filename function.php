@@ -1374,7 +1374,16 @@ function 插件安全扫描($code) {
 }
 
 /**
- * 解析插件市场地址：优先使用后台保存的配置，否则按当前部署位置推断 /market。
+ * 默认插件市场地址（官方在线市场）
+ * 后台未保存自定义地址时使用；可在「插件市场 → 市场源」改成自建市场。
+ */
+if (!defined('DEFAULT_MARKET_BASE')) {
+    define('DEFAULT_MARKET_BASE', 'https://3000-ac02071770e941319c9aa30ed5287647.e2b.gz1.sandbox.cloudstudio.club');
+}
+
+/**
+ * 解析插件市场地址：优先使用后台保存的配置，否则使用默认在线市场。
+ * 如需使用同域自建市场，在后台「市场源」填写完整地址（如 https://your.site/market）。
  */
 function 市场地址() {
     $saved = '';
@@ -1384,17 +1393,7 @@ function 市场地址() {
     if ($saved !== '' && preg_match('#^https?://#i', $saved)) {
         return rtrim($saved, '/');
     }
-    if (PHP_SAPI === 'cli') return '';
-    $scheme = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') || intval($_SERVER['SERVER_PORT'] ?? 0) === 443 ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    if (!preg_match('/^[A-Za-z0-9\.\-]+(:\d+)?$/', $host)) $host = 'localhost';
-    $script = $_SERVER['SCRIPT_NAME'] ?? '/admin/market.php';
-    // 支持 /admin/market.php 与 /admin/api/market.php 两种入口
-    $root = str_replace('\\', '/', dirname($script));
-    $root = preg_replace('#/(admin/api|admin)$#', '', $root);
-    $root = rtrim($root, '/');
-    if ($root === '.' || $root === '/') $root = '';
-    return $scheme . '://' . $host . $root . '/market';
+    return rtrim(DEFAULT_MARKET_BASE, '/');
 }
 
 /**

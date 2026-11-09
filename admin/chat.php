@@ -1142,6 +1142,75 @@ if (!empty($bots)) {
         margin-left: 0;
     }
 }
+
+/* ===== 快捷操作：@全体成员 / 素材 ===== */
+.chat-quick-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.chat-quick-btn:hover { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.chat-force-verify {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    user-select: none;
+    white-space: nowrap;
+}
+.chat-force-verify input { margin: 0; }
+.chat-at-user.everyone {
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid #e6d3a8;
+}
+.chat-msg.sent .chat-at-user.everyone {
+    color: #4a3408;
+    background: #f0d49a;
+    border-color: #f0d49a;
+}
+.chat-msg.sent .chat-md-media {
+    background: rgba(255, 255, 255, .12);
+    border-color: rgba(255, 255, 255, .32);
+    color: #e9e4d8;
+}
+.chat-msg.sent .chat-md-media b { color: #fff; }
+.chat-md-media {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 240px;
+    margin: 4px 0;
+    padding: 6px 9px;
+    border: 1px dashed var(--line-2);
+    background: var(--surface-2);
+    color: var(--ink-3);
+    font-size: 11px;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+.chat-md-media b { font-weight: 600; color: var(--ink-2); }
+
+/* ===== 聊天内素材选择器 ===== */
+.cmp-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.cmp-toolbar .form-control { flex: 1; min-width: 140px; font-size: 12px; padding: 6px 9px; }
+.cmp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; max-height: 52vh; overflow: auto; overscroll-behavior: contain; }
+.cmp-item { border: 1px solid var(--line); background: var(--surface); padding: 0; cursor: pointer; text-align: left; min-width: 0; transition: var(--transition); }
+.cmp-item:hover { border-color: var(--brand); }
+.cmp-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--surface-3); }
+.cmp-item .cmp-name { display: block; padding: 5px 7px; font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-empty { padding: 28px 12px; text-align: center; color: var(--ink-3); font-size: 12px; }
+.cmp-hint { margin-top: 9px; font-size: 11px; color: var(--ink-3); }
+@media (max-width: 768px) {
+  .cmp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 46vh; }
+  .chat-quick-btn { padding: 4px 7px; }
+}
 </style>
 
 <div class="page-header">
@@ -1236,6 +1305,10 @@ if (!empty($bots)) {
           <span class="chat-send-type" data-type="file" onclick="selectSendType('file')">文件</span>
           <span class="chat-send-type" data-type="ark" onclick="selectSendType('ark')">Ark</span>
           <span class="chat-send-type" data-type="tuwen" onclick="selectSendType('tuwen')">图文卡片</span>
+          <button type="button" class="chat-quick-btn" onclick="insertAtEveryone()" title="群聊专用：机器人需为群管理员，每个群每天仅可发送 1 次">＠全体成员</button>
+          <label class="chat-force-verify" id="chatForceVerifyWrap" title="官方参数 force_verify_image_resource：Markdown 中的图片转存失败时中止发送">
+            <input type="checkbox" id="chatForceVerify"> 图片失败即中止
+          </label>
           <span style="font-size:11px; color:var(--text-muted); margin-left:auto;">输入@可提及用户</span>
         </div>
         <div class="chat-quote-preview" id="chatQuotePreview" style="width:100%;">
@@ -1257,6 +1330,11 @@ if (!empty($bots)) {
         <button class="btn btn-outline" onclick="triggerFileUpload()" title="上传文件发送" style="height:38px;width:38px;padding:0;display:flex;align-items:center;justify-content:center;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <button class="btn btn-outline" onclick="openMaterialPicker()" title="插入素材图片（Markdown 引用）" style="height:38px;width:38px;padding:0;display:flex;align-items:center;justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
           </svg>
         </button>
         <button class="btn btn-primary" onclick="sendChatMessage(event)">发送</button>
@@ -1412,30 +1490,51 @@ if (!empty($bots)) {
   </div>
 </div>
 
+<!-- ==================== 素材选择器（插入 Markdown） ==================== -->
+<div class="modal-overlay" id="materialPickerModal" style="display:none;">
+  <div class="modal" style="width:100%;max-width:760px;">
+    <div class="modal-header">插入素材图片</div>
+    <div class="modal-body" style="padding:16px;">
+      <div class="cmp-toolbar">
+        <input type="text" id="cmpFilter" class="form-control" placeholder="按文件名筛选" oninput="renderPickerMaterials()">
+        <button class="btn btn-outline btn-sm" type="button" onclick="loadPickerMaterials(true)">刷新</button>
+      </div>
+      <div class="cmp-grid" id="cmpGrid"></div>
+      <div class="cmp-empty" id="cmpEmpty" style="display:none;">还没有素材，请先到「素材管理」上传</div>
+      <div class="cmp-hint"><span id="cmpCount">—</span> · 点击图片插入 <code>![文件名](qqbot-media://...)</code>，会自动切换为 MD 模式；素材需与当前机器人属于同一 AppID。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="cmpMoreBtn" type="button" style="display:none;margin-right:auto;" onclick="loadPickerMaterials(false)">加载更多</button>
+      <a class="btn btn-outline" href="material.php" target="_blank" rel="noopener">打开素材管理</a>
+      <button class="btn btn-outline" onclick="closeMaterialPicker()">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== 图文卡片编辑器模态框 ==================== -->
 <div class="modal-overlay" id="tuwenModal" style="display:none;">
   <div class="modal" style="max-width:520px;">
     <div class="modal-header">发送图文卡片</div>
     <div class="modal-body" style="padding:16px;">
       <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">卡片标题</label>
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">卡片标题（1–50 字，必填）</label>
         <input type="text" id="tuwenTitle" class="form-control" placeholder="输入卡片标题" style="width:100%;">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">卡片描述</label>
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">卡片描述（1–200 字，必填）</label>
         <textarea id="tuwenDesc" class="form-control" rows="3" placeholder="输入卡片描述内容" style="width:100%;"></textarea>
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">图片URL</label>
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">图片 URL（https，必填）</label>
         <input type="text" id="tuwenImage" class="form-control" placeholder="https://图片链接" style="width:100%;">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">跳转链接</label>
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">跳转链接（https，必填）</label>
         <input type="text" id="tuwenLink" class="form-control" placeholder="https://点击卡片跳转的链接" style="width:100%;">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">提示文字</label>
-        <input type="text" id="tuwenPrompt" class="form-control" placeholder="卡片底部提示文字（可选）" style="width:100%;">
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">本地预览备注</label>
+        <input type="text" id="tuwenPrompt" class="form-control" placeholder="仅用于本地预览，不会随卡片发送" style="width:100%;">
       </div>
       <div id="tuwenPreview" style="margin-top:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:300px;"></div>
     </div>
@@ -1709,7 +1808,7 @@ function selectSendType(type) {
     var textarea = document.getElementById('chatInputMsg');
     var hints = {
         'text': '输入消息... 输入@提及用户',
-        'md': '输入Markdown内容... 支持代码块、引用、列表等',
+        'md': '输入 Markdown 内容... 支持代码块、引用、列表；@全体成员用 <qqbot-at-everyone />',
         'image': '点击"图片"标签输入图片链接，或直接粘贴图片URL；可另加配文一起发送',
         'voice': '输入语音URL，或点击📎上传本地音频',
         'video': '输入视频URL，或点击📎上传本地视频',
@@ -1723,6 +1822,10 @@ function selectSendType(type) {
     if (type !== 'image' && pendingImageUrl) {
         clearPendingImageUrl();
     }
+
+    // 官方 force_verify_image_resource 仅对 MD 消息生效
+    var forceWrap = document.getElementById('chatForceVerifyWrap');
+    if (forceWrap) forceWrap.style.display = (type === 'md') ? 'inline-flex' : 'none';
 
     // Ark / 图文卡片 类型时，直接打开编辑器
     // 先关闭所有编辑器模态框
@@ -1953,7 +2056,120 @@ function insertMention(idx) {
     hideMentionPopup();
 }
 
-document.addEventListener('click', function(e) {
+// ==================== 在光标处插入文本（@全体成员 / 素材） ====================
+function insertTextAtCursor(text) {
+    var ta = document.getElementById('chatInputMsg');
+    if (!ta) return;
+    var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+    var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
+    var val = ta.value;
+    ta.value = val.slice(0, start) + text + val.slice(end);
+    var pos = start + text.length;
+    ta.focus();
+    ta.setSelectionRange(pos, pos);
+    ta.dispatchEvent(new Event('input'));
+}
+
+// 群聊 @全体成员：官方 20261026 起支持文本/Markdown 消息使用 <qqbot-at-everyone />
+function insertAtEveryone() {
+    if (!currentSession) { alert('请先选择会话'); return; }
+    if ((currentSession.source_type || '群聊') !== '群聊') {
+        alert('@全体成员仅支持群聊会话；单聊消息会被平台拒绝。');
+        return;
+    }
+    if (currentSendType !== 'md') selectSendType('md');
+    insertTextAtCursor('<qqbot-at-everyone /> ');
+}
+
+// ==================== 聊天内素材选择器 ====================
+var cmpImages = [];
+var cmpLoading = false;
+var cmpCursor = '';
+
+function openMaterialPicker() {
+    if (!currentSession) { alert('请先选择会话'); return; }
+    document.getElementById('materialPickerModal').style.display = 'flex';
+    loadPickerMaterials(true);
+}
+
+function closeMaterialPicker() {
+    document.getElementById('materialPickerModal').style.display = 'none';
+}
+
+function loadPickerMaterials(reset) {
+    if (cmpLoading) return;
+    var appid = getCurrentBotId();
+    if (!appid) { alert('请先选择机器人'); return; }
+    if (reset) { cmpImages = []; cmpCursor = ''; }
+    cmpLoading = true;
+    var url = 'api/material_api.php?action=list&appid=' + encodeURIComponent(appid);
+    if (!reset && cmpCursor) url += '&cursor=' + encodeURIComponent(cmpCursor);
+    apiGet(url, function (res) {
+        cmpLoading = false;
+        if (!res.success) {
+            if (reset) document.getElementById('cmpGrid').innerHTML = '';
+            var empty = document.getElementById('cmpEmpty');
+            empty.style.display = 'block';
+            empty.textContent = res.message || '素材加载失败';
+            document.getElementById('cmpCount').textContent = '加载失败';
+            document.getElementById('cmpMoreBtn').style.display = 'none';
+            return;
+        }
+        var incoming = res.images || [];
+        cmpImages = reset ? incoming : cmpImages.concat(incoming);
+        cmpCursor = res.next_cursor || '';
+        document.getElementById('cmpCount').textContent = '已加载 ' + cmpImages.length + ' 张 / 共 ' + (res.total || cmpImages.length) + ' 张';
+        document.getElementById('cmpMoreBtn').style.display = cmpCursor ? 'inline-flex' : 'none';
+        renderPickerMaterials();
+    });
+}
+
+function renderPickerMaterials() {
+    var grid = document.getElementById('cmpGrid');
+    var empty = document.getElementById('cmpEmpty');
+    var filter = (document.getElementById('cmpFilter').value || '').trim().toLowerCase();
+    var list = cmpImages.filter(function (it) {
+        return !filter || String(it.file_name || '').toLowerCase().indexOf(filter) > -1;
+    });
+    if (!list.length) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        empty.textContent = filter ? '没有匹配的素材' : '还没有素材，请先到「素材管理」上传';
+        return;
+    }
+    empty.style.display = 'none';
+    var html = '';
+    list.forEach(function (it, idx) {
+        var name = it.file_name || '未命名图片';
+        html += '<button type="button" class="cmp-item" data-idx="' + idx + '" title="' + escapeAttr(name) + '">'
+             + (it.preview_url ? '<img src="' + escapeAttr(it.preview_url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<div style="aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:11px;">无预览</div>')
+             + '<span class="cmp-name">' + escapeHtml(name) + '</span>'
+             + '</button>';
+    });
+    grid.innerHTML = html;
+    Array.prototype.forEach.call(grid.querySelectorAll('.cmp-item'), function (btn) {
+        btn.addEventListener('click', function () {
+            var idx = parseInt(btn.getAttribute('data-idx'), 10);
+            var item = list[idx];
+            if (!item) return;
+            if (currentSendType !== 'md') selectSendType('md');
+            insertTextAtCursor('![' + (item.file_name || '图片') + '](' + item.url + ')\n');
+            closeMaterialPicker();
+        });
+    });
+}
+
+document.getElementById('materialPickerModal').addEventListener('click', function (e) {
+    if (e.target === this) closeMaterialPicker();
+});
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        var m = document.getElementById('materialPickerModal');
+        if (m && m.style.display === 'flex') closeMaterialPicker();
+    }
+});
+
+document.addEventListener('click', function (e) {
     var popup = document.getElementById('chatMentionPopup');
     if (popup && !popup.contains(e.target) && e.target.id !== 'chatInputMsg') {
         hideMentionPopup();
@@ -3002,6 +3218,8 @@ function replaceAtMentions(escapedHtml) {
         var nick = getMentionDisplay(userId);
         return '<span class="chat-at-user">@' + escapeHtml(nick) + '</span>';
     });
+    // 群聊 @全体成员（官方 20261026）：<qqbot-at-everyone />
+    escapedHtml = escapedHtml.replace(/&lt;qqbot-at-everyone\s*\/?&gt;/gi, '<span class="chat-at-user everyone">@全体成员</span>');
     // 处理 <@USERID> 格式（转义后为 &lt;@USERID&gt;）
     // USERID 通常是32位十六进制字符串
     escapedHtml = escapedHtml.replace(/&lt;@([A-Fa-f0-9]{16,})&gt;/g, function(match, userId) {
@@ -3056,6 +3274,12 @@ function renderMarkdown(md) {
     // QQ特有: alt 可为尺寸参数 "#30px #30px"(宽 高), 转为固定显示尺寸
     html = html.replace(/!\[([^\]\n]*)\]\s*\(\s*([^)]*?)\s*\)/g, function(match, alt, url) {
         url = url.replace(/\s+/g, '');
+        // 素材引用 qqbot-media:// 仅 QQ 客户端可解析，后台显示为占位条
+        if (/^qqbot-media:\/\//i.test(url)) {
+            var altText = String(alt || '').replace(/#\d+(?:\.\d+)?px/gi, '').trim();
+            return '<span class="chat-md-media" title="' + escapeAttr(url) + '">'
+                 + '<b>素材图片</b>' + (altText ? ' · ' + escapeHtml(altText) : '') + ' · 在 QQ 内可见</span>';
+        }
         if (!url || !/^(https?:\/\/|\/|api\/)/i.test(url)) return match;
         var style = '';
         var wh = [], re = /#(\d+(?:\.\d+)?)px/gi, m2;
@@ -3161,8 +3385,19 @@ function sendChatMessage(evt) {
 
     // 如果消息中包含@提及标签，自动使用MD格式发送（仅纯文字模式，图片/MD模式不劫持）
     var effectiveSendType = currentSendType;
-    if (currentSendType === 'text' && msg.indexOf('<qqbot-at-user') > -1) {
+    if (currentSendType === 'text' && (msg.indexOf('<qqbot-at-user') > -1 || msg.indexOf('<qqbot-at-everyone') > -1)) {
         effectiveSendType = 'md';
+    }
+
+    // @全体成员是不可撤回的高影响操作：每个群每天仅 1 次，发送前二次确认
+    if (/<qqbot-at-everyone\s*\/?>/i.test(msg)) {
+        if ((currentSession.source_type || '群聊') !== '群聊') {
+            alert('@全体成员仅支持群聊会话。');
+            return;
+        }
+        if (!confirm('这条消息会 @全体成员。\n\n平台限制：机器人需为群管理员，且每个群每天只能发送 1 次。\n确认发送？')) {
+            return;
+        }
     }
 
     var btn = evt ? evt.currentTarget : document.querySelector('.chat-input-area .btn-primary');
@@ -3174,6 +3409,12 @@ function sendChatMessage(evt) {
         msg_type: effectiveSendType,
         message: msg
     };
+
+    // 官方 force_verify_image_resource：仅 MD 消息有效
+    var forceEl = document.getElementById('chatForceVerify');
+    if (effectiveSendType === 'md' && forceEl && forceEl.checked) {
+        data.force_verify = 1;
+    }
 
     // 图片模式：弹窗链接优先，其次输入框直接填URL；输入框其余文字作为配文一起发送
     if (effectiveSendType === 'image') {
@@ -4967,10 +5208,17 @@ function sendTuwenMessage() {
     var link = document.getElementById('tuwenLink').value.trim();
     var prompt = document.getElementById('tuwenPrompt').value.trim();
 
-    if (!title && !desc && !img) {
-        alert('请至少填写标题、描述或图片URL');
+    if (!title || !desc || !img || !link) {
+        alert('官方图文卡片要求四个字段全部填写：标题、描述、图片 URL、跳转链接。');
         return;
     }
+    if (Array.from(title).length > 50) { alert('标题最多 50 个字'); return; }
+    if (Array.from(desc).length > 200) { alert('描述最多 200 个字'); return; }
+    if (!/^https:\/\//i.test(img) || !/^https:\/\//i.test(link)) {
+        alert('图片 URL 与跳转链接必须使用 https://');
+        return;
+    }
+    if (img.length > 1024 || link.length > 1024) { alert('链接长度不能超过 1024 个字符'); return; }
 
     // 使用图文卡片函数发送（msg_type=8）
     var btn = document.getElementById('tuwenSendBtn');

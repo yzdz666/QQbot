@@ -274,6 +274,70 @@ try {
             json_response(['code' => 0, 'msg' => $msg, 'success' => true, 'data' => $data]);
             break;
 
+        // ==================== 入群申请列表（官方 20260810） ====================
+        case 'join_requests':
+            $appid = trim($_GET['appid'] ?? $_POST['appid'] ?? '');
+            $groupOpenid = trim($_GET['group_openid'] ?? $_POST['group_openid'] ?? '');
+            $cursor = trim($_GET['cursor'] ?? $_POST['cursor'] ?? '');
+            $limit = min(50, max(1, intval($_GET['limit'] ?? $_POST['limit'] ?? 20)));
+            if (empty($appid) || empty($groupOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid 或 group_openid']);
+            }
+            $bot = getBot($appid);
+            if (!$bot) json_response(['code' => 404, 'msg' => '机器人不存在']);
+            initBotContext($bot);
+            $resp = 获取入群申请列表($groupOpenid, $cursor, $limit);
+            $data = json_decode($resp, true);
+            if (!is_array($data) || (isset($data['code']) && (int)$data['code'] !== 0)) {
+                $code = is_array($data) ? (int)($data['code'] ?? 0) : 0;
+                $msg = is_array($data) ? ($data['message'] ?? '获取入群申请失败') : '平台返回格式错误';
+                if ($code === 11253) $msg .= '（该接口处于内邀阶段，需向平台申请权限）';
+                json_response(['code' => 500, 'msg' => $msg, 'raw' => $resp]);
+            }
+            json_response([
+                'code' => 0,
+                'msg' => 'success',
+                'success' => true,
+                'data' => [
+                    'list' => $data['list'] ?? [],
+                    'next_cursor' => $data['next_cursor'] ?? '',
+                ],
+            ]);
+            break;
+
+        // ==================== 审批入群申请（官方 20260810） ====================
+        case 'join_approve':
+            $appid = trim($_POST['appid'] ?? '');
+            $groupOpenid = trim($_POST['group_openid'] ?? '');
+            $memberOpenid = trim($_POST['member_openid'] ?? '');
+            $op = trim($_POST['op'] ?? '');
+            $reason = trim($_POST['reason'] ?? '');
+            $blacklist = !empty($_POST['blacklist']) && $_POST['blacklist'] !== '0';
+            $joinRequestId = trim($_POST['join_request_id'] ?? '');
+            if (empty($appid) || empty($groupOpenid) || empty($memberOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid / group_openid / member_openid']);
+            }
+            if (!in_array($op, ['approve', 'decline'], true)) {
+                json_response(['code' => 400, 'msg' => 'op 仅支持 approve（通过）或 decline（拒绝）']);
+            }
+            if (mb_strlen($reason, 'UTF-8') > 200) {
+                json_response(['code' => 400, 'msg' => '拒绝理由最多 200 个字']);
+            }
+            $bot = getBot($appid);
+            if (!$bot) json_response(['code' => 404, 'msg' => '机器人不存在']);
+            initBotContext($bot);
+            $resp = 处理入群申请($groupOpenid, $memberOpenid, $op === 'approve', $reason, $blacklist, $joinRequestId);
+            $data = json_decode($resp, true);
+            if (is_array($data) && isset($data['code']) && (int)$data['code'] !== 0) {
+                $code = (int)$data['code'];
+                $msg = (string)($data['message'] ?? '审批失败');
+                if ($code === 11253) $msg .= '（该接口处于内邀阶段，需向平台申请权限）';
+                json_response(['code' => 500, 'msg' => $msg, 'raw' => $resp]);
+            }
+            后台操作记录($op === 'approve' ? '通过入群申请' : '拒绝入群申请', $groupOpenid . ' / ' . $memberOpenid, $appid);
+            json_response(['code' => 0, 'msg' => $op === 'approve' ? '已通过入群申请' : '已拒绝入群申请', 'success' => true]);
+            break;
+
         default:
             json_response(['code' => 400, 'msg' => '未知操作类型: ' . htmlspecialchars($action)]);
     }

@@ -52,8 +52,8 @@ switch ($action) {
         $url = trim((string)($_POST['url'] ?? ''));
         if ($url === '') {
             db()->execute("DELETE FROM settings WHERE key = 'market_base_url'");
-            后台操作记录('保存插件市场地址', '恢复自动识别');
-            json_response(['success' => true, 'message' => '已恢复为自动识别同域 /market', 'url' => 市场地址()]);
+            后台操作记录('保存插件市场地址', '恢复默认在线市场');
+            json_response(['success' => true, 'message' => '已恢复为默认在线市场', 'url' => 市场地址()]);
         }
         if (!preg_match('#^https?://#i', $url) || !filter_var($url, FILTER_VALIDATE_URL)) {
             json_response(['success' => false, 'message' => '请输入合法的 http(s) 地址']);

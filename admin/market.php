@@ -308,7 +308,7 @@ function mk_monogram($name) {
       <button class="btn btn-primary btn-sm" id="saveSourceBtn" type="button">保存并连接</button>
       <button class="btn btn-outline btn-sm" id="testSourceBtn" type="button">测试连接</button>
     </div>
-    <div class="form-hint" style="margin-top:7px;">留空则自动识别同域 <code>/market</code>；市场部署在其他域名时填写完整地址，建议使用 HTTPS。</div>
+    <div class="form-hint" style="margin-top:7px;">默认连接官方在线市场；使用自建市场时填写完整地址（如 <code>https://你的域名/market</code>），建议 HTTPS。</div>
     <div id="sourceStatus" style="margin-top:7px;font-size:10px;"></div>
   </div>
 </div>

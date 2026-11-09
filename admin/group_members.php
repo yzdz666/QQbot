@@ -35,9 +35,12 @@ $bots = getBots();
 .gm-tip { font-size:12px; color:var(--text-muted); line-height:1.7; }
 
 /* ===== 表格显示控制（class 方式，兼容移动端卡片化） ===== */
-#memberTable, #blacklistTable { display: none; }
-#memberTable.gm-table-show, #blacklistTable.gm-table-show { display: table; }
+#memberTable, #blacklistTable, #joinTable { display: none; }
+#memberTable.gm-table-show, #blacklistTable.gm-table-show, #joinTable.gm-table-show { display: table; }
 .gm-selectall-m { display: none; }
+.gm-join-name { font-weight: 600; }
+.gm-join-verify { font-size: 12px; color: var(--text-secondary); max-width: 260px; line-height: 1.5; }
+.gm-join-risk { color: var(--danger); font-size: 12px; }
 
 /* ===== 手机端：表格卡片化，避免列挤压与横向滚动 ===== */
 @media (max-width: 768px) {
@@ -47,9 +50,9 @@ $bots = getBots();
   .gm-selectall-m { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; user-select: none; }
   .gm-openid { word-break: break-all; }
 
-  #memberTable.gm-table-show, #blacklistTable.gm-table-show { display: block; }
-  #memberTable thead, #blacklistTable thead { display: none; }
-  #memberTable tbody, #blacklistTable tbody { display: block; }
+  #memberTable.gm-table-show, #blacklistTable.gm-table-show, #joinTable.gm-table-show { display: block; }
+  #memberTable thead, #blacklistTable thead, #joinTable thead { display: none; }
+  #memberTable tbody, #blacklistTable tbody, #joinTable tbody { display: block; }
   #memberTable tr, #blacklistTable tr {
     display: flex; flex-wrap: wrap; align-items: center;
     border: 1px solid var(--border); border-radius: 10px;
@@ -78,6 +81,19 @@ $bots = getBots();
   #blacklistTable td:nth-child(3)::before { content: 'union：'; }
   #blacklistTable td:nth-child(4) { order: 5; flex: 0 0 100%; font-size: 12px; color: var(--text-muted); }
   #blacklistTable td:nth-child(4)::before { content: '拉黑：'; }
+  /* 入群申请卡片 */
+  #joinTable tr {
+    display: flex; flex-wrap: wrap; align-items: center;
+    border: 1px solid var(--border); border-radius: 10px;
+    margin: 10px 12px; padding: 10px 12px; background: var(--bg);
+  }
+  #joinTable td { display: block; border: none; padding: 2px 0; text-align: left; width: auto; }
+  #joinTable td:nth-child(1) { order: 1; font-weight: 600; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #joinTable td:nth-child(4) { order: 2; margin-left: auto; }
+  #joinTable td:nth-child(2) { order: 3; flex: 0 0 100%; font-size: 11px; color: var(--text-muted); word-break: break-all; }
+  #joinTable td:nth-child(3) { order: 4; flex: 0 0 100%; font-size: 11px; color: var(--text-muted); }
+  #joinTable td:nth-child(5) { order: 5; flex: 0 0 100%; }
+  #joinTable td:nth-child(6) { order: 6; flex: 0 0 100%; margin-top: 6px; }
   #blacklistTable td:nth-child(6) { order: 6; flex: 0 0 100%; margin-top: 6px; }
 
   .gm-pager { flex-wrap: wrap; padding: 10px 12px; }
@@ -132,6 +148,7 @@ $bots = getBots();
   <div class="gm-tabs">
     <div class="gm-tab active" id="tabMembers" onclick="switchTab('members')">成员列表</div>
     <div class="gm-tab" id="tabBlacklist" onclick="switchTab('blacklist')">群黑名单</div>
+    <div class="gm-tab" id="tabJoins" onclick="switchTab('joins')">入群申请</div>
   </div>
 
   <!-- ==================== 成员列表 ==================== -->
@@ -207,6 +224,39 @@ $bots = getBots();
       </div>
     </div>
   </div>
+
+  <!-- ==================== 入群申请（官方 20260810） ==================== -->
+  <div id="panelJoins" style="display:none;">
+    <div class="gm-actionbar">
+      <button class="btn btn-outline btn-sm" onclick="loadJoinRequests(true)">刷新申请</button>
+      <span class="spacer"></span>
+      <span class="gm-tip">机器人需为群管理员 · 该接口处于官方内邀阶段</span>
+    </div>
+    <div id="joinAlert"></div>
+    <div class="card-body no-padding" style="overflow-x:auto;">
+      <table class="table" id="joinTable">
+        <thead>
+          <tr>
+            <th>申请人</th>
+            <th>member_openid</th>
+            <th>申请时间</th>
+            <th>来源</th>
+            <th>验证信息</th>
+            <th class="text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody id="joinTbody"></tbody>
+      </table>
+      <div id="joinEmpty" class="empty-state" style="display:none;">暂无入群申请，请选择群后点击「刷新申请」</div>
+    </div>
+    <div class="gm-pager" id="joinPager" style="display:none;">
+      <span class="info" id="joinPageInfo"></span>
+      <button class="btn btn-outline btn-sm" id="btnJoinMore" onclick="loadJoinRequests(false)">加载更多</button>
+    </div>
+    <div class="card-body" style="border-top:1px solid var(--border);">
+      <div class="gm-tip">通过/拒绝会直接作用于真实入群申请；拒绝时可填写理由并选择同时加入群黑名单。审批结果会写入后台操作记录。</div>
+    </div>
+  </div>
 </div>
 
 <!-- 原始响应 -->
@@ -263,6 +313,30 @@ $bots = getBots();
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('blacklistAddModal')">取消</button>
       <button class="btn btn-primary" onclick="doBlacklistAdd()">确认拉黑</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 拒绝入群申请模态框 ==================== -->
+<div class="modal-overlay" id="joinDeclineModal" style="display:none;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">拒绝入群申请</div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">申请人</label>
+        <div id="joinDeclineName" style="font-size:13px; padding:6px 0; word-break:break-all;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">拒绝理由（可留空）</label>
+        <textarea id="joinDeclineReason" class="form-control" rows="3" placeholder="例如：群满 / 信息不完整" maxlength="200"></textarea>
+      </div>
+      <label style="font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="joinDeclineBlacklist"> 同时加入群黑名单
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('joinDeclineModal')">取消</button>
+      <button class="btn btn-danger" onclick="doDeclineJoin()">确认拒绝</button>
     </div>
   </div>
 </div>
@@ -395,10 +469,171 @@ document.querySelectorAll('.modal-overlay').forEach(function(m) {
 
 // ==================== Tab 切换 ====================
 function switchTab(tab) {
-    document.getElementById('tabMembers').classList.toggle('active', tab === 'members');
-    document.getElementById('tabBlacklist').classList.toggle('active', tab === 'blacklist');
-    document.getElementById('panelMembers').style.display = tab === 'members' ? 'block' : 'none';
-    document.getElementById('panelBlacklist').style.display = tab === 'blacklist' ? 'block' : 'none';
+    var tabs = ['members', 'blacklist', 'joins'];
+    tabs.forEach(function (t) {
+        var cap = t.charAt(0).toUpperCase() + t.slice(1);
+        var tabEl = document.getElementById('tab' + cap);
+        var panelEl = document.getElementById('panel' + cap);
+        if (tabEl) tabEl.classList.toggle('active', tab === t);
+        if (panelEl) panelEl.style.display = tab === t ? 'block' : 'none';
+    });
+    if (tab === 'joins' && !joinLoading && (!joinLoaded || joinItems.length === 0) && currentGroupId()) loadJoinRequests(true);
+}
+
+// ==================== 入群申请 ====================
+var joinItems = [];
+var joinCursor = '';
+var joinLoaded = false;
+var joinLoading = false;
+
+function loadJoinRequests(reset) {
+    if (!currentBotId()) {
+        showAlert('joinAlert', 'danger', '请先选择机器人');
+        return;
+    }
+    var gid = currentGroupId();
+    if (!gid) {
+        showAlert('joinAlert', 'danger', '请选择群或输入群 OpenID');
+        return;
+    }
+    if (joinLoading) return;
+    if (reset) {
+        joinItems = [];
+        joinCursor = '';
+        joinLoaded = false;
+        document.getElementById('joinTbody').innerHTML = '';
+    }
+    joinLoading = true;
+    clearAlert('joinAlert');
+    var empty = document.getElementById('joinEmpty');
+    empty.style.display = 'block';
+    empty.textContent = '加载中...';
+    apiCall('api/group_member_api.php?action=join_requests', {
+        appid: currentBotId(),
+        group_openid: gid,
+        cursor: joinCursor,
+        limit: 20
+    }, function (res) {
+        joinLoading = false;
+        showRaw('获取入群申请列表 (cursor=' + (joinCursor || '') + ')', res);
+        if (!res.success) {
+            empty.textContent = '加载失败';
+            showAlert('joinAlert', 'danger', res.msg || res.message || '获取入群申请失败');
+            return;
+        }
+        var data = res.data || {};
+        var list = data.list || [];
+        joinCursor = data.next_cursor || '';
+        joinLoaded = true;
+        joinItems = joinItems.concat(list);
+        renderJoinRows();
+    });
+}
+
+function joinSourceText(item) {
+    if (item.apply_source === 'invited') return '被邀请';
+    if (item.apply_source === 'self_apply') return '主动申请';
+    return item.apply_source || '-';
+}
+
+function joinVerifyHtml(item) {
+    var v = item.verify_info || {};
+    var parts = [];
+    if (v.verify_message) parts.push('验证消息：' + escapeHtml(v.verify_message));
+    if (Array.isArray(v.review_qa_list) && v.review_qa_list.length) {
+        v.review_qa_list.forEach(function (qa) {
+            parts.push('问答：' + escapeHtml(qa.question || '') + ' → ' + escapeHtml(qa.answer || ''));
+        });
+    }
+    if (!parts.length) return '<span style="color:var(--text-muted);">—</span>';
+    return '<div class="gm-join-verify">' + parts.join('<br>') + '</div>';
+}
+
+function renderJoinRows() {
+    var tbody = document.getElementById('joinTbody');
+    var empty = document.getElementById('joinEmpty');
+    var pager = document.getElementById('joinPager');
+    document.getElementById('joinTable').classList.add('gm-table-show');
+    if (!joinItems.length) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        empty.textContent = '暂无入群申请';
+        pager.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+    var html = '';
+    joinItems.forEach(function (item, idx) {
+        var risk = item.risk_tips ? '<div class="gm-join-risk">' + escapeHtml(item.risk_tips) + '</div>' : '';
+        html += '<tr data-idx="' + idx + '">'
+             +   '<td><span class="gm-join-name">' + escapeHtml(item.username || '(未命名)') + '</span>' + (item.bot ? ' <span class="badge badge-warn">机器人</span>' : '') + risk + '</td>'
+             +   '<td><span class="gm-openid" onclick="copyText(this.textContent)" title="点击复制">' + escapeHtml(item.member_openid || '') + '</span></td>'
+             +   '<td style="font-size:12px;color:var(--text-muted);">' + escapeHtml(item.apply_at || '') + '</td>'
+             +   '<td>' + escapeHtml(joinSourceText(item)) + '</td>'
+             +   '<td>' + joinVerifyHtml(item) + '</td>'
+             +   '<td class="text-right" style="white-space:nowrap;">'
+             +     '<button class="btn btn-primary btn-sm" onclick="approveJoin(' + idx + ')">通过</button> '
+             +     '<button class="btn btn-danger btn-sm" onclick="showDeclineJoin(' + idx + ')">拒绝</button>'
+             +   '</td>'
+             + '</tr>';
+    });
+    tbody.innerHTML = html;
+    document.getElementById('joinPageInfo').textContent = '已加载 ' + joinItems.length + ' 条申请';
+    pager.style.display = joinCursor ? 'flex' : 'none';
+}
+
+function approveJoin(idx) {
+    var item = joinItems[idx];
+    if (!item) return;
+    if (!confirm('通过「' + (item.username || item.member_openid) + '」的入群申请？')) return;
+    apiCall('api/group_member_api.php?action=join_approve', {
+        appid: currentBotId(),
+        group_openid: currentGroupId(),
+        member_openid: item.member_openid,
+        join_request_id: item.join_request_id || '',
+        op: 'approve'
+    }, function (res) {
+        showRaw('审批入群申请（通过）', res);
+        if (!res.success) { showAlert('joinAlert', 'danger', res.msg || res.message || '审批失败'); return; }
+        showAlert('joinAlert', 'success', res.msg || '已通过入群申请');
+        joinItems.splice(idx, 1);
+        renderJoinRows();
+    });
+}
+
+var joinDeclineIdx = -1;
+function showDeclineJoin(idx) {
+    var item = joinItems[idx];
+    if (!item) return;
+    joinDeclineIdx = idx;
+    document.getElementById('joinDeclineName').textContent = (item.username || item.member_openid) + '  ·  ' + (item.member_openid || '');
+    document.getElementById('joinDeclineReason').value = '';
+    document.getElementById('joinDeclineBlacklist').checked = false;
+    document.getElementById('joinDeclineModal').style.display = 'flex';
+}
+
+function doDeclineJoin() {
+    var item = joinItems[joinDeclineIdx];
+    if (!item) return;
+    var reason = document.getElementById('joinDeclineReason').value.trim();
+    var blacklist = document.getElementById('joinDeclineBlacklist').checked;
+    closeModal('joinDeclineModal');
+    apiCall('api/group_member_api.php?action=join_approve', {
+        appid: currentBotId(),
+        group_openid: currentGroupId(),
+        member_openid: item.member_openid,
+        join_request_id: item.join_request_id || '',
+        op: 'decline',
+        reason: reason,
+        blacklist: blacklist ? 1 : 0
+    }, function (res) {
+        showRaw('审批入群申请（拒绝）', res);
+        if (!res.success) { showAlert('joinAlert', 'danger', res.msg || res.message || '审批失败'); return; }
+        showAlert('joinAlert', 'success', res.msg || '已拒绝入群申请');
+        joinItems.splice(joinDeclineIdx, 1);
+        joinDeclineIdx = -1;
+        renderJoinRows();
+    });
 }
 
 // ==================== 群列表加载 ====================
@@ -438,6 +673,14 @@ function onBotChange() {
 function onGroupChange() {
     // 选择群后清空手动输入，保持单一来源
     document.getElementById('groupOpenidInput').value = '';
+    // 切换群后入群申请缓存失效
+    joinItems = [];
+    joinCursor = '';
+    joinLoaded = false;
+    document.getElementById('joinTbody').innerHTML = '';
+    document.getElementById('joinEmpty').style.display = 'none';
+    document.getElementById('joinPager').style.display = 'none';
+    if (document.getElementById('panelJoins').style.display === 'block') loadJoinRequests(true);
 }
 
 // ==================== 成员列表 ====================
