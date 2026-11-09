@@ -169,7 +169,7 @@ try {
             $systemPrompt .= <<<PROMPT
 ## 插件格式要求
 - 文件开头必须检查: `if (!defined('消息')) return;`
-- 消息内容使用全局常量 `消息`（不加$符号）
+- 消息内容使用全局常量 `消息`（直接写 消息，不加美元符号）
 - 其他可用全局常量: 消息来源, 来源, 用户, 消息ID, 事件ID, appid, secret, type
 - 发送文字回复: 文字("内容")
 - 发送Markdown: MD("markdown内容")
