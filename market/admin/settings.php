@@ -135,9 +135,9 @@ $uploadMb = max(1, (int)round((int)market_setting('max_upload', '2097152') / 104
         <div class="kv">
           <div><span>PHP 版本</span><b><?= market_h(PHP_VERSION) ?></b></div>
           <div><span>数据库</span><b>SQLite</b></div>
-          <div><span>数据目录可写</span><b style="color:<?= is_writable(MARKET_DATA_DIR) ? '#34d399' : '#f87171' ?>"><?= is_writable(MARKET_DATA_DIR) ? '正常' : '不可写' ?></b></div>
-          <div><span>存储目录可写</span><b style="color:<?= is_writable(MARKET_STORAGE_DIR) ? '#34d399' : '#f87171' ?>"><?= is_writable(MARKET_STORAGE_DIR) ? '正常' : '不可写' ?></b></div>
-          <div><span>HTTPS</span><b style="color:<?= market_is_https() ? '#34d399' : '#fbbf24' ?>"><?= market_is_https() ? '已启用' : '未启用' ?></b></div>
+          <div><span>数据目录可写</span><b style="color:<?= is_writable(MARKET_DATA_DIR) ? 'var(--ok)' : 'var(--danger)' ?>"><?= is_writable(MARKET_DATA_DIR) ? '正常' : '不可写' ?></b></div>
+          <div><span>存储目录可写</span><b style="color:<?= is_writable(MARKET_STORAGE_DIR) ? 'var(--ok)' : 'var(--danger)' ?>"><?= is_writable(MARKET_STORAGE_DIR) ? '正常' : '不可写' ?></b></div>
+          <div><span>HTTPS</span><b style="color:<?= market_is_https() ? 'var(--ok)' : 'var(--warn)' ?>"><?= market_is_https() ? '已启用' : '未启用' ?></b></div>
           <div><span>ZipArchive</span><b><?= class_exists('ZipArchive') ? '可用' : '未安装' ?></b></div>
           <div><span>会话超时</span><b>2 小时</b></div>
           <div><span>登录限流</span><b>10 次 / 15 分钟</b></div>

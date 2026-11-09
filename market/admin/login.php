@@ -69,7 +69,7 @@ $siteName = market_setting('site_name', '官鸡插件市场');
 
     <div class="auth-foot">
       首次部署请使用部署说明中的初始密码，登录后立即修改。<br>
-      <a href="../index.php" style="color:#8fb0ff;">← 返回插件广场</a>
+      <a href="../index.php" style="color:var(--brand);">← 返回插件广场</a>
     </div>
   </div>
 </div>

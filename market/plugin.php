@@ -12,7 +12,7 @@ if (!$plugin || $plugin['status'] !== 'approved' || empty($plugin['latest'])) {
     $pageTitle = '插件不存在';
     $activeNav = 'home';
     require __DIR__ . '/partials/header.php';
-    echo '<div class="container section"><div class="empty"><div class="icon">🫥</div><p>插件不存在或尚未通过审核</p><p class="small"><a href="' . market_h(market_base_url()) . '/index.php" style="color:#8fb0ff">返回插件广场</a></p></div></div>';
+    echo '<div class="container section"><div class="empty"><div class="icon">🫥</div><p>插件不存在或尚未通过审核</p><p class="small"><a href="' . market_h(market_base_url()) . '/index.php" style="color:var(--brand)">返回插件广场</a></p></div></div>';
     require __DIR__ . '/partials/footer.php';
     exit;
 }
@@ -38,7 +38,8 @@ require __DIR__ . '/partials/header.php';
   </div>
 
   <div class="detail-head">
-    <div class="detail-icon"><?= market_h($plugin['icon'] ?: '🧩') ?></div>
+    <?php $首字 = trim((string)$plugin['name']); $首字 = $首字 !== '' ? mb_substr($首字, 0, 1, 'UTF-8') : 'P'; ?>
+    <div class="detail-icon"><?= market_h($首字) ?></div>
     <div style="min-width:0;flex:1;">
       <h1>
         <?= market_h($plugin['name']) ?>
@@ -47,8 +48,8 @@ require __DIR__ . '/partials/header.php';
       </h1>
       <p class="summary"><?= market_h($plugin['summary'] ?: '暂无简介') ?></p>
       <div class="detail-meta">
-        <span>作者 <b style="color:#e9eefb"><?= market_h($plugin['author'] ?: '匿名') ?></b></span>
-        <span>版本 <b style="color:#e9eefb">v<?= market_h($latest['version']) ?></b></span>
+        <span>作者 <b style="color:var(--ink)"><?= market_h($plugin['author'] ?: '匿名') ?></b></span>
+        <span>版本 <b style="color:var(--ink)">v<?= market_h($latest['version']) ?></b></span>
         <span>分类 <?= market_h($plugin['category']) ?></span>
         <span>更新 <?= market_h(market_time_ago($plugin['updated_at'])) ?></span>
         <span>下载 <?= (int)$plugin['downloads'] ?></span>
@@ -112,7 +113,7 @@ require __DIR__ . '/partials/header.php';
           <?php endif; ?>
           <?php if (!empty($plugin['homepage'])): ?>
           <div class="side-block">
-            <div class="side-item"><span>项目主页</span><b><a href="<?= market_h($plugin['homepage']) ?>" target="_blank" rel="noopener noreferrer nofollow" style="color:#8fb0ff">访问</a></b></div>
+            <div class="side-item"><span>项目主页</span><b><a href="<?= market_h($plugin['homepage']) ?>" target="_blank" rel="noopener noreferrer nofollow" style="color:var(--brand)">访问</a></b></div>
           </div>
           <?php endif; ?>
         </div>
@@ -127,7 +128,7 @@ require __DIR__ . '/partials/header.php';
                 <?php if ((int)$v['id'] === (int)$latest['id']): ?><span class="badge badge-ok" style="margin-left:6px;">最新</span><?php endif; ?>
               </div>
               <div class="d"><?= market_h(market_time_ago($v['created_at'])) ?> · <?= market_size($v['file_size']) ?> · <?= (int)$v['downloads'] ?> 次下载</div>
-              <?php if (!empty($v['changelog'])): ?><div class="d" style="color:#93a3c4"><?= market_h($v['changelog']) ?></div><?php endif; ?>
+              <?php if (!empty($v['changelog'])): ?><div class="d" style="color:var(--ink-3)"><?= market_h($v['changelog']) ?></div><?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>

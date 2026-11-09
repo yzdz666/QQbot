@@ -67,37 +67,14 @@ function market_url_with($overrides = []) {
 
 <section class="hero">
   <div class="container">
-    <div class="hero-badge"><i></i> 所有插件均通过静态安全扫描与人工审核</div>
-    <h1>给机器人装上<br><em>更好的能力</em></h1>
-    <p><?= market_h(market_setting('site_desc', '为官鸡 QQ 机器人框架提供插件浏览、源码审计与一键安装服务。')) ?></p>
-    <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="#plugins">浏览插件</a>
-      <a class="btn btn-outline btn-lg" href="<?= market_h(market_base_url()) ?>/submit.php">发布我的插件</a>
-    </div>
+    <div class="hero-badge"><i></i> 插件均通过静态扫描与人工审核后上架</div>
+    <h1>插件市场</h1>
+    <p><?= market_h(market_setting('site_desc', '为官鸡 QQ 机器人框架提供插件浏览、源码审计与一键安装。')) ?></p>
     <div class="hero-stats">
-      <div class="hero-stat"><strong><?= (int)$stats['plugins'] ?></strong><span>已上架插件</span></div>
-      <div class="hero-stat"><strong><?= (int)$stats['downloads'] ?></strong><span>累计下载</span></div>
-      <div class="hero-stat"><strong><?= (int)$stats['authors'] ?></strong><span>插件作者</span></div>
+      <div class="hero-stat"><strong><?= (int)$stats['plugins'] ?></strong><span>个插件</span></div>
+      <div class="hero-stat"><strong><?= (int)$stats['downloads'] ?></strong><span>次下载</span></div>
+      <div class="hero-stat"><strong><?= (int)$stats['authors'] ?></strong><span>位作者</span></div>
       <div class="hero-stat"><strong>100%</strong><span>人工审核</span></div>
-    </div>
-
-    <div class="hero-panel">
-      <div class="hero-card">
-        <h3>安装到机器人</h3>
-        <p class="muted">进入机器人后台 → 插件市场 → 选择插件 → 一键安装，插件会写入 <code>plugin/</code> 目录并自动校验 SHA-256。</p>
-        <div class="hero-list">
-          <div><b>01</b><span>浏览并查看插件源码与安全扫描结果</span></div>
-          <div><b>02</b><span>后台点击安装，自动备份旧版本</span></div>
-          <div><b>03</b><span>在插件管理中启用 / 配置</span></div>
-        </div>
-      </div>
-      <div class="hero-card">
-        <h3>开发者发布</h3>
-        <p class="muted">上传单个 PHP 文件或源码文本，填写版本说明后进入审核队列。审核通过即可被所有机器人安装。</p>
-        <div style="margin-top:16px;">
-          <a class="btn btn-ghost btn-sm" href="<?= market_h(market_base_url()) ?>/submit.php">立即提交 →</a>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -134,14 +111,15 @@ function market_url_with($overrides = []) {
       <div class="empty">
         <div class="icon">🔍</div>
         <p><?= $q !== '' ? '没有找到与「' . market_h($q) . '」相关的插件' : '暂无已上架插件' ?></p>
-        <p class="small">换个关键词，或 <a href="<?= market_h(market_base_url()) ?>/submit.php" style="color:#8fb0ff">发布第一个插件</a></p>
+        <p class="small">换个关键词，或 <a href="<?= market_h(market_base_url()) ?>/submit.php" style="color:var(--brand)">发布第一个插件</a></p>
       </div>
     <?php else: ?>
       <div class="plugin-grid">
         <?php foreach ($items as $item): ?>
           <a class="plugin-card" href="<?= market_h(market_base_url()) ?>/plugin.php?id=<?= (int)$item['id'] ?>">
+            <?php $首字 = trim((string)$item['name']); $首字 = $首字 !== '' ? mb_substr($首字, 0, 1, 'UTF-8') : 'P'; ?>
             <div class="plugin-card-head">
-              <div class="plugin-icon"><?= market_h($item['icon'] ?: '🧩') ?></div>
+              <div class="plugin-icon"><?= market_h($首字) ?></div>
               <div class="plugin-title">
                 <h3>
                   <span><?= market_h($item['name']) ?></span>
@@ -153,6 +131,10 @@ function market_url_with($overrides = []) {
                   <span>v<?= market_h($item['version'] ?: '1.0.0') ?></span>
                   <span>·</span>
                   <span><?= market_h($item['category']) ?></span>
+                  <span>·</span>
+                  <span><?= (int)$item['downloads'] ?> 次下载</span>
+                  <span>·</span>
+                  <span><?= market_size($item['file_size']) ?></span>
                 </div>
               </div>
             </div>
@@ -162,14 +144,11 @@ function market_url_with($overrides = []) {
                 <span class="tag"><?= market_h($tag) ?></span>
               <?php endforeach; ?>
               <?php if (($item['scan_status'] ?? '') === 'pass'): ?>
-                <span class="tag" style="color:#8ef0c8;border-color:rgba(52,211,153,.25)">已扫描</span>
+                <span class="tag tag-ok">已扫描</span>
               <?php endif; ?>
             </div>
             <div class="plugin-card-foot">
-              <span class="icon-text">↓ <?= (int)$item['downloads'] ?></span>
-              <span class="icon-text"><?= market_size($item['file_size']) ?></span>
-              <span class="grow"></span>
-              <span class="icon-text" style="color:#8fb0ff">查看详情 →</span>
+              <span class="detail-link">查看详情 →</span>
             </div>
           </a>
         <?php endforeach; ?>

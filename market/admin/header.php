@@ -34,9 +34,9 @@ $pendingCount = (int)MarketDB::pdo()->query("SELECT COUNT(*) FROM versions WHERE
     <a class="nav-item <?= $current === 'logs.php' ? 'active' : '' ?>" href="logs.php">审计日志</a>
     <a class="nav-item" href="../index.php" target="_blank" rel="noopener">前台市场 ↗</a>
     <div class="side-foot">
-      <div>当前账号：<strong style="color:#e9eefb"><?= market_h($admin['username'] ?? '') ?></strong></div>
+      <div>当前账号：<strong style="color:var(--ink)"><?= market_h($admin['username'] ?? '') ?></strong></div>
       <div style="margin-top:4px;">IP：<?= market_h(market_client_ip()) ?></div>
-      <div style="margin-top:10px;"><a href="logout.php?token=<?= market_h(market_csrf_token()) ?>" style="color:#f87171;">退出登录</a></div>
+      <div style="margin-top:10px;"><a href="logout.php?token=<?= market_h(market_csrf_token()) ?>" style="color:var(--danger);">退出登录</a></div>
     </div>
   </aside>
   <div class="admin-main">

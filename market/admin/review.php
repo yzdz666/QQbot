@@ -237,7 +237,7 @@ for ($i = 1; $i <= $lineCount; $i++) { $lineNumbers .= $i . ($i < $lineCount ? "
             </div>
             <div class="d"><?= market_h($h['created_at']) ?></div>
             <?php if ($h['status'] !== 'pending'): ?>
-              <div class="d"><a href="review.php?id=<?= (int)$h['id'] ?>" style="color:#8fb0ff;">查看</a></div>
+              <div class="d"><a href="review.php?id=<?= (int)$h['id'] ?>" style="color:var(--brand);">查看</a></div>
             <?php endif; ?>
           </div>
         <?php endforeach; ?>

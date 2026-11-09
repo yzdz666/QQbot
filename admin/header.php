@@ -212,6 +212,12 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
         </span>
         系统设置
       </a>
+      <a href="update.php" class="nav-item <?= $currentPage === 'update.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4.5 6.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 11.5V12.5C2.5 13.05 2.95 13.5 3.5 13.5H12.5C13.05 13.5 13.5 13.05 13.5 12.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        系统更新
+      </a>
       <div class="nav-section" style="margin-top: auto; padding-bottom: 20px;">
         <div style="padding: 8px 24px; font-size: 12px; color: var(--text-muted);">
           管理员: <?= htmlspecialchars($admin['username'] ?? '') ?>

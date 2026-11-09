@@ -68,7 +68,7 @@ for ($i = 1; $i <= $lineCount; $i++) {
   </div>
 
   <div class="detail-head" style="border-bottom:0;padding-bottom:16px;">
-    <div class="detail-icon" style="width:58px;height:58px;font-size:26px;border-radius:16px;">&lt;/&gt;</div>
+    <div class="detail-icon" style="font-size:18px;">&lt;/&gt;</div>
     <div>
       <h1 style="font-size:24px;"><?= market_h($plugin['name']) ?> · 源码</h1>
       <p class="summary" style="margin:0;">当前版本 v<?= market_h($current['version']) ?> · <?= market_size($current['file_size']) ?> · SHA-256 已校验</p>

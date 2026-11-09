@@ -10,8 +10,8 @@ require __DIR__ . '/partials/header.php';
 ?>
 <div class="container" style="max-width:900px;padding:40px 0 60px;">
   <div class="hero-badge"><i></i> 5 分钟接入</div>
-  <h1 style="font-size:34px;letter-spacing:-.8px;margin:0 0 12px;">把市场接进你的机器人</h1>
-  <p class="muted" style="font-size:15px;max-width:680px;">本市场与官鸡机器人框架（PHP + SQLite）配套使用。机器人后台已内置「插件市场」页面，只需填写市场地址即可浏览、查看源码并一键安装。</p>
+  <h1 style="font-size:28px;margin:0 0 10px;">接入说明</h1>
+  <p class="muted" style="font-size:14px;max-width:680px;">本市场与官鸡机器人框架（PHP + SQLite）配套使用。机器人后台已内置「插件市场」页面，填写市场地址后即可浏览、查看源码并一键安装。</p>
 
   <div class="panel" style="margin-top:26px;">
     <div class="panel-head"><h3>1. 机器人后台配置</h3></div>
@@ -57,6 +57,7 @@ if (消息 === '你好') {
   <div class="panel" style="margin-top:18px;">
     <div class="panel-head"><h3>3. 市场 API</h3></div>
     <div class="panel-body markdown">
+      <p class="table-hint">表格较宽，手机上可左右滑动查看完整说明。</p>
       <table>
         <thead><tr><th>接口</th><th>说明</th></tr></thead>
         <tbody>

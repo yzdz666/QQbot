@@ -16,7 +16,7 @@ $stats = market_stats();
 <title><?= market_h($pageTitle) ?> - <?= market_h($siteName) ?></title>
 <meta name="description" content="<?= market_h($siteDesc ?: $pageTitle) ?>">
 <link rel="stylesheet" href="<?= market_h(market_base_url()) ?>/assets/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%235b8cff'/><text y='.9em' x='50%' text-anchor='middle' font-size='58' fill='%23071020'>Q</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%231c5d4c'/><text y='.9em' x='50%' text-anchor='middle' font-size='58' fill='%23ffffff'>Q</text></svg>">
 </head>
 <body>
 <header class="site-header">

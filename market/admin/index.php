@@ -102,7 +102,7 @@ require __DIR__ . '/header.php';
       <?php foreach ($recent as $log): ?>
         <div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px;">
           <span class="muted" style="width:132px;flex:0 0 132px;"><?= market_h($log['created_at']) ?></span>
-          <span style="color:#cfe0ff;width:86px;flex:0 0 86px;"><?= market_h($log['action']) ?></span>
+          <span style="color:var(--brand);width:86px;flex:0 0 86px;"><?= market_h($log['action']) ?></span>
           <span class="muted" style="flex:1;word-break:break-all;"><?= market_h($log['detail']) ?></span>
           <span class="muted small"><?= market_h($log['admin']) ?></span>
         </div>
