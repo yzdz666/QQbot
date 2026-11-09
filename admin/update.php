@@ -31,11 +31,18 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
 .upd-release-head .grow { margin-left:auto; display:flex; gap:8px; align-items:center; }
 
 .upd-notes {
-  white-space:pre-wrap; word-break:break-word; font-size:12.5px; line-height:1.75; color:#3d3d3d;
-  background:var(--bg); border:1px solid var(--border); border-radius:3px; padding:14px 16px;
-  max-height:360px; overflow:auto; margin:0;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  word-break:break-word; font-size:12.5px; line-height:1.75; color:var(--ink-2);
+  background:var(--surface-2); border:1px solid var(--line); border-radius:3px; padding:12px 16px 4px;
+  max-height:380px; overflow:auto; margin:0;
+  font-family:var(--font);
 }
+.upd-notes h3 { font-size:14px; color:var(--ink); margin:12px 0 6px; }
+.upd-notes h4 { font-size:12.5px; color:var(--ink); margin:12px 0 5px; }
+.upd-notes p { margin:0 0 6px; }
+.upd-notes ul { margin:0 0 8px; padding-left:18px; }
+.upd-notes li { margin:2px 0; }
+.upd-notes code { font-family:var(--mono); font-size:11.5px; background:var(--surface-3); padding:1px 5px; border-radius:2px; }
+.upd-notes strong { color:var(--ink); font-weight:600; }
 .upd-steps { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
 .upd-step { flex:1 1 150px; border:1px solid var(--line); border-radius:3px; padding:10px 12px; font-size:12px; color:var(--ink-2); background:var(--surface); }
 .upd-step b { display:block; color:var(--text); font-size:12px; margin-bottom:3px; font-weight:600; }
@@ -222,6 +229,30 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // Release 说明是 Markdown：先转义，再只认标题、列表、粗体与行内代码
+  function mdNotes(md) {
+    var lines = String(md || '').replace(/\r/g, '').split('\n');
+    var out = '', inList = false;
+    function inline(t) {
+      return esc(t)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+    function closeList() { if (inList) { out += '</ul>'; inList = false; } }
+    lines.forEach(function (line) {
+      var m;
+      if ((m = line.match(/^###\s+(.*)$/))) { closeList(); out += '<h4>' + inline(m[1]) + '</h4>'; }
+      else if ((m = line.match(/^##\s+(.*)$/))) { closeList(); out += '<h3>' + inline(m[1]) + '</h3>'; }
+      else if ((m = line.match(/^-\s+(.*)$/))) {
+        if (!inList) { out += '<ul>'; inList = true; }
+        out += '<li>' + inline(m[1]) + '</li>';
+      }
+      else if (line.trim() === '') { closeList(); }
+      else { closeList(); out += '<p>' + inline(line) + '</p>'; }
+    });
+    closeList();
+    return out;
+  }
   function size(n) {
     n = Number(n) || 0;
     if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
@@ -287,7 +318,7 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
     html += '</div>';
 
     if (d.body) {
-      html += '<pre class="upd-notes">' + esc(d.body) + '</pre>';
+      html += '<div class="upd-notes">' + mdNotes(d.body) + '</div>';
     } else {
       html += '<div class="upd-note">该版本没有填写更新说明。</div>';
     }
