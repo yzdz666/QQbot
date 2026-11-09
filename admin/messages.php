@@ -660,6 +660,7 @@ function detectFileUrlFromContent($url) {
 <div class="card">
   <div class="card-header">
     <h3>消息列表（共 <?= $total ?> 条）</h3>
+    <span class="table-scroll-hint">左右滑动查看</span>
   </div>
   <div class="card-body no-padding">
     <?php if (empty($messages)): ?>

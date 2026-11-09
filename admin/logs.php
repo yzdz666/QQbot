@@ -160,10 +160,10 @@ function escapeHtml(s) {
 
 // 操作类型徽章配色
 function opBadgeColor(op) {
-    if (/失败|解封|删除|清空|清理|停用|关闭/.test(op)) return 'var(--danger)';
-    if (/添加|创建|上传|启用|开启|启动|登录/.test(op)) return 'var(--success, #20c997)';
-    if (/重置|修改|更新|设置|保存|导入|发送|撤回|禁言/.test(op)) return '#4b7bec';
-    return '#8a94a6';
+    if (/失败|解封|删除|清空|清理|停用|关闭/.test(op)) return 'var(--danger-soft);color:var(--danger)';
+    if (/添加|创建|上传|启用|开启|启动|登录/.test(op)) return 'var(--ok-soft);color:var(--ok)';
+    if (/重置|修改|更新|设置|保存|导入|发送|撤回|禁言/.test(op)) return 'var(--brand-soft);color:var(--brand)';
+    return 'var(--surface-3);color:var(--ink-2)';
 }
 
 function loadOpLogs() {
@@ -185,7 +185,7 @@ function loadOpLogs() {
         res.items.forEach(function (it) {
             html += '<tr>'
                 + '<td class="text-muted" style="white-space:nowrap; font-size:12px;">' + escapeHtml(it.time || '') + '</td>'
-                + '<td><span class="badge" style="background:' + opBadgeColor(it.op) + '; color:#fff;">' + escapeHtml(it.op || '未知') + '</span></td>'
+                + '<td><span class="badge" style="background:' + opBadgeColor(it.op) + ';">' + escapeHtml(it.op || '未知') + '</span></td>'
                 + '<td>' + escapeHtml(it.user || '-') + '</td>'
                 + '<td style="word-break:break-all;">' + escapeHtml(it.detail || '-') + '</td>'
                 + '<td class="text-muted" style="font-family:monospace; font-size:12px;">' + escapeHtml(it.appid && it.appid !== 'admin' ? it.appid : '-') + '</td>'

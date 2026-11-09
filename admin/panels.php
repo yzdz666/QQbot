@@ -35,11 +35,13 @@ require_once(__DIR__ . '/header.php');
 $bots = db()->fetchAll("SELECT appid, nickname, env FROM bots ORDER BY appid");
 ?>
 <div class="page-header">
-  <h1>指令面板管理</h1>
-  <p class="text-muted">管理机器人指令面板 · 支持 C2C单聊 / 群聊 / 文字子频道 / 频道私信 四种场景 · 严格遵循官方 API 字段格式</p>
+  <div>
+    <h2>指令面板管理</h2>
+    <p class="page-desc">管理机器人指令面板 · 支持 C2C单聊 / 群聊 / 文字子频道 / 频道私信 四种场景 · 严格遵循官方 API 字段格式</p>
+  </div>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card" style="margin-bottom:16px;padding:16px;">
   <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
     <div style="flex:1; min-width:200px;">
       <label class="form-label">选择机器人</label>
@@ -61,12 +63,12 @@ $bots = db()->fetchAll("SELECT appid, nickname, env FROM bots ORDER BY appid");
         <option value="dm">频道私信 (dm)</option>
       </select>
     </div>
-    <button class="btn btn-primary" onclick="loadPanels()">查询面板列表</button>
-    <button class="btn btn-success" onclick="showCreateModal()">创建面板</button>
+    <button class="btn btn-outline" onclick="loadPanels()">查询面板列表</button>
+    <button class="btn btn-primary" onclick="showCreateModal()">创建面板</button>
   </div>
 </div>
 
-<div class="card">
+<div class="card" style="padding:16px;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
     <h2 style="margin:0;">面板列表</h2>
     <span id="panelCount" class="text-muted" style="font-size:13px;"></span>

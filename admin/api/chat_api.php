@@ -350,9 +350,11 @@ try {
                 $memberRole = '';
                 $username = '';
                 $isBot = false;
+                $rawData = [];
                 if (!empty($msg['raw_data'])) {
-                    $rawData = json_decode($msg['raw_data'], true);
-                    if (is_array($rawData)) {
+                    $decodedRaw = json_decode($msg['raw_data'], true);
+                    if (is_array($decodedRaw)) {
+                        $rawData = $decodedRaw;
                         // 从原始事件数据中提取 member_role、username 和 bot
                         if (isset($rawData['d']['author']['member_role'])) {
                             $memberRole = $rawData['d']['author']['member_role'];

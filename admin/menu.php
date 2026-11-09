@@ -26,11 +26,13 @@ require_once(__DIR__ . '/header.php');
 $bots = db()->fetchAll("SELECT appid, nickname, env FROM bots ORDER BY appid");
 ?>
 <div class="page-header">
-  <h1>自定义菜单管理</h1>
-  <p class="text-muted">管理机器人自定义菜单（仅 C2C 单聊场景生效） · 严格遵循官方 API 字段格式</p>
+  <div>
+    <h2>自定义菜单管理</h2>
+    <p class="page-desc">管理机器人自定义菜单（仅 C2C 单聊场景生效） · 严格遵循官方 API 字段格式</p>
+  </div>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card" style="margin-bottom:16px;padding:16px;">
   <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
     <div style="flex:1; min-width:200px;">
       <label class="form-label">选择机器人</label>
@@ -43,21 +45,21 @@ $bots = db()->fetchAll("SELECT appid, nickname, env FROM bots ORDER BY appid");
         <?php endforeach; ?>
       </select>
     </div>
-    <button class="btn btn-primary" onclick="loadMenu()">查询当前菜单</button>
-    <button class="btn btn-success" onclick="addMenuItem()">添加按钮</button>
+    <button class="btn btn-outline" onclick="loadMenu()">查询当前菜单</button>
+    <button class="btn btn-outline" onclick="addMenuItem()">添加按钮</button>
     <button class="btn btn-primary" onclick="saveMenu()">保存菜单</button>
     <button class="btn btn-danger" onclick="deleteMenu()">删除所有菜单</button>
   </div>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card" style="margin-bottom:16px;padding:16px;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
     <h2 style="margin:0;">菜单版本</h2>
     <span id="menuVersion" class="text-muted" style="font-size:13px;">未查询</span>
   </div>
 </div>
 
-<div class="card">
+<div class="card" style="padding:16px;">
   <h2 style="margin-top:0;">可视化菜单编辑器</h2>
   <p class="text-muted" style="font-size:13px; line-height:1.8;">
     <b>官方按钮类型</b>（type 字段）：<br>
@@ -73,7 +75,7 @@ $bots = db()->fetchAll("SELECT appid, nickname, env FROM bots ORDER BY appid");
   </div>
 </div>
 
-<div class="card" style="margin-top:16px;">
+<div class="card" style="margin-top:16px;padding:16px;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
     <h2 style="margin:0;">原始 JSON（与官方 API 完全一致）</h2>
     <div style="display:flex; gap:8px;">

@@ -87,9 +87,9 @@ require_once('header.php');
     margin: 0 0 16px; color: var(--text-secondary);
 }
 .markdown-body pre {
-    background: #f1f5f9;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
     padding: 14px;
     margin: 16px 0;
     max-width: 100%;
@@ -109,9 +109,9 @@ require_once('header.php');
     word-break: normal;
 }
 .markdown-body code {
-    background: #f1f5f9;
+    background: var(--surface-2);
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 2px;
     font-family: 'SF Mono', Monaco, monospace;
     font-size: 13px;
     word-wrap: break-word;
@@ -132,7 +132,7 @@ require_once('header.php');
     word-break: break-word;
 }
 .markdown-body th {
-    background: var(--bg);
+    background: var(--surface-2);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -145,9 +145,13 @@ require_once('header.php');
     word-wrap: break-word;
 }
 .markdown-body a {
+    color: var(--brand);
+    text-decoration: none;
+    border-bottom: 1px solid var(--brand-line);
     word-break: break-all;
     word-wrap: break-word;
 }
+.markdown-body a:hover { color: var(--brand-hover); border-bottom-color: var(--brand); }
 .markdown-body blockquote {
     border-left: 3px solid var(--border);
     padding: 8px 16px;

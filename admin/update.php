@@ -15,54 +15,54 @@ $zipOk = class_exists('ZipArchive');
 $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
 ?>
 <style>
-.upd-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
-.upd-metric { background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
-.upd-metric .k { font-size:11px; color:var(--text-muted); margin-bottom:6px; }
-.upd-metric .v { font-size:20px; font-weight:600; letter-spacing:-.2px; line-height:1.2; word-break:break-all; }
-.upd-metric .s { font-size:11px; color:var(--text-secondary); margin-top:4px; }
+.upd-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:3px; overflow:hidden; margin-bottom:16px; }
+.upd-metric { background:var(--surface); border:0; border-radius:0; padding:14px 16px; }
+.upd-metric .k { font-size:11.5px; color:var(--ink-3); margin-bottom:6px; }
+.upd-metric .v { font-family:var(--mono); font-size:22px; font-weight:600; letter-spacing:-.02em; line-height:1.2; word-break:break-all; }
+.upd-metric .s { font-size:11.5px; color:var(--ink-2); margin-top:4px; }
 
 .upd-empty { text-align:center; padding:34px 16px; color:var(--text-secondary); font-size:13px; }
 .upd-empty .big { font-size:15px; color:var(--text); margin-bottom:6px; font-weight:500; }
 
 .upd-release-head { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:14px; }
-.upd-release-head .ver { font-size:22px; font-weight:600; letter-spacing:-.3px; line-height:1.2; }
-.upd-release-head .tag { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; color:var(--text-secondary); background:var(--bg-alt); border:1px solid var(--border); border-radius:4px; padding:2px 7px; }
+.upd-release-head .ver { font-family:var(--mono); font-size:23px; font-weight:600; letter-spacing:-.02em; line-height:1.2; }
+.upd-release-head .tag { font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line); border-radius:2px; padding:2px 7px; }
 .upd-release-head .meta { font-size:12px; color:var(--text-secondary); margin-top:6px; }
 .upd-release-head .grow { margin-left:auto; display:flex; gap:8px; align-items:center; }
 
 .upd-notes {
   white-space:pre-wrap; word-break:break-word; font-size:12.5px; line-height:1.75; color:#3d3d3d;
-  background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:14px 16px;
+  background:var(--bg); border:1px solid var(--border); border-radius:3px; padding:14px 16px;
   max-height:360px; overflow:auto; margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
 }
 .upd-steps { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
-.upd-step { flex:1 1 150px; border:1px solid var(--border); border-radius:6px; padding:10px 12px; font-size:12px; color:var(--text-secondary); background:#fff; }
+.upd-step { flex:1 1 150px; border:1px solid var(--line); border-radius:3px; padding:10px 12px; font-size:12px; color:var(--ink-2); background:var(--surface); }
 .upd-step b { display:block; color:var(--text); font-size:12px; margin-bottom:3px; font-weight:600; }
-.upd-step.on { border-color:#c8c8c8; background:#fafafa; }
-.upd-step.done { border-color:#cfe8d5; background:#f4faf5; }
-.upd-step.done b { color:#2e7d32; }
+.upd-step.on { border-color:var(--line-2); background:var(--surface-2); }
+.upd-step.done { border-color:var(--brand-line); background:var(--brand-soft); }
+.upd-step.done b { color:var(--brand); }
 
-.upd-bar { height:4px; background:var(--bg-secondary); border-radius:999px; overflow:hidden; margin-top:14px; display:none; }
+.upd-bar { height:3px; background:var(--surface-3); border-radius:2px; overflow:hidden; margin-top:14px; display:none; }
 .upd-bar.on { display:block; }
-.upd-bar i { display:block; height:100%; width:35%; background:#333; border-radius:999px; animation:updSlide 1.1s ease-in-out infinite; }
+.upd-bar i { display:block; height:100%; width:35%; background:var(--brand); border-radius:2px; animation:updSlide 1.1s ease-in-out infinite; }
 @keyframes updSlide { 0%{ transform:translateX(-100%);} 100%{ transform:translateX(320%);} }
 
 .upd-note { font-size:12px; color:var(--text-secondary); line-height:1.7; }
 .upd-note code { font-family:ui-monospace,Consolas,monospace; background:var(--bg-alt); padding:1px 5px; border-radius:3px; font-size:11.5px; }
-.upd-warn { border-left:3px solid #f0b429; background:#fffdf5; padding:10px 14px; border-radius:0 6px 6px 0; font-size:12px; color:#6b5420; line-height:1.7; }
-.upd-ok { border-left:3px solid #34a853; background:#f6fbf7; padding:10px 14px; border-radius:0 6px 6px 0; font-size:12px; color:#205c31; line-height:1.7; }
-.upd-err { border-left:3px solid #dc3545; background:#fff7f7; padding:10px 14px; border-radius:0 6px 6px 0; font-size:12px; color:#8a1f2b; line-height:1.7; }
+.upd-warn { border-left:3px solid var(--warn); background:var(--warn-soft); padding:10px 14px; border-radius:0 2px 2px 0; font-size:12px; color:var(--warn); line-height:1.7; }
+.upd-ok { border-left:3px solid var(--ok); background:var(--ok-soft); padding:10px 14px; border-radius:0 2px 2px 0; font-size:12px; color:var(--ok); line-height:1.7; }
+.upd-err { border-left:3px solid var(--danger); background:var(--danger-soft); padding:10px 14px; border-radius:0 2px 2px 0; font-size:12px; color:var(--danger); line-height:1.7; }
 
 .upd-form { display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
 .upd-form .full { grid-column:1 / -1; }
 .upd-form label { display:block; font-size:12px; color:var(--text-secondary); margin-bottom:5px; }
-.upd-form .form-control { width:100%; height:36px; padding:0 10px; border:1px solid var(--border-hover); border-radius:6px; font-size:13px; background:#fff; color:var(--text); }
-.upd-form .form-control:focus { outline:none; border-color:#999; }
+.upd-form .form-control { width:100%; height:34px; padding:0 10px; border:1px solid var(--line-2); border-radius:2px; font-size:13px; background:#fff; color:var(--ink); }
+.upd-form .form-control:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(28,91,73,.10); }
 .upd-form .hint { font-size:11px; color:var(--text-muted); margin-top:4px; line-height:1.6; }
 .upd-preset { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
-.upd-preset button { font-size:11px; padding:3px 9px; border:1px solid var(--border-hover); background:#fff; border-radius:999px; color:var(--text-secondary); cursor:pointer; }
-.upd-preset button:hover { border-color:#aaa; color:var(--text); }
+.upd-preset button { font-size:11px; padding:3px 9px; border:1px solid var(--line-2); background:var(--surface); border-radius:2px; color:var(--ink-2); cursor:pointer; }
+.upd-preset button:hover { border-color:var(--brand); color:var(--brand); }
 
 .upd-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
 
@@ -90,7 +90,7 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
   <div class="upd-metric">
     <div class="k">最新版本</div>
     <div class="v" id="updLatest">—</div>
-    <div class="s" id="updLatestSub">点击右上角检查</div>
+    <div class="s" id="updLatestSub">点击「检查更新」获取</div>
   </div>
   <div class="upd-metric">
     <div class="k">更新源</div>
@@ -116,7 +116,7 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
     <div id="updPanel">
       <div class="upd-empty">
         <div class="big">尚未检查更新</div>
-        点击右上角「检查更新」，会从 GitHub Releases 读取最新版本与更新说明。
+        点击「检查更新」，会从 GitHub Releases 读取最新版本与更新说明。
       </div>
     </div>
 

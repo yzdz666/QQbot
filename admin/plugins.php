@@ -130,7 +130,7 @@ function formatFileSize($bytes)
     <?php if (empty($plugins)): ?>
       <div class="empty-state">
         <div class="empty-icon">--</div>
-        <p>暂无插件，点击右上角"上传插件"添加</p>
+        <p>暂无插件，点击上方「上传插件」添加</p>
       </div>
     <?php else: ?>
       <div class="table-responsive">

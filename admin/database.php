@@ -88,8 +88,8 @@ function dbm_fmt_bytes($b) {
 }
 ?>
 <style>
-.db-size-bar { height:8px; border-radius:4px; background:var(--border); overflow:hidden; min-width:80px; }
-.db-size-bar > div { height:100%; border-radius:4px; }
+.db-size-bar { height:6px; border-radius:2px; background:var(--border); overflow:hidden; min-width:80px; }
+.db-size-bar > div { height:100%; border-radius:2px; }
 .db-table-name { font-family:monospace; font-size:12px; color:var(--text-muted); }
 .db-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .vacuum-result { font-family:monospace; font-size:12px; }
@@ -139,7 +139,7 @@ function dbm_fmt_bytes($b) {
 <div class="card mb-3">
   <div class="card-header">
     <h3>数据表占用明细</h3>
-    <span class="text-muted" style="margin-left:auto; font-size:12px;">数据字节为文本内容体积估算（不含索引）；清理后需 VACUUM 才会缩小文件</span>
+    <span class="text-muted hide-sm" style="margin-left:auto; font-size:12px;">数据字节为文本内容体积估算（不含索引）；清理后需 VACUUM 才会缩小文件</span>
   </div>
   <div class="card-body no-padding">
     <div class="table-responsive">
@@ -156,7 +156,7 @@ function dbm_fmt_bytes($b) {
         <tbody>
         <?php foreach ($tableStats as $t => $s):
             $pct = $totalBytes > 0 ? $s['bytes'] * 100 / $totalBytes : 0;
-            $barColor = $pct > 50 ? 'var(--danger)' : ($pct > 15 ? '#f0a020' : 'var(--primary)');
+            $barColor = $pct > 50 ? 'var(--danger)' : ($pct > 15 ? 'var(--warn)' : 'var(--primary)');
         ?>
           <tr>
             <td>

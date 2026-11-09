@@ -29,7 +29,7 @@ $bots = getBots();
     <?php if (empty($bots)): ?>
       <div class="empty-state">
         <div class="empty-icon">--</div>
-        <p>暂无机器人，点击右上角“添加机器人”开始创建</p>
+        <p>暂无机器人，点击上方「添加机器人」开始创建</p>
       </div>
     <?php else: ?>
       <div class="table-responsive">

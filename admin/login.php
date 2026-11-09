@@ -67,6 +67,7 @@ $pageTitle = '登录';
 <div class="login-wrapper">
   <div class="login-card">
     <div class="logo">
+      <div class="login-seal">官</div>
       <h1>官鸡机器人</h1>
       <p>管理后台登录</p>
     </div>
@@ -84,6 +85,7 @@ $pageTitle = '登录';
       </div>
       <button type="submit" class="btn btn-primary btn-block">登录</button>
     </form>
+    <div class="login-foot">仅限授权管理员登录</div>
   </div>
 </div>
 </body>

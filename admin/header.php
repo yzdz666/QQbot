@@ -35,6 +35,8 @@ if ($currentScript !== 'login.php') {
 
 $admin = db()->fetch("SELECT * FROM admin LIMIT 1");
 $currentPage = $currentScript;
+$sysVersion = require __DIR__ . '/version.php';
+$sysVersionNo = $sysVersion['version'] ?? '';
 
 // 统计未读消息数
 $unreadMsgs = 0;
@@ -103,11 +105,13 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
   };
 })();
 </script>
-<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" aria-label="菜单">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="layout">
   <div class="sidebar">
-    <a href="index.php" class="brand"><span class="brand-mark">Q</span><span>QQ机器人后台</span></a>
+    <a href="index.php" class="brand">
+      <span class="brand-mark">官</span>
+      <span class="brand-text"><strong>官鸡机器人</strong><small>后台控制台</small></span>
+    </a>
     <div class="nav-menu">
       <div class="nav-section">概览</div>
       <a href="index.php" class="nav-item <?= $currentPage === 'index.php' ? 'active' : '' ?>">
@@ -218,17 +222,11 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
         </span>
         系统更新
       </a>
-      <div class="nav-section" style="margin-top: auto; padding-bottom: 20px;">
-        <div style="padding: 8px 24px; font-size: 12px; color: var(--text-muted);">
-          管理员: <?= htmlspecialchars($admin['username'] ?? '') ?>
-        </div>
-        <a href="api.php?action=logout" class="nav-item" style="color: var(--danger);">
-          <span class="nav-icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3C2.5 2 2 2.5 2 3V13C2 13.5 2.5 14 3 14H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 4L13 7L10 10M13 7H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </span>
-          退出登录
-        </a>
-      </div>
+    </div>
+    <div class="sidebar-foot">
+      <span class="foot-avatar"><?= htmlspecialchars(mb_substr($admin['username'] ?? 'A', 0, 1, 'UTF-8')) ?></span>
+      <span class="foot-name"><?= htmlspecialchars($admin['username'] ?? 'admin') ?></span>
+      <a class="foot-logout" href="api.php?action=logout">退出</a>
     </div>
   </div>
   <div class="main-content">
@@ -236,14 +234,14 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
       <div class="topbar-left">
         <button class="mobile-menu-btn" type="button" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
         <div class="breadcrumb">
-          <span class="breadcrumb-root">QQ机器人后台</span>
+          <span class="breadcrumb-root">控制台</span>
           <span class="breadcrumb-sep">/</span>
           <strong><?= htmlspecialchars($pageTitle ?? '仪表盘') ?></strong>
         </div>
       </div>
       <div class="topbar-right">
-        <span class="topbar-status"><i></i> 服务正常</span>
-        <div class="admin-menu"><span class="admin-avatar"><?= htmlspecialchars(mb_substr($admin['username'] ?? 'A', 0, 1, 'UTF-8')) ?></span><span><?= htmlspecialchars($admin['username'] ?? 'admin') ?></span><span class="admin-caret">⌄</span></div>
+        <span class="topbar-status"><i></i> 服务运行中</span>
+        <span class="topbar-version">v<?= htmlspecialchars($sysVersionNo) ?></span>
       </div>
     </header>
 <?php endif; ?>
