@@ -13,7 +13,15 @@ class Database {
         $this->dbPath = $dbPath;
         $dir = dirname($dbPath);
         if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
+            @mkdir($dir, 0750, true);
+        }
+        // SQLite 不仅需要 bot.db 可写，还需要 data 目录可写（创建 -journal/-wal/-shm）。
+        // 如果目录/文件由 root 创建，直接运行 WS 会让后台 Web 用户无法访问数据库。
+        if (!is_dir($dir) || !is_readable($dir) || !is_writable($dir)) {
+            throw new RuntimeException('SQLite 数据目录不可写: ' . $dir . '；请让 Web/PHP 用户拥有 data 目录写权限，并使用同一用户运行 ws_client.php。');
+        }
+        if (file_exists($dbPath) && (!is_readable($dbPath) || !is_writable($dbPath))) {
+            throw new RuntimeException('SQLite 数据库文件不可读写: ' . $dbPath . '；请修复文件属主/权限。');
         }
         $this->pdo = new PDO('sqlite:' . $dbPath);
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -21,7 +29,26 @@ class Database {
         $this->pdo->exec('PRAGMA journal_mode = WAL');
         $this->pdo->exec('PRAGMA foreign_keys = ON');
         $this->pdo->exec('PRAGMA busy_timeout = 5000');
+        $this->ensureDataHtaccess($dir);
         $this->initTables();
+    }
+
+    /**
+     * 自愈防护: data/.htaccess 缺失时自动补建 (拒绝 Apache 直接访问数据库/日志/会话文件)
+     * 三层防护之一 (另两层: router.php 403 + nginx 配置见文档), 防止 bot.db 被匿名下载
+     */
+    private function ensureDataHtaccess($dir) {
+        $ht = $dir . '/.htaccess';
+        if (is_file($ht)) return;
+        $content = "# 拒绝一切 Web 访问 (Apache 2.4+)\n"
+                 . "# SQLite 数据库/日志/会话文件包含: 管理员密码哈希、机器人 AppSecret、会话 token、代发签名密钥\n"
+                 . "Require all denied\n\n"
+                 . "# Apache 2.2 兼容\n"
+                 . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
+        if (is_writable($dir)) {
+            @file_put_contents($ht, $content);
+            @chmod($ht, 0644);
+        }
     }
 
     public static function getInstance($dbPath = null) {
@@ -197,6 +224,17 @@ class Database {
                 value TEXT,
                 updated_at TEXT DEFAULT (datetime('now','localtime'))
             )",
+
+            // 插件市场安装记录（用于更新检测/卸载）
+            "CREATE TABLE IF NOT EXISTS market_installed (
+                plugin_name TEXT PRIMARY KEY,
+                slug TEXT DEFAULT '',
+                version TEXT DEFAULT '',
+                sha256 TEXT DEFAULT '',
+                source TEXT DEFAULT '',
+                installed_at TEXT DEFAULT (datetime('now','localtime')),
+                updated_at TEXT DEFAULT (datetime('now','localtime'))
+            )",
         ];
 
         foreach ($sqls as $sql) {
@@ -229,6 +267,7 @@ class Database {
                 'group_class_text'   => "ALTER TABLE groups ADD COLUMN group_class_text TEXT DEFAULT ''",
                 'group_tags'         => "ALTER TABLE groups ADD COLUMN group_tags TEXT DEFAULT ''",
                 'group_member_num'   => "ALTER TABLE groups ADD COLUMN group_member_num INTEGER DEFAULT 0",
+                'info_updated_at'    => "ALTER TABLE groups ADD COLUMN info_updated_at TEXT DEFAULT ''",
             ],
             'bots' => [
                 'robot_qq'  => "ALTER TABLE bots ADD COLUMN robot_qq TEXT DEFAULT ''",
@@ -296,8 +335,9 @@ class Database {
     // KV存储 - 替代原 写()/读() 函数
     public function kvSet($namespace, $key, $value) {
         // 兼容原版：原版用json_encode存整个文件，单个值直接存原始类型
+        // JSON_UNESCAPED_SLASHES: 存储 URL 不再被转义为 \/ (保持 / 原样, 与解码行为无关)
         if (is_array($value) || is_object($value)) {
-            $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } elseif (is_bool($value)) {
             $value = $value ? '1' : '0';
         } elseif (is_null($value)) {
@@ -325,8 +365,14 @@ class Database {
             if ($decoded !== null) return $decoded;
         }
         // 尝试还原数字类型（含布尔兼容：1/0 在PHP弱类型中等价于true/false）
+        // 安全限制: 仅当无前导零且长度≤15位时才转为int，
+        // 避免openid/AppID/雪花消息ID等长纯数字字符串被错误转换丢失前导零或精度
         if (is_numeric($val) && $val !== '') {
-            if (strpos($val, '.') === false && ctype_digit(ltrim($val, '-'))) {
+            if (strpos($val, '.') === false
+                && ctype_digit(ltrim($val, '-'))
+                && strlen(ltrim($val, '-')) <= 15
+                && (strlen($val) === 1 || $val[0] !== '0')
+                && (string)(int)$val === $val) {
                 return (int)$val;
             }
             $floatVal = (float)$val;
@@ -357,7 +403,7 @@ class Database {
 
     // 设置管理
     public function setSetting($key, $value) {
-        $value = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
+        $value = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string)$value;
         $this->execute(
             "INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now','localtime'))",
             [$key, $value]

@@ -218,11 +218,76 @@ if (!empty($bots)) {
 .chat-main-header h3 {
     font-size: 15px;
     font-weight: 600;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .chat-main-header .chat-info {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 2px;
+    /* 防止长ID/简介撑破布局：允许断行并限制最多2行 */
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+}
+/* 紧凑群资料条：单行展示成员数/分类/标签，不占大空间 */
+.gp-strip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    max-width: 100%;
+}
+.gp-strip .gp-item {
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gp-strip .gp-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--bg-alt, rgba(0,0,0,0.05));
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 18px;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.gp-strip .gp-toggle {
+    color: var(--primary);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    font-size: 12px;
+}
+.gp-strip .gp-toggle:hover { text-decoration: underline; }
+/* 可展开的群详情（默认收起，展开后限高滚动） */
+.gp-full {
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: var(--bg-alt, rgba(0,0,0,0.04));
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 100%;
+    max-height: 130px;
+    overflow-y: auto;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 .chat-messages {
     flex: 1;
@@ -424,6 +489,21 @@ if (!empty($bots)) {
     max-height: 200px;
     border-radius: 4px;
     cursor: pointer;
+}
+
+/* 媒体加载失败/原件未留存占位块 */
+.chat-media-fallback {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--bg, #f5f6f8);
+    border: 1px dashed var(--border, #d8dde6);
+    border-radius: 8px;
+    color: var(--text-muted, #8a94a6);
+    font-size: 12px;
+    min-width: 120px;
+    justify-content: center;
 }
 
 /* 多图片网格 */
@@ -633,6 +713,40 @@ if (!empty($bots)) {
     white-space: nowrap;
 }
 
+/* 引用块媒体缩略预览 */
+.chat-msg-quote-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    align-items: center;
+}
+.chat-msg-quote-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: zoom-in;
+    border: 1px solid var(--border);
+    display: block;
+}
+.chat-msg-quote-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 8px;
+    background: rgba(0,0,0,0.04);
+    border-radius: 10px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-msg.sent .chat-msg-quote-file {
+    background: rgba(255,255,255,0.12);
+}
+
 /* Markdown内容 */
 .chat-md-content {
     line-height: 1.6;
@@ -687,6 +801,51 @@ if (!empty($bots)) {
 }
 .chat-md-content del { text-decoration: line-through; opacity: 0.7; }
 .chat-md-content img { max-width: 100%; border-radius: 4px; }
+/* MD图片 ![alt](url)，支持QQ尺寸参数(#30px #30px)，点击看大图 */
+.chat-md-content img.chat-md-img {
+    max-width: 240px;
+    max-height: 240px;
+    border-radius: 6px;
+    display: block;
+    margin: 4px 0;
+    cursor: zoom-in;
+}
+/* QQ客户端内联按钮(mqqapi:// 等伪协议链接，浏览器中仅展示) */
+.chat-md-btn {
+    display: inline-block;
+    padding: 3px 14px;
+    margin: 2px 4px 2px 0;
+    border: 1px solid var(--border, #d8dde6);
+    border-radius: 16px;
+    background: var(--bg, #f5f6f8);
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s;
+}
+.chat-md-btn:hover { background: rgba(0,0,0,0.08); }
+.chat-msg.sent .chat-md-btn {
+    border-color: rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.14);
+}
+.chat-msg.sent .chat-md-btn:hover { background: rgba(255,255,255,0.24); }
+/* MD伪协议按钮点击提示 */
+#mdBtnTip {
+    position: fixed;
+    left: 50%;
+    bottom: 90px;
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(20,24,34,0.92);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 99999;
+}
+#mdBtnTip.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* 输入区域 */
 .chat-input-area {
@@ -761,6 +920,56 @@ if (!empty($bots)) {
     background: none;
     padding: 0 4px;
     line-height: 1;
+}
+
+/* 图片链接就绪chip */
+.chat-image-chip {
+    display: none;
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+    position: relative;
+}
+.chat-image-chip img {
+    width: 38px;
+    height: 38px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+.chat-image-chip-info {
+    flex: 1;
+    min-width: 0;
+    padding-right: 24px;
+}
+.chat-image-chip-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.chat-image-chip-url {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-quote-preview-thumb {
+    width: 34px;
+    height: 34px;
+    object-fit: cover;
+    border-radius: 5px;
+    vertical-align: middle;
+    margin-right: 8px;
+    border: 1px solid var(--border);
+    background: var(--border);
 }
 
 /* @提及弹窗 */
@@ -896,6 +1105,17 @@ if (!empty($bots)) {
     .chat-main-header h3 {
         font-size: 14px;
     }
+    /* 手机版：头部文字区占据剩余宽度，群资料条/信息行不撑破布局 */
+    .chat-main-header > div:first-child {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+    .chat-main-header .gp-strip .gp-item {
+        max-width: 120px;
+    }
+    .chat-main-header .gp-full {
+        max-height: 110px;
+    }
     #chatTargetActions {
         flex-wrap: wrap;
         gap: 4px !important;
@@ -985,7 +1205,7 @@ if (!empty($bots)) {
         <div style="display:flex; align-items:center; gap:10px;">
           <button class="chat-mobile-toggle" onclick="showSessionList()">&#9776;</button>
           <div class="chat-header-avatar" id="chatHeaderAvatar" style="width:40px;height:40px;border-radius:8px;display:none;overflow:hidden;flex-shrink:0;background:var(--border);align-items:center;justify-content:center;font-size:18px;color:var(--text-secondary);"></div>
-          <div style="min-width:0;">
+          <div style="flex:1; min-width:0;">
             <h3 id="chatTargetName">选择一个会话</h3>
             <div class="chat-info" id="chatTargetInfo"></div>
             <div id="chatGroupDetail" style="display:none;"></div>
@@ -1023,7 +1243,15 @@ if (!empty($bots)) {
           <div id="chatQuoteContent" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:24px;"></div>
           <button class="chat-quote-preview-close" onclick="cancelQuote()">&times;</button>
         </div>
-        <textarea id="chatInputMsg" class="form-control" placeholder="输入消息... 输入@提及用户" rows="1" onkeydown="handleChatKeydown(event)" oninput="handleChatInput(event)"></textarea>
+        <div class="chat-image-chip" id="chatImageChip" style="display:none;">
+          <img id="chatImageChipThumb" alt="" onerror="this.style.opacity='0.25'">
+          <div class="chat-image-chip-info">
+            <div class="chat-image-chip-title">图片已就绪（可继续输入配文一起发送）</div>
+            <div class="chat-image-chip-url" id="chatImageChipUrl"></div>
+          </div>
+          <button class="chat-quote-preview-close" onclick="clearPendingImageUrl()" title="移除图片">&times;</button>
+        </div>
+        <textarea id="chatInputMsg" class="form-control" placeholder="输入消息..." rows="1" onkeydown="handleChatKeydown(event)" oninput="handleChatInput(event)"></textarea>
         <div id="chatMentionPopup" class="chat-mention-popup"></div>
         <input type="file" id="chatFileInput" style="display:none;" onchange="handleFileUpload(this)">
         <button class="btn btn-outline" onclick="triggerFileUpload()" title="上传文件发送" style="height:38px;width:38px;padding:0;display:flex;align-items:center;justify-content:center;">
@@ -1161,6 +1389,29 @@ if (!empty($bots)) {
   </div>
 </div>
 
+<!-- ==================== 图片链接发送模态框 ==================== -->
+<div class="modal-overlay" id="imageUrlModal" style="display:none;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">发送图片</div>
+    <div class="modal-body" style="padding:16px;">
+      <div class="form-group">
+        <label for="imageUrlInput">图片链接 URL</label>
+        <input type="text" id="imageUrlInput" class="form-control" placeholder="https://example.com/image.png" oninput="previewImageUrl(this.value)">
+        <div class="form-hint">支持 http/https 图片直链（QQ服务器会自动拉取）；确定后仍可在输入框输入配文一起发送</div>
+      </div>
+      <div id="imageUrlPreviewBox" style="display:none; text-align:center;">
+        <img id="imageUrlPreviewImg" style="max-width:100%; max-height:180px; border-radius:8px; border:1px solid var(--border);" alt="预览">
+        <div id="imageUrlPreviewTip" style="font-size:11px; color:var(--text-muted); margin-top:4px;">预览加载成功，可直接发送</div>
+      </div>
+      <div id="imageUrlPreviewError" style="display:none; font-size:12px; color:#c0392b; text-align:center;">预览加载失败（链接仍可尝试发送，QQ服务器可能可以访问）</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeImageUrlModal()">取消</button>
+      <button class="btn btn-primary" id="imageUrlConfirmBtn" onclick="confirmImageUrl()">确定</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== 图文卡片编辑器模态框 ==================== -->
 <div class="modal-overlay" id="tuwenModal" style="display:none;">
   <div class="modal" style="max-width:520px;">
@@ -1209,9 +1460,95 @@ var mentionUsers = [];
 var mentionQuery = '';
 var mentionStartPos = 0;
 var currentQuoteMsg = null; // 引用的消息
+var pendingImageUrl = null; // 图片模式下待发送的图片链接（弹窗输入）
 var nicknameCache = {}; // 昵称缓存
 var groupAvatarCache = {}; // 群自定义头像缓存
 var remarkCache = {}; // 备注缓存（用户和群）
+var groupProfileExpanded = false; // 群资料详情展开状态（默认收起，不占空间）
+var groupProfileData = null;      // 当前会话的群资料缓存
+
+// ==================== 群资料工具函数 ====================
+// 清理QQ接口返回文本：解码HTML实体（&nbsp;等）并压缩空白
+function cleanGroupText(str) {
+    if (str === null || str === undefined) return '';
+    var s = String(str);
+    if (!s) return '';
+    try {
+        var t = document.createElement('textarea');
+        t.innerHTML = s;
+        s = t.value;
+        // 二次解码防止 &amp;nbsp; 之类的嵌套编码
+        if (s.indexOf('&') !== -1) {
+            t.innerHTML = s;
+            s = t.value;
+        }
+    } catch (e) {
+        s = String(s).replace(/&nbsp;/gi, ' ').replace(/&amp;/g, '&');
+    }
+    return s.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// 长OpenID缩略显示（保留首尾便于辨识）
+function shortOpenid(id) {
+    var s = String(id || '');
+    if (s.length <= 14) return s;
+    return s.slice(0, 8) + '…' + s.slice(-4);
+}
+// 渲染紧凑群资料条 + 可折叠详情（点击「详情」展开/收起）
+function renderGroupProfile(gi) {
+    var detailEl = document.getElementById('chatGroupDetail');
+    if (!detailEl) return;
+    if (!gi) {
+        detailEl.style.display = 'none';
+        detailEl.innerHTML = '';
+        groupProfileData = null;
+        return;
+    }
+    groupProfileData = gi;
+    var memberNum = parseInt(gi.group_member_num, 10) || 0;
+    var classText = cleanGroupText(gi.group_class_text);
+    var tags = cleanGroupText(gi.group_tags);
+    var memo = cleanGroupText(gi.group_finger_memo);
+    var groupName = cleanGroupText(gi.group_name);
+
+    // 紧凑条：成员数 · 分类 · 标签徽章 · 详情开关
+    var html = '<div class="gp-strip">';
+    if (memberNum > 0) html += '<span class="gp-item">' + memberNum + '人</span>';
+    if (classText) html += '<span class="gp-item">' + escapeHtml(classText) + '</span>';
+    if (tags) {
+        var tagArr = tags.split(',').map(function (t) { return t.trim(); }).filter(function (t) { return t; });
+        tagArr.slice(0, 4).forEach(function (t) {
+            html += '<span class="gp-tag" title="' + escapeAttr(t) + '">' + escapeHtml(t) + '</span>';
+        });
+        if (tagArr.length > 4) html += '<span class="gp-item">+' + (tagArr.length - 4) + '</span>';
+    }
+    html += '<span class="gp-toggle" onclick="toggleGroupProfile()">' + (groupProfileExpanded ? '收起 ▴' : '详情 ▾') + '</span>';
+    html += '</div>';
+
+    // 展开区：完整群资料（限高滚动，超长简介不占屏）
+    if (groupProfileExpanded) {
+        var full = '<div class="gp-full">';
+        if (groupName) full += '<div><b>群名称:</b> ' + escapeHtml(groupName) + '</div>';
+        if (memberNum > 0) full += '<div><b>成员数:</b> ' + memberNum + '</div>';
+        if (classText) full += '<div><b>群分类:</b> ' + escapeHtml(classText) + '</div>';
+        if (tags) {
+            var tagArr2 = tags.split(',').map(function (t) { return t.trim(); }).filter(function (t) { return t; });
+            if (tagArr2.length > 0) {
+                full += '<div><b>群标签:</b> ';
+                tagArr2.forEach(function (t) { full += '<span class="gp-tag" style="margin-right:4px;">' + escapeHtml(t) + '</span>'; });
+                full += '</div>';
+            }
+        }
+        if (memo) full += '<div><b>群简介:</b> ' + escapeHtml(memo) + '</div>';
+        full += '</div>';
+        html += full;
+    }
+    detailEl.innerHTML = html;
+    detailEl.style.display = 'block';
+}
+function toggleGroupProfile() {
+    groupProfileExpanded = !groupProfileExpanded;
+    renderGroupProfile(groupProfileData);
+}
 
 // ==================== 分页加载状态 ====================
 var PAGE_SIZE = 50;       // 每页加载的消息数
@@ -1373,7 +1710,7 @@ function selectSendType(type) {
     var hints = {
         'text': '输入消息... 输入@提及用户',
         'md': '输入Markdown内容... 支持代码块、引用、列表等',
-        'image': '输入图片URL，或点击📎上传图片。上传时可在输入框填写文字一起发送',
+        'image': '点击"图片"标签输入图片链接，或直接粘贴图片URL；可另加配文一起发送',
         'voice': '输入语音URL，或点击📎上传本地音频',
         'video': '输入视频URL，或点击📎上传本地视频',
         'file': '输入文件URL，或点击📎上传本地文件',
@@ -1381,6 +1718,11 @@ function selectSendType(type) {
         'tuwen': '图文卡片编辑器已打开，请在弹窗中编辑...'
     };
     textarea.placeholder = hints[type] || '输入消息...';
+
+    // 离开图片模式时清除待发送图片链接
+    if (type !== 'image' && pendingImageUrl) {
+        clearPendingImageUrl();
+    }
 
     // Ark / 图文卡片 类型时，直接打开编辑器
     // 先关闭所有编辑器模态框
@@ -1400,6 +1742,98 @@ function selectSendType(type) {
     } else {
         textarea.readOnly = false;
         textarea.style.opacity = '1';
+        // 点击"图片"标签：弹出链接输入窗（已就绪时不重复弹出）
+        if (type === 'image' && !pendingImageUrl) {
+            showImageUrlModal();
+        }
+    }
+}
+
+// ==================== 图片链接发送（弹窗输入 → 就绪chip → 可加配文） ====================
+function showImageUrlModal() {
+    var modal = document.getElementById('imageUrlModal');
+    if (!modal) return;
+    var input = document.getElementById('imageUrlInput');
+    if (!pendingImageUrl) {
+        input.value = '';
+        resetImageUrlPreview();
+    } else {
+        input.value = pendingImageUrl;
+        previewImageUrl(pendingImageUrl);
+    }
+    modal.style.display = 'flex';
+    setTimeout(function() { input.focus(); }, 50);
+}
+
+function closeImageUrlModal() {
+    document.getElementById('imageUrlModal').style.display = 'none';
+}
+
+function resetImageUrlPreview() {
+    document.getElementById('imageUrlPreviewBox').style.display = 'none';
+    document.getElementById('imageUrlPreviewError').style.display = 'none';
+    document.getElementById('imageUrlPreviewImg').removeAttribute('src');
+}
+
+function previewImageUrl(url) {
+    var box = document.getElementById('imageUrlPreviewBox');
+    var errBox = document.getElementById('imageUrlPreviewError');
+    var img = document.getElementById('imageUrlPreviewImg');
+    url = (url || '').trim();
+    if (!/^https?:\/\//i.test(url)) {
+        box.style.display = 'none';
+        errBox.style.display = 'none';
+        img.removeAttribute('src');
+        return;
+    }
+    errBox.style.display = 'none';
+    box.style.display = 'block';
+    img.style.opacity = '1';
+    img.onload = function() {
+        document.getElementById('imageUrlPreviewTip').style.display = 'block';
+    };
+    img.onerror = function() {
+        // 预览失败不阻断发送：QQ服务器可能仍可访问该链接
+        document.getElementById('imageUrlPreviewTip').style.display = 'none';
+        errBox.style.display = 'block';
+    };
+    img.src = url;
+}
+
+function confirmImageUrl() {
+    var url = document.getElementById('imageUrlInput').value.trim();
+    if (!url) { alert('请输入图片链接'); return; }
+    if (!/^https?:\/\//i.test(url)) {
+        if (!confirm('链接不是 http/https 开头，可能无法被QQ服务器拉取。仍要使用吗？')) return;
+    }
+    pendingImageUrl = url;
+    updateImageChip();
+    closeImageUrlModal();
+    var textarea = document.getElementById('chatInputMsg');
+    textarea.placeholder = '图片已就绪，输入随图一起发送的文字（可留空）...';
+    textarea.focus();
+}
+
+function updateImageChip() {
+    var chip = document.getElementById('chatImageChip');
+    if (!pendingImageUrl) {
+        chip.style.display = 'none';
+        return;
+    }
+    var thumb = document.getElementById('chatImageChipThumb');
+    thumb.style.opacity = '1';
+    thumb.onload = function() { thumb.style.opacity = '1'; };
+    thumb.onerror = function() { thumb.style.opacity = '0.25'; };
+    thumb.src = pendingImageUrl;
+    document.getElementById('chatImageChipUrl').textContent = pendingImageUrl;
+    chip.style.display = 'flex';
+}
+
+function clearPendingImageUrl() {
+    pendingImageUrl = null;
+    updateImageChip();
+    if (currentSendType === 'image') {
+        document.getElementById('chatInputMsg').placeholder = '点击"图片"标签输入图片链接，或直接粘贴图片URL；可另加配文一起发送';
     }
 }
 
@@ -1606,6 +2040,8 @@ function filterSessions() {
 function selectSession(targetId, sourceType, elem) {
     currentSession = { target_id: targetId, source_type: sourceType };
     mentionUsers = [];
+    groupProfileExpanded = false; // 切换会话时收起群资料详情
+    groupProfileData = null;
     var items = document.querySelectorAll('.chat-session-item');
     items.forEach(function(item) { item.classList.remove('active'); });
     if (elem) elem.classList.add('active');
@@ -1644,49 +2080,38 @@ function refreshGroupInfo() {
         if (btn) { btn.disabled = false; btn.textContent = '刷新群信息'; }
         if (res.success) {
             var d = res.data || {};
-            var newName = d.group_name || '';
-            var memberNum = d.group_member_num || 0;
-            var memo = d.group_finger_memo || '';
-            var classText = d.group_class_text || '';
-            var tags = d.group_tags || '';
+            var newName = cleanGroupText(d.group_name);
+            var memberNum = parseInt(d.group_member_num, 10) || 0;
+            var memo = cleanGroupText(d.group_finger_memo);
+            var classText = cleanGroupText(d.group_class_text);
+            var tags = cleanGroupText(d.group_tags);
 
             // 更新顶部标题区
             var nameEl = document.getElementById('chatTargetName');
             if (nameEl && newName) nameEl.textContent = newName;
 
-            // 更新副信息行
-            var infoParts = ['群聊 · ' + targetId];
+            // 更新副信息行（保持精简，完整资料放群资料条）
+            var infoParts = ['群聊 · ' + shortOpenid(targetId)];
             if (memberNum > 0) infoParts.push(memberNum + '人');
             if (classText) infoParts.push('分类:' + classText);
-            if (memo) infoParts.push('简介:' + memo);
             if (tags) infoParts.push('标签:' + tags);
             var infoEl = document.getElementById('chatTargetInfo');
             if (infoEl) infoEl.textContent = infoParts.join(' · ');
 
-            // 更新群详情卡片
-            var detailEl = document.getElementById('chatGroupDetail');
-            if (detailEl) {
-                var detailHtml = '<div style="margin-top:8px; padding:8px 12px; background:var(--bg-alt); border-radius:6px; font-size:13px;">';
-                if (newName) detailHtml += '<div><b>群名称:</b> ' + escapeHtml(newName) + '</div>';
-                if (memberNum > 0) detailHtml += '<div><b>成员数:</b> ' + memberNum + '</div>';
-                if (memo) detailHtml += '<div><b>群简介:</b> ' + escapeHtml(memo) + '</div>';
-                if (classText) detailHtml += '<div><b>群分类:</b> ' + escapeHtml(classText) + '</div>';
-                if (tags) {
-                    var tagArr = String(tags).split(',').filter(function(t){return t.trim();});
-                    if (tagArr.length > 0) {
-                        detailHtml += '<div><b>群标签:</b> ';
-                        tagArr.forEach(function(t){ detailHtml += '<span class="badge" style="margin-right:4px;">' + escapeHtml(t.trim()) + '</span>'; });
-                        detailHtml += '</div>';
-                    }
-                }
-                detailHtml += '</div>';
-                detailEl.innerHTML = detailHtml;
-                detailEl.style.display = 'block';
-            }
+            // 紧凑群资料条（保留当前展开状态）
+            renderGroupProfile({
+                group_name: newName,
+                group_member_num: memberNum,
+                group_class_text: classText,
+                group_tags: tags,
+                group_finger_memo: memo
+            });
 
             // 刷新会话列表
             loadSessions();
-            alert('群信息刷新成功\n群名称: ' + newName + (memberNum ? '\n成员数: ' + memberNum : '') + (memo ? '\n群简介: ' + memo : '') + (classText ? '\n群分类: ' + classText : '') + (tags ? '\n群标签: ' + tags : ''));
+            var tip = '群信息已更新\n群名称: ' + newName + (memberNum ? '\n成员数: ' + memberNum : '') + (classText ? '\n群分类: ' + classText : '') + (tags ? '\n群标签: ' + tags : '');
+            if (memo) tip += '\n群简介: ' + (memo.length > 60 ? memo.slice(0, 60) + '…' : memo);
+            alert(tip);
         } else {
             alert('刷新失败: ' + (res.message || '未知错误'));
         }
@@ -1700,6 +2125,7 @@ function loadMessages(targetId, sourceType) {
     document.getElementById('chatMessages').innerHTML = '<div class="chat-empty"><div style="margin-top:8px;">加载中...</div></div>';
     document.getElementById('chatTargetName').textContent = '加载中...';
     document.getElementById('chatTargetInfo').textContent = '';
+    renderGroupProfile(null); // 清空上一会话的群资料
 
     // 重置分页状态
     currentMsgOffset = 0;
@@ -1728,43 +2154,21 @@ function loadMessages(targetId, sourceType) {
             // 显示昵称（优先备注）
             var displayName = info.remark || info.name || targetId;
             document.getElementById('chatTargetName').textContent = displayName;
-            // 显示聊天详情：群聊显示群名称/简介/分类/标签/成员数
-            var infoParts = [(info.source_type || '') + ' · ' + targetId];
+            // 副信息行保持精简：类型·短ID·消息数，长简介等放入群资料条，避免占屏
+            var infoParts = [(info.source_type || '') + ' · ' + shortOpenid(targetId)];
             if (info.total) infoParts.push('共' + info.total + '条消息');
             var gi = info.group_info;
             if (sourceType === '群聊' && gi) {
-                if (gi.group_member_num > 0) infoParts.push(gi.group_member_num + '人');
-                if (gi.group_class_text) infoParts.push('分类:' + gi.group_class_text);
-                if (gi.group_finger_memo) infoParts.push('简介:' + gi.group_finger_memo);
-                if (gi.group_tags) infoParts.push('标签:' + gi.group_tags);
+                if (parseInt(gi.group_member_num, 10) > 0) infoParts.push(parseInt(gi.group_member_num, 10) + '人');
+                var clsText = cleanGroupText(gi.group_class_text);
+                if (clsText) infoParts.push('分类:' + clsText);
+                var tagText = cleanGroupText(gi.group_tags);
+                if (tagText) infoParts.push('标签:' + tagText);
             }
             document.getElementById('chatTargetInfo').textContent = infoParts.join(' · ');
 
-            // 群聊时在详情区显示完整群信息卡片
-            var detailEl = document.getElementById('chatGroupDetail');
-            if (detailEl) {
-                if (sourceType === '群聊' && gi) {
-                    var detailHtml = '<div style="margin-top:8px; padding:8px 12px; background:var(--bg-alt); border-radius:6px; font-size:13px;">';
-                    if (gi.group_name) detailHtml += '<div><b>群名称:</b> ' + escapeHtml(gi.group_name) + '</div>';
-                    if (gi.group_member_num > 0) detailHtml += '<div><b>成员数:</b> ' + gi.group_member_num + '</div>';
-                    if (gi.group_finger_memo) detailHtml += '<div><b>群简介:</b> ' + escapeHtml(gi.group_finger_memo) + '</div>';
-                    if (gi.group_class_text) detailHtml += '<div><b>群分类:</b> ' + escapeHtml(gi.group_class_text) + '</div>';
-                    if (gi.group_tags) {
-                        var tags = gi.group_tags.split(',').filter(function(t){return t.trim();});
-                        if (tags.length > 0) {
-                            detailHtml += '<div><b>群标签:</b> ';
-                            tags.forEach(function(t){ detailHtml += '<span class="badge" style="margin-right:4px;">' + escapeHtml(t.trim()) + '</span>'; });
-                            detailHtml += '</div>';
-                        }
-                    }
-                    detailHtml += '</div>';
-                    detailEl.innerHTML = detailHtml;
-                    detailEl.style.display = 'block';
-                } else {
-                    detailEl.style.display = 'none';
-                    detailEl.innerHTML = '';
-                }
-            }
+            // 群聊时以紧凑群资料条展示（点击「详情」展开完整资料）
+            renderGroupProfile((sourceType === '群聊') ? (gi || null) : null);
 
             // 显示聊天头部头像
             var headerAvatar = document.getElementById('chatHeaderAvatar');
@@ -2192,6 +2596,8 @@ function buildMsgHtml(m, botId) {
         appid: m.appid || botId || '',
         msg_id: m.msg_id || '',
         ref_idx: m.ref_idx || '',
+        msg_idx: m.msg_idx || '',
+        quote: m.quote || null,
         target_id: m.target_id || '',
         content: m.content || '',
         media_url: m.media_url || '',
@@ -2210,6 +2616,15 @@ function buildMsgHtml(m, botId) {
     html += '<div class="chat-msg-sender">' + escapeHtml(senderName) + roleBadge + '</div>';
 
     var contentType = (m.content_type || 'text');
+    // 归一化: bot.php 日志用大写 MD, 渲染分支用小写
+    if (contentType === 'MD') contentType = 'md';
+    else if (contentType === 'Markdown') contentType = 'markdown';
+    // 存量数据兜底: 早期入库的 QQ markdown 消息被记为"文字", 检测到强 MD 特征时按 MD 渲染
+    // (强特征: 图片语法 ![alt](url / QQ内联按钮 ](mqqapi: , 普通聊天文本几乎不会出现, 误判率极低)
+    if ((contentType === 'text' || contentType === '文字') && typeof m.content === 'string'
+        && /!\[[^\]\n]*\]\s*\(|\]\(mqqapi:/i.test(m.content)) {
+        contentType = 'md';
+    }
     // 统一类型映射为中文标签
     var typeLabelMap = {
         'text': '文字', '文字': '文字',
@@ -2219,11 +2634,44 @@ function buildMsgHtml(m, botId) {
         'voice': '语音', '语音': '语音',
         'file': '文件', '文件': '文件',
         'ark': 'Ark', 'Ark': 'Ark',
-        'embed': '图文卡片', '图文卡片': '图文卡片'
+        'embed': '图文卡片', '图文卡片': '图文卡片',
+        '引用图片': '引用图片', '引用图文': '引用图文',
+        '引用语音': '引用语音', '引用视频': '引用视频',
+        '引用文件': '引用文件', '引用MD': '引用MD', '引用': '引用'
     };
     var typeLabel = typeLabelMap[contentType] || contentType;
-    var typeCls = 'type-' + (['image','video','voice','file','md','ark','embed'].indexOf(contentType) >= 0 ? contentType : (contentType === '图片' ? 'image' : contentType === '视频' ? 'video' : contentType === '语音' ? 'voice' : contentType === '文件' ? 'file' : contentType === 'MD' ? 'md' : 'text'));
+    var typeCls = 'type-' + (['image','video','voice','file','md','ark','embed'].indexOf(contentType) >= 0 ? contentType : (contentType === '图片' ? 'image' : contentType === '视频' ? 'video' : contentType === '语音' ? 'voice' : contentType === '文件' ? 'file' : 'text'));
+    // 引用系类型徽章沿用引用橙色样式 (引用图片/引用图文/引用语音/引用视频/引用文件/引用MD/引用)
+    if (contentType.indexOf('引用') === 0) typeCls = 'type-quote';
+    // 引用消息（回复他人）：类型徽章显示“引用”，并在气泡前渲染被引用内容块（含媒体缩略图）
+    var quoteHtml = '';
+    if (m.quote && (m.quote.content || (m.quote.attachments && m.quote.attachments.length))) {
+        typeLabel = '引用';
+        typeCls = 'type-quote';
+        quoteHtml = '<div class="chat-msg-quote" title="点击引用这条消息" onclick="quoteMsg(this)">';
+        quoteHtml += '<div class="chat-msg-quote-sender">引用消息</div>';
+        if (m.quote.content) {
+            quoteHtml += '<div class="chat-msg-quote-content" title="' + escapeAttr(m.quote.content) + '">' + escapeHtml(m.quote.content) + '</div>';
+        }
+        // 被引用消息的媒体缩略预览（图片看大图，视频/语音/文件用图标标签）
+        var qAtts = (m.quote.attachments || []).filter(function(a) { return a && a.url; });
+        if (qAtts.length) {
+            quoteHtml += '<div class="chat-msg-quote-thumbs">';
+            qAtts.forEach(function(a) {
+                if (a.type === 'image') {
+                    quoteHtml += '<img class="chat-msg-quote-thumb" src="' + escapeAttr(a.url) + '" onclick="event.stopPropagation();openMediaViewer(\'image\',\'' + escapeAttr(a.url) + '\')" onerror="this.style.display=\'none\'" referrerpolicy="no-referrer">';
+                } else {
+                    var qIcon = a.type === 'video' ? '&#127909;' : (a.type === 'voice' ? '&#127925;' : '&#128206;');
+                    var qName = a.filename || (a.type === 'video' ? '视频' : (a.type === 'voice' ? '语音' : '文件'));
+                    quoteHtml += '<span class="chat-msg-quote-file">' + qIcon + ' ' + escapeHtml(qName) + '</span>';
+                }
+            });
+            quoteHtml += '</div>';
+        }
+        quoteHtml += '</div>';
+    }
     html += '<div class="chat-msg-type ' + typeCls + '">' + escapeHtml(typeLabel) + '</div>';
+    if (quoteHtml) html += quoteHtml;
 
     // 内容渲染 - 优先使用attachments数组，其次media_url
     var content = (m.content || '(无内容)');
@@ -2237,6 +2685,19 @@ function buildMsgHtml(m, botId) {
     // 附件数组（支持多图片/多文件）
     var attachments = m.attachments || [];
 
+    // 旧格式兑底: 引用图片/引用图文/引用语音/引用视频/引用文件 的日志 content 为 "URL + 配文"/"URL",
+    // 无结构化附件时从 content 解析出媒体与配文, 转为统一附件渲染 (兼容历史存量记录)
+    if (!attachments.length && (contentType === '引用图片' || contentType === '引用图文' || contentType === '引用语音' || contentType === '引用视频' || contentType === '引用文件')) {
+        var legacy = parseMediaCaption(content);
+        if (legacy) {
+            var legacyType = (contentType === '引用图片' || contentType === '引用图文') ? 'image'
+                           : (contentType === '引用语音' ? 'voice' : (contentType === '引用视频' ? 'video' : 'file'));
+            attachments = [{type: legacyType, url: legacy.url, filename: '', wav_url: '', asr_text: ''}];
+            mediaUrl = legacy.url;
+            content = legacy.caption;
+        }
+    }
+
     // 多附件渲染（图片/视频/语音/文件混合）
     if (attachments.length > 0) {
         // 分离图片附件和其他附件
@@ -2249,7 +2710,7 @@ function buildMsgHtml(m, botId) {
                 // 单张图片
                 var imgUrl = imageAtts[0].url.replace(/^`+|`+$/g, '').trim();
                 html += '<div class="chat-msg-bubble" style="padding:4px;background:none;border:none;">';
-                html += '<img class="chat-msg-image chat-media-clickable" src="' + escapeAttr(imgUrl) + '" onclick="openMediaViewer(\'image\',\'' + escapeAttr(imgUrl) + '\')" onerror="this.style.display=\'none\'" referrerpolicy="no-referrer">';
+                html += '<img class="chat-msg-image chat-media-clickable" src="' + escapeAttr(imgUrl) + '" onclick="openMediaViewer(\'image\',\'' + escapeAttr(imgUrl) + '\')" onerror="mediaImgError(this)" referrerpolicy="no-referrer">';
                 html += '</div>';
             } else {
                 // 多张图片：网格布局
@@ -2293,7 +2754,7 @@ function buildMsgHtml(m, botId) {
                 }
                 html += '</div>';
             } else if (att.type === 'file') {
-                var fName = att.filename || attUrl.split('/').pop().split('?')[0] || '文件';
+                var fName = resolveFileName(att.filename, attUrl, content);
                 var fileInfo = detectFileUrl(attUrl);
                 var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#1565c0;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
                 var extLabel = fileInfo ? fileInfo.extension.toUpperCase() : '';
@@ -2306,13 +2767,13 @@ function buildMsgHtml(m, botId) {
         });
 
         // 如果有文字内容（图片+文字消息），在附件下方显示文字
-        // 判断content是否是纯URL（如果是URL则不显示，因为它可能是附件URL）
+        // 剔除内容中出现的附件URL与 "+ " 分隔符后, 剩余文本即为配文 (兼容 "URL + 配文"与"URL 配文"两种日志格式)
         var textOnly = content;
+        attachments.forEach(function(a) {
+            if (a && a.url) { try { textOnly = textOnly.split(a.url).join(''); } catch(e) {} }
+        });
+        textOnly = textOnly.replace(/^\s*\+\s*/, '').trim();
         var isUrlOnly = /^https?:\/\/\S+$/i.test(textOnly);
-        // 如果content等于第一个附件的URL，说明没有额外文字
-        if (attachments.length > 0 && textOnly === attachments[0].url.replace(/^`+|`+$/g, '').trim()) {
-            textOnly = '';
-        }
         if (textOnly && !isUrlOnly) {
             // 显示文字内容（处理@提及）
             var processedContent = escapeHtml(textOnly);
@@ -2320,10 +2781,22 @@ function buildMsgHtml(m, botId) {
             html += '<div class="chat-msg-bubble">' + processedContent + '</div>';
         }
     } else if ((contentType === 'image' || contentType === '图片') && (mediaUrl || content)) {
-        var imgUrl = mediaUrl || content;
-        html += '<div class="chat-msg-bubble" style="padding:4px;background:none;border:none;">';
-        html += '<img class="chat-msg-image chat-media-clickable" src="' + escapeAttr(imgUrl) + '" onclick="openMediaViewer(\'image\',\'' + escapeAttr(imgUrl) + '\')" onerror="this.style.display=\'none\'" referrerpolicy="no-referrer">';
-        html += '</div>';
+        var rawImgContent = (mediaUrl || content).replace(/^`+|`+$/g, '').trim();
+        var imgPart = parseMediaCaption(rawImgContent);
+        if (!imgPart && rawImgContent.indexOf('[') === 0) {
+            // 旧版二进制上传占位符: 原件未留存, 无法回放 (新版本已本地留存, 不再产生此类记录)
+            html += '<div class="chat-msg-bubble"><div class="chat-media-fallback">🖼 图片（上传原件未留存）</div></div>';
+        } else {
+            var imgUrl = imgPart ? imgPart.url : rawImgContent;
+            var imgCaption = imgPart ? imgPart.caption : '';
+            html += '<div class="chat-msg-bubble" style="padding:4px;background:none;border:none;">';
+            html += '<img class="chat-msg-image chat-media-clickable" src="' + escapeAttr(imgUrl) + '" onclick="openMediaViewer(\'image\',\'' + escapeAttr(imgUrl) + '\')" onerror="mediaImgError(this)" referrerpolicy="no-referrer">';
+            html += '</div>';
+            if (imgCaption) {
+                var processedImgCaption = replaceAtMentions(escapeHtml(imgCaption));
+                html += '<div class="chat-msg-bubble">' + processedImgCaption + '</div>';
+            }
+        }
     } else if ((contentType === 'video' || contentType === '视频') && (mediaUrl || content)) {
         var vidUrl = mediaUrl || content;
         html += '<div class="chat-msg-bubble" style="padding:4px;background:none;border:none;">';
@@ -2342,18 +2815,8 @@ function buildMsgHtml(m, botId) {
         html += '</div>';
     } else if ((contentType === 'file' || contentType === '文件') && (mediaUrl || content)) {
         var fileUrl = mediaUrl || content;
-        // 优先使用API传来的文件名，否则从URL解析
-        var fName = fileName || '';
-        if (!fName) {
-            // 尝试从fname参数获取
-            var fnameMatch = fileUrl.match(/[?&]fname=([^&]+)/);
-            if (fnameMatch) {
-                try { fName = decodeURIComponent(fnameMatch[1]); } catch(e) { fName = fnameMatch[1]; }
-            }
-        }
-        if (!fName) {
-            fName = fileUrl.split('/').pop().split('?')[0] || '文件';
-        }
+        // 统一文件名解析: API传入 > 日志括号内真实名 > fname/f 参数 > URL路径
+        var fName = resolveFileName(fileName, fileUrl, content);
         // 使用带颜色的文件类型徽章
         var fileInfo = detectFileUrl(fileUrl);
         var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#1565c0;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
@@ -2363,7 +2826,7 @@ function buildMsgHtml(m, botId) {
         html += iconHtml;
         html += '<div style="min-width:0;"><div style="font-weight:500;font-size:13px;word-break:break-all;">' + escapeHtml(fName) + '</div>';
         html += '<div style="font-size:11px;color:var(--text-muted);">点击下载' + (extLabel ? ' (' + escapeHtml(extLabel) + ')' : '') + '</div></div></a></div>';
-    } else if (contentType === 'md' || contentType === 'markdown') {
+    } else if (contentType === 'md' || contentType === 'markdown' || contentType === '引用MD') {
         html += '<div class="chat-msg-bubble chat-md-content">' + renderMarkdown(content) + '</div>';
     } else if (contentType === 'ark' || contentType === 'Ark') {
         // Ark 消息渲染
@@ -2459,7 +2922,7 @@ function buildMsgHtml(m, botId) {
     html += '<button class="chat-msg-action-btn" onclick="quoteMsg(this)">引用</button>';
     // 已撤回的消息不再显示撤回按钮
     if (!m.is_retracted) {
-        html += '<button class="chat-msg-action-btn" onclick="retractMsg(\'' + escapeAttr(m.appid || botId || '') + '\',\'' + escapeAttr(m.msg_id || '') + '\',\'' + escapeAttr(m.target_id || '') + '\')">撤回</button>';
+        html += '<button class="chat-msg-action-btn" onclick="retractMsg(\'' + escapeAttr(m.appid || botId || '') + '\',\'' + escapeAttr(m.msg_id || '') + '\',\'' + escapeAttr(m.target_id || '') + '\',' + (parseInt(m.id, 10) || 0) + ')">撤回</button>';
     }
     // 群聊接收消息显示禁言/解禁按钮
     if (!isSent && m.user_id && currentSession && currentSession.source_type === '群聊') {
@@ -2485,8 +2948,8 @@ function quoteMsg(btn) {
         currentQuoteMsg = null;
         return;
     }
-    // 优先使用REFIDX，其次使用msg_id
-    var quoteId = currentQuoteMsg.ref_idx || currentQuoteMsg.msg_id || '';
+    // 引用这条消息应使用它自身的索引: msg_idx (本条) > ref_idx (兼容旧数据) > msg_id
+    var quoteId = currentQuoteMsg.msg_idx || currentQuoteMsg.ref_idx || currentQuoteMsg.msg_id || '';
     if (!quoteId) {
         alert('该消息没有可引用的ID');
         return;
@@ -2496,7 +2959,17 @@ function quoteMsg(btn) {
     var content = document.getElementById('chatQuoteContent');
     var previewText = currentQuoteMsg.content || '';
     if (previewText.length > 60) previewText = previewText.substring(0, 60) + '...';
-    content.textContent = currentQuoteMsg.sender_name + ': ' + previewText;
+    // 被引用消息带图片附件时，预览行内显示缩略图（引用发图场景更直观）
+    var thumbHtml = '';
+    if (Array.isArray(currentQuoteMsg.attachments)) {
+        for (var i = 0; i < currentQuoteMsg.attachments.length; i++) {
+            if (currentQuoteMsg.attachments[i] && currentQuoteMsg.attachments[i].type === 'image' && currentQuoteMsg.attachments[i].url) {
+                thumbHtml = '<img class="chat-quote-preview-thumb" src="' + escapeAttr(currentQuoteMsg.attachments[i].url) + '" onerror="this.style.display=\'none\'">';
+                break;
+            }
+        }
+    }
+    content.innerHTML = thumbHtml + escapeHtml(currentQuoteMsg.sender_name + ': ' + previewText);
     preview.classList.add('show');
     document.getElementById('chatInputMsg').focus();
 }
@@ -2539,17 +3012,24 @@ function replaceAtMentions(escapedHtml) {
 }
 
 // ==================== 简易Markdown渲染 ====================
+// 支持: 代码块/行内代码(占位符保护不被二次加工)/标题/引用/粗体/斜体/删除线/
+//       图片![alt](url)(含QQ尺寸参数 #30px #30px, 点击看大图, 失败占位)/
+//       链接(http正常跳转; mqqapi://等伪协议渲染为按钮chip+点击提示)/
+//       有无序列表/分割线/@提及(<qqbot-at-user>、<@id>、[@昵称]三种形态)
 function renderMarkdown(md) {
     if (!md) return '';
     var html = escapeHtml(md);
 
-    // 代码块 ```...```
+    // 0. 保护代码内容(块/行内), 占位符统一在末尾还原
+    var codeStore = [];
     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, function(match, lang, code) {
-        return '<pre><code>' + code.replace(/\n$/, '') + '</code></pre>';
+        codeStore.push('<pre><code>' + code.replace(/\n$/, '') + '</code></pre>');
+        return '\uE000C' + (codeStore.length - 1) + '\uE000';
     });
-
-    // 行内代码 `code`
-    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    html = html.replace(/`([^`\n]+)`/g, function(match, code) {
+        codeStore.push('<code>' + code + '</code>');
+        return '\uE000C' + (codeStore.length - 1) + '\uE000';
+    });
 
     // 标题
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -2570,8 +3050,40 @@ function renderMarkdown(md) {
     // 删除线
     html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
 
-    // 链接 [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    // 图片 ![alt](url) — 必须在链接规则之前, 否则被当普通链接渲染成文字
+    // 容忍换行拆断: QQ md 卡片的 alt 与 URL 之间、URL 内部可能被换行拆开(采集端折行/拼接),
+    // alt 与 url 间的空白由 \s* 容忍; url 捕获后去除所有空白(URL 不含合法空白字符)
+    // QQ特有: alt 可为尺寸参数 "#30px #30px"(宽 高), 转为固定显示尺寸
+    html = html.replace(/!\[([^\]\n]*)\]\s*\(\s*([^)]*?)\s*\)/g, function(match, alt, url) {
+        url = url.replace(/\s+/g, '');
+        if (!url || !/^(https?:\/\/|\/|api\/)/i.test(url)) return match;
+        var style = '';
+        var wh = [], re = /#(\d+(?:\.\d+)?)px/gi, m2;
+        while ((m2 = re.exec(alt)) !== null) wh.push(parseFloat(m2[1]));
+        if (wh.length >= 1) {
+            var w = Math.min(Math.max(Math.round(wh[0]), 16), 240);
+            style = ' style="width:' + w + 'px'
+                 + (wh.length >= 2 ? ';height:' + Math.min(Math.max(Math.round(wh[1]), 16), 240) + 'px' : '')
+                 + ';object-fit:cover"';
+        }
+        return '<img class="chat-md-img" src="' + url + '" alt="图片" loading="lazy"' + style
+             + ' title="点击查看大图"'
+             + ' onclick="openMediaViewer(\'image\', this.src)"'
+             + ' onerror="mediaImgError(this, \'图片加载失败或已过期\')">';
+    });
+
+    // @提及: [@昵称] 形态(QQ markdown 消息常用), 须在链接规则之前
+    html = html.replace(/\[@([^\[\]\n]{1,64})\]/g, '<span class="chat-at-user">@$1</span>');
+
+    // 链接 [text](url) — http(s)/mailto 正常跳转; mqqapi:// 等伪协议渲染为按钮样式(仅QQ客户端可点)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, text, url) {
+        if (/^(https?:)?\/\//i.test(url) || /^mailto:/i.test(url)) {
+            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+        }
+        return '<span class="chat-md-btn" role="button" tabindex="0"'
+             + ' title="QQ客户端内联按钮, 需在QQ中点击生效"'
+             + ' onclick="showMdBtnTip()">' + text + '</span>';
+    });
 
     // 无序列表
     html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
@@ -2603,7 +3115,27 @@ function renderMarkdown(md) {
     html = html.replace(/<br>(<li>)/g, '$1');
     html = html.replace(/(<\/li>)<br>/g, '$1');
 
+    // 还原代码内容
+    html = html.replace(/\uE000C(\d+)\uE000/g, function(m, i) {
+        return typeof codeStore[+i] !== 'undefined' ? codeStore[+i] : m;
+    });
+
     return html;
+}
+
+// MD伪协议按钮(mqqapi://等)点击提示: 浏览器无法打开QQ内部协议
+function showMdBtnTip() {
+    var t = document.getElementById('mdBtnTip');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'mdBtnTip';
+        t.setAttribute('role', 'status');
+        document.body.appendChild(t);
+    }
+    t.textContent = '该按钮为QQ客户端内联按钮，需在QQ中点击生效';
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function() { t.classList.remove('show'); }, 1800);
 }
 
 // ==================== 发送消息 ====================
@@ -2625,18 +3157,15 @@ function sendChatMessage(evt) {
     }
 
     var msg = document.getElementById('chatInputMsg').value.trim();
-    if (!msg) { alert('请输入消息'); return; }
+    if (!msg && currentSendType !== 'image') { alert('请输入消息'); return; }
 
-    // 如果消息中包含@提及标签，自动使用MD格式发送
+    // 如果消息中包含@提及标签，自动使用MD格式发送（仅纯文字模式，图片/MD模式不劫持）
     var effectiveSendType = currentSendType;
-    if (msg.indexOf('<qqbot-at-user') > -1) {
+    if (currentSendType === 'text' && msg.indexOf('<qqbot-at-user') > -1) {
         effectiveSendType = 'md';
     }
 
     var btn = evt ? evt.currentTarget : document.querySelector('.chat-input-area .btn-primary');
-    btn.disabled = true;
-    var origText = btn.textContent;
-    btn.textContent = '发送中...';
 
     var data = {
         appid: botId,
@@ -2646,12 +3175,44 @@ function sendChatMessage(evt) {
         message: msg
     };
 
-    // 如果有引用，添加引用参数（使用REFIDX或msg_id）
-    if (currentQuoteMsg && currentQuoteMsg.quote_ref_id) {
-        data.msg_type = 'quote';
-        data.ref_msg_id = currentQuoteMsg.quote_ref_id;
-        data.quote_content = msg;
+    // 图片模式：弹窗链接优先，其次输入框直接填URL；输入框其余文字作为配文一起发送
+    if (effectiveSendType === 'image') {
+        var imgUrl = pendingImageUrl || '';
+        var caption = msg;
+        if (!imgUrl && /^https?:\/\//i.test(msg)) {
+            imgUrl = msg;   // 直接粘贴URL → 纯图片
+            caption = '';
+        }
+        if (!imgUrl) {
+            alert(caption
+                ? '请先点击"图片"标签填写图片链接，或点击📎上传图片（输入框文字将作为配文一起发送）'
+                : '请点击"图片"标签输入图片链接，直接粘贴URL，或点击📎上传图片');
+            return;
+        }
+        data.message = imgUrl;
+        if (caption) data.image_content = caption;   // 图文同发（msg_type=7 + media + content）
     }
+
+    // 如果有引用，添加引用参数（按类型选择官方报文形态）
+    if (currentQuoteMsg && currentQuoteMsg.quote_ref_id) {
+        if (effectiveSendType === 'quote') {
+            // 已是引用类型（不会走到这里，防御性保留）
+            data.ref_msg_id = currentQuoteMsg.quote_ref_id;
+        } else if (effectiveSendType === 'text') {
+            // 文字引用: 官方 msg_type=0 + message_reference
+            data.msg_type = 'quote';
+            data.ref_msg_id = currentQuoteMsg.quote_ref_id;
+            data.quote_content = msg;
+        } else {
+            // 图片→引用图片/引用图文，MD→引用MD，语音/视频/文件→引用富媒体
+            // 统一保持原类型 + ref_msg_id，由后端选择对应函数
+            data.ref_msg_id = currentQuoteMsg.quote_ref_id;
+        }
+    }
+
+    btn.disabled = true;
+    var origText = btn.textContent;
+    btn.textContent = '发送中...';
 
     apiCall('api/chat_api.php?action=send', data, function(res) {
         btn.disabled = false;
@@ -2660,6 +3221,7 @@ function sendChatMessage(evt) {
             document.getElementById('chatInputMsg').value = '';
             hideMentionPopup();
             cancelQuote();
+            clearPendingImageUrl();
             // 轻量刷新：只追加新消息，不重新加载整个消息列表
             refreshAfterSend();
         } else {
@@ -2696,10 +3258,10 @@ function handleFileUpload(input) {
     var botId = getCurrentBotId();
     if (!botId || !currentSession) return;
 
-    // 文件大小限制 (10MB)
-    var maxSize = 10 * 1024 * 1024;
+    // 文件大小限制 (512MB; >1.5MB 自动走分片上传, 可发送大文件)
+    var maxSize = 512 * 1024 * 1024;
     if (file.size > maxSize) {
-        alert('文件大小不能超过10MB');
+        alert('文件大小不能超过512MB');
         return;
     }
 
@@ -2793,6 +3355,21 @@ function confirmFileSend() {
     var botId = getCurrentBotId();
     if (!botId || !currentSession) return;
 
+    // 大文件分片上传: >1.5MB 自动分片(服务器 upload_max_filesize 通常 2M, 1MB/片安全)
+    var CHUNK_THRESHOLD = 1.5 * 1024 * 1024;
+    if (file.size > CHUNK_THRESHOLD) {
+        // 采集与整包上传一致的附加参数后进入分片流程
+        var refId = (currentQuoteMsg && currentQuoteMsg.quote_ref_id) ? currentQuoteMsg.quote_ref_id : '';
+        var txt = '';
+        if (uploadType === 'image') {
+            txt = document.getElementById('filePreviewText').value.trim();
+            if (!txt) txt = document.getElementById('chatInputMsg').value.trim();
+        }
+        closeFilePreviewModal();
+        sendFileInChunks(file, uploadType, refId, txt);
+        return;
+    }
+
     var formData = new FormData();
     formData.append('action', 'send');
     formData.append('appid', botId);
@@ -2801,6 +3378,11 @@ function confirmFileSend() {
     formData.append('msg_type', uploadType);
     formData.append('upload_type', uploadType);
     formData.append('upload_file', file, file.name);
+
+    // 有引用时附带引用锚点: 图片→引用图片/引用图文 (官方 message_reference)
+    if (currentQuoteMsg && currentQuoteMsg.quote_ref_id) {
+        formData.append('ref_msg_id', currentQuoteMsg.quote_ref_id);
+    }
 
     // 图片类型支持附带文字
     var textContent = '';
@@ -2870,16 +3452,132 @@ function confirmFileSend() {
     xhr.send(formData);
 }
 
+// ==================== 分片上传发送 (>1.5MB 大文件) ====================
+// 逐片 POST upload_chunk (1MB/片, 覆盖写幂等可重试), 全部完成后 upload_complete 由后端
+// 流式合并、留存到 data/uploads/ 并走与整包上传相同的发送链路(官方 /files 接口)
+var CHUNK_SIZE = 1024 * 1024; // 1MB/片 (服务器 upload_max_filesize 通常 2M, 含表单开销留余量)
+
+function sendFileInChunks(file, uploadType, refMsgId, textContent) {
+    var botId = getCurrentBotId();
+    if (!botId || !currentSession) return;
+
+    var total = Math.ceil(file.size / CHUNK_SIZE);
+    var uploadId = '';
+    for (var i = 0; i < 32; i++) uploadId += Math.floor(Math.random() * 16).toString(16);
+
+    var sendBtn = document.querySelector('.chat-input-area .btn-primary');
+    var origText = sendBtn.textContent;
+    sendBtn.disabled = true;
+
+    var apiUrl = 'api/chat_api.php';
+    if (authToken) apiUrl += '?token=' + encodeURIComponent(authToken);
+
+    // 上传结束统一恢复按钮
+    function done() {
+        sendBtn.disabled = false;
+        sendBtn.textContent = origText;
+    }
+
+    // 阶段2: 全部分片完成后通知后端合并并发送
+    function completeUpload() {
+        sendBtn.textContent = '发送中...';
+        var fd = new FormData();
+        fd.append('action', 'upload_complete');
+        fd.append('appid', botId);
+        fd.append('target_id', currentSession.target_id);
+        fd.append('source_type', currentSession.source_type || '群聊');
+        fd.append('upload_id', uploadId);
+        fd.append('chunk_total', total);
+        fd.append('file_name', file.name);
+        fd.append('file_size', file.size);
+        fd.append('upload_type', uploadType);
+        fd.append('msg_type', uploadType);
+        if (refMsgId) fd.append('ref_msg_id', refMsgId);
+        if (textContent) fd.append('text_content', textContent);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', apiUrl);
+        xhr.timeout = 300000; // 大文件经官方 /files 接口发送耗时较长
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) return;
+            done();
+            try {
+                var res = JSON.parse(xhr.responseText);
+                if (res.success || res.code === 0) {
+                    document.getElementById('chatInputMsg').value = '';
+                    refreshAfterSend();
+                } else {
+                    alert(res.message || res.msg || '发送失败');
+                }
+            } catch(e) {
+                var snippet = xhr.responseText ? xhr.responseText.substring(0, 300) : '(空响应)';
+                alert('发送失败: 服务器返回异常\n\nHTTP状态: ' + xhr.status + '\n响应内容: ' + snippet);
+            }
+        };
+        xhr.onerror = function() { done(); alert('网络错误，请检查服务器状态'); };
+        xhr.ontimeout = function() { done(); alert('发送超时，文件已上传到服务器，请稍后在聊天记录中查看'); };
+        xhr.send(fd);
+    }
+
+    // 阶段1: 逐片顺序上传(覆盖写, 失败可整体重试)
+    function sendChunk(idx) {
+        var pct = Math.min(100, Math.round((idx / total) * 100));
+        sendBtn.textContent = '上传中 ' + pct + '%';
+        var start = idx * CHUNK_SIZE;
+        var blob = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+        var fd = new FormData();
+        fd.append('action', 'upload_chunk');
+        fd.append('appid', botId);
+        fd.append('upload_id', uploadId);
+        fd.append('chunk_index', idx);
+        fd.append('chunk_total', total);
+        fd.append('file_name', file.name);
+        fd.append('chunk', blob, 'blob');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', apiUrl);
+        xhr.timeout = 60000;
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) return;
+            try {
+                var res = JSON.parse(xhr.responseText);
+                if (res.success || res.code === 0) {
+                    if (idx + 1 < total) {
+                        sendChunk(idx + 1);
+                    } else {
+                        completeUpload();
+                    }
+                } else {
+                    done();
+                    alert(res.message || res.msg || ('分片上传失败(第 ' + (idx + 1) + '/' + total + ' 片)，请重试'));
+                }
+            } catch(e) {
+                done();
+                alert('分片上传失败(第 ' + (idx + 1) + '/' + total + ' 片): 服务器返回异常\n\nHTTP状态: ' + xhr.status);
+            }
+        };
+        xhr.onerror = function() { done(); alert('分片上传网络错误(第 ' + (idx + 1) + '/' + total + ' 片)，请重试'); };
+        xhr.ontimeout = function() { done(); alert('分片上传超时(第 ' + (idx + 1) + '/' + total + ' 片)，请重试'); };
+        xhr.send(fd);
+    }
+
+    sendChunk(0);
+}
+
 // ==================== 撤回消息 ====================
-function retractMsg(appid, msgId, targetId) {
+// rowId 为消息行主键(messages.id): 同一会话中 QQ 的 message_id 可能为空/重复,
+// 按 message_id 定位会误标多条消息, 优先传主键精确定位
+function retractMsg(appid, msgId, targetId, rowId) {
     if (!confirm('确定要撤回这条消息吗？')) return;
     var sourceType = (currentSession && currentSession.source_type) ? currentSession.source_type : '群聊';
-    apiCall('api/chat_api.php?action=retract', {
+    var payload = {
         appid: appid,
         msg_id: msgId,
         target_id: targetId,
         source_type: sourceType
-    }, function(res) {
+    };
+    if (rowId) payload.row_id = rowId;
+    apiCall('api/chat_api.php?action=retract', payload, function(res) {
         if (res.success) {
             alert('撤回成功');
             // 直接在DOM中更新被撤回的消息，不重新加载整个消息列表
@@ -2890,7 +3588,14 @@ function retractMsg(appid, msgId, targetId) {
                 if (updated) return;
                 try {
                     var msgData = JSON.parse(el.getAttribute('data-msg-data') || '{}');
-                    if (msgData.msg_id === msgId) {
+                    // 优先按行主键匹配；无主键时按 msg_id 匹配（避免空/重复 msg_id 误标多条）
+                    var match = false;
+                    if (rowId) {
+                        match = (parseInt(msgData.id, 10) === parseInt(rowId, 10));
+                    } else if (msgId) {
+                        match = (msgData.msg_id === msgId && msgId !== '');
+                    }
+                    if (match) {
                         // 标记消息为已撤回状态（添加CSS类，使气泡半透明+删除线）
                         el.classList.add('is-retracted');
                         // 更新 data-msg-data 中的 is_retracted 标记
@@ -3232,6 +3937,28 @@ function hideSessionList() {
 }
 
 // ==================== 工具函数 ====================
+// 媒体图片加载失败兜底: 替换为占位提示块(不再静默隐藏, 避免空白气泡)
+function mediaImgError(el, tip) {
+    if (!el || !el.parentElement) return;
+    var d = document.createElement('div');
+    d.className = 'chat-media-fallback';
+    d.textContent = tip || '图片加载失败或已过期';
+    el.replaceWith(d);
+}
+
+// 从 "URL + 配文" / "URL 配文" / "URL" 格式的日志 content 中解析出媒体URL与配文
+// 兼容发送日志旧格式(引用图片/引用图文等)与新格式的文本字段; 非URL开头返回 null
+function parseMediaCaption(txt) {
+    txt = (txt || '').replace(/^`+|`+$/g, '').trim();
+    var m = txt.match(/^(https?:\/\/\S+|api\/[^\s]+|\/[^\s]+)(?:[ \t]*\+[ \t]*|[ \t]+)?([\s\S]*)$/);
+    if (!m) return null;
+    var url = m[1];
+    if (!/^https?:\/\//i.test(url) && url.charAt(0) !== '/' && url.indexOf('api/') !== 0) return null;
+    var caption = (m[2] || '').trim();
+    if (caption.indexOf('+ ') === 0) caption = caption.slice(2).trim();
+    return {url: url, caption: caption};
+}
+
 function escapeHtml(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3242,6 +3969,31 @@ function escapeAttr(str) {
 }
 
 // ==================== 文件URL识别 ====================
+// 统一文件名解析(多附件与单文件分支共用):
+// 优先级: 显式文件名 > 日志 content 末尾括号内真实文件名("URL (名字)"格式) > fname/f 参数 > URL路径最后一段
+function resolveFileName(explicitName, url, logContent) {
+    if (explicitName) return String(explicitName);
+    url = String(url || '').trim();
+    // 1. 日志 content 末尾括号部分 (发送日志记录的原始文件名, 排除URL/路径)
+    if (logContent) {
+        var pm = String(logContent).match(/\(([^)]+)\)\s*$/);
+        if (pm && !/^https?:/i.test(pm[1]) && pm[1].indexOf('api/') !== 0 && pm[1].indexOf('/') === -1) {
+            return pm[1];
+        }
+    }
+    // 2. fname 参数 (ftn.qq.com 链接) / f 参数 (后台本地媒体, 值为 appid/年月/文件名)
+    var fnameMatch = url.match(/[?&]fname=([^&]+)/);
+    if (fnameMatch) {
+        try { return decodeURIComponent(fnameMatch[1]); } catch(e) { return fnameMatch[1]; }
+    }
+    var fMatch = url.match(/[?&]f=([^&]+)/);
+    if (fMatch) {
+        try { return decodeURIComponent(fMatch[1]).split('/').pop(); } catch(e) { return fMatch[1].split('/').pop(); }
+    }
+    // 3. URL路径最后一段
+    return url.split('/').pop().split('?')[0] || '文件';
+}
+
 // 识别URL对应的文件类型，支持从 fname 参数或路径中提取文件名
 // 返回 { type: 'video'|'audio'|'image'|'file'|'link', fileName: 'xxx', extension: 'mp4' }
 function detectFileUrl(url) {
@@ -3249,9 +4001,11 @@ function detectFileUrl(url) {
     url = String(url).trim();
     // 去除URL两端的反引号
     url = url.replace(/^`+|`+$/g, '');
-    if (!/^https?:\/\//i.test(url)) return null;
+    // 支持后台本地媒体相对路径 (api/chat_api.php?action=media&f=...)
+    var isLocalMedia = url.indexOf('api/') === 0;
+    if (!/^https?:\/\//i.test(url) && !isLocalMedia) return null;
 
-    // 1. 优先从 fname 参数获取文件名（ftn.qq.com 链接的文件名在 fname 参数中）
+    // 1. 优先从 fname / f 参数获取文件名 (ftn.qq.com 链接用 fname, 后台本地媒体用 f)
     var fileName = '';
     var fnameMatch = url.match(/[?&]fname=([^&]+)/);
     if (fnameMatch) {
@@ -3259,6 +4013,16 @@ function detectFileUrl(url) {
             fileName = decodeURIComponent(fnameMatch[1]);
         } catch (e) {
             fileName = fnameMatch[1];
+        }
+    }
+    if (!fileName) {
+        var fMatch = url.match(/[?&]f=([^&]+)/);
+        if (fMatch) {
+            try {
+                fileName = decodeURIComponent(fMatch[1]).split('/').pop();
+            } catch (e) {
+                fileName = fMatch[1].split('/').pop();
+            }
         }
     }
     // 2. 其次从URL路径的最后一段获取

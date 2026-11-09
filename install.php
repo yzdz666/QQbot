@@ -10,8 +10,28 @@ require_once(__DIR__ . '/auth.php');
 $step = $_POST['step'] ?? ($_GET['step'] ?? '1');
 $installed = Auth::isInstalled();
 
-// 如果已安装且访问的是默认步骤（非安装流程中），跳转到管理后台
-if ($installed && !in_array($step, ['2', '3', '4', 'import']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+// 安装完成标记：完成后安装向导彻底锁定，任何 POST 都不再执行
+$setupComplete = false;
+try {
+    $setupComplete = db()->getSetting('setup_complete', '0') === '1';
+} catch (Throwable $e) {}
+
+if ($setupComplete) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(403);
+        header('Content-Type: text/html; charset=utf-8');
+        exit('系统已完成安装，安装向导已锁定。如需重置管理员密码，请在服务器命令行执行：php tools/reset_admin.php');
+    }
+    header('Location: admin/index.php');
+    exit;
+}
+
+// 已安装但未标记完成：只允许继续步骤 3/4；禁止重新设置管理员
+if ($installed && !in_array($step, ['3', '4', 'import'], true)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(403);
+        exit('系统已安装，禁止重新执行该步骤');
+    }
     header('Location: admin/index.php');
     exit;
 }
@@ -238,7 +258,11 @@ if ($step == '1' && !$installed) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($step) {
         case '2':
-            // 设置管理员
+            // 设置管理员（已存在管理员时禁止覆盖，防止未授权重置）
+            if ($installed) {
+                $errors[] = '系统已存在管理员，禁止通过安装向导重新设置。';
+                break;
+            }
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
             $passwordConfirm = $_POST['password_confirm'] ?? '';
@@ -262,7 +286,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case '3':
-            // 添加机器人
+            // 添加机器人（必须先设置管理员）
+            if (!$installed) {
+                $errors[] = '请先完成管理员设置。';
+                break;
+            }
             $appid = trim($_POST['appid'] ?? '');
             $secret = trim($_POST['secret'] ?? '');
             $env = $_POST['env'] ?? '正式';
@@ -292,8 +320,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
 
+        case '4':
+            // 完成安装：写入锁定标记
+            try {
+                db()->setSetting('setup_complete', '1');
+            } catch (Throwable $e) {}
+            $success = true;
+            break;
+
         case 'import':
-            // 导入JSON文件
+            // 导入JSON文件：已安装系统仅允许登录后的管理员导入，且不允许覆盖管理员账号
+            if ($installed && !Auth::check()) {
+                $errors[] = '系统已安装，导入配置需要先登录管理后台。';
+                break;
+            }
             $importResult = handleImport();
             if ($importResult['success']) {
                 $success = true;
@@ -316,11 +356,11 @@ function handleImport() {
         if ($data && isset($data['admin']) && isset($data['password'])) {
             if (!Auth::isInstalled()) {
                 Auth::setupAdmin($data['admin'], $data['password']);
+                $imported[] = '管理员配置 (config.json)';
             } else {
-                db()->execute("UPDATE admin SET username = ?, password = ? WHERE id = 1",
-                    [$data['admin'], passwordHash($data['password'])]);
+                // 安全加固：已安装系统禁止通过导入覆盖管理员凭证
+                $imported[] = '管理员配置 (已忽略：系统已有管理员，禁止覆盖)';
             }
-            $imported[] = '管理员配置 (config.json)';
         } else {
             $errors[] = 'config.json 格式错误';
         }

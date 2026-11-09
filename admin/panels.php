@@ -307,7 +307,11 @@ function renderPanelItems() {
       + '<label style="font-size:12px; display:flex; align-items:center; gap:4px;">'
       + '<input type="checkbox" ' + (it.only_admin?'checked':'') + ' onchange="updatePanelItem(' + idx + ',\'only_admin\',this.checked)"> 仅管理员'
       + '</label>'
-      + '<button class="btn btn-danger btn-sm" onclick="removePanelItem(' + idx + ')" style="margin-left:auto;">删除</button>'
+      + '<span style="display:inline-flex; gap:4px; margin-left:auto;">'
+      + '<button class="btn btn-outline btn-sm" title="上移" onclick="movePanelItem(' + idx + ',-1)"' + (idx===0?' disabled style="opacity:.45;cursor:not-allowed;"':'') + '>↑</button>'
+      + '<button class="btn btn-outline btn-sm" title="下移" onclick="movePanelItem(' + idx + ',1)"' + (idx===panelItems.length-1?' disabled style="opacity:.45;cursor:not-allowed;"':'') + '>↓</button>'
+      + '</span>'
+      + '<button class="btn btn-danger btn-sm" onclick="removePanelItem(' + idx + ')" style="margin-left:4px;">删除</button>'
       + '</div>'
       + '<div style="display:flex; gap:8px; flex-wrap:wrap;">'
       + '<div style="flex:1; min-width:150px;"><label class="form-label">name (元素名称, 最多14字符)</label>'
@@ -331,6 +335,16 @@ function addPanelItem() {
 
 function removePanelItem(idx) {
   panelItems.splice(idx, 1);
+  renderPanelItems();
+}
+
+// 上移/下移面板元素（dir: -1 上移 / 1 下移），调整保存时的 items 顺序
+function movePanelItem(idx, dir) {
+  var target = idx + dir;
+  if (target < 0 || target >= panelItems.length || idx === target) return;
+  var tmp = panelItems[idx];
+  panelItems[idx] = panelItems[target];
+  panelItems[target] = tmp;
   renderPanelItems();
 }
 

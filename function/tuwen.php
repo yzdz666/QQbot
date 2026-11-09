@@ -4,6 +4,13 @@ function 图文($text) {
 $text=str_replace("[加号]","+",$text);
 $text=str_replace("[井号]","#",$text);
 $ttf=__DIR__."/font/雅黑.ttf";
+// 字体文件名在部分解压工具下会被转义（如 #U96c5#U9ed1.ttf），此处回退到目录内第一个 ttf
+if(!is_file($ttf)){
+    foreach((array)glob(__DIR__."/font/*.ttf") as $字体文件){
+        $ttf=$字体文件;
+        break;
+    }
+}
 $font_size=25;
 $data=explode("\n",$text);
 $arrays=array();

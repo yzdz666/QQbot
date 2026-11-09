@@ -13,6 +13,9 @@ ini_set('error_log', dirname(__DIR__, 2) . '/error.log');
 require_once dirname(__DIR__, 2) . '/function.php';
 require_once dirname(__DIR__, 2) . '/auth.php';
 
+
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
 if (!Auth::check()) {
     http_response_code(401);
     echo json_encode(['code' => 401, 'msg' => '未登录']);

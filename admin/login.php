@@ -3,6 +3,9 @@
  * 管理后台 - 登录页
  */
 date_default_timezone_set('Asia/Shanghai');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: same-origin');
 require_once(__DIR__ . '/../function.php');
 require_once(__DIR__ . '/../auth.php');
 
@@ -29,8 +32,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $result = Auth::login($username, $password);
         if ($result['success']) {
-            setcookie('admin_token', $result['token'], time() + 604800, '/');
-            header('Location: index.php?token=' . $result['token']);
+            $secure = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') || intval($_SERVER['SERVER_PORT'] ?? 0) === 443;
+            if (PHP_VERSION_ID >= 70300) {
+                setcookie('admin_token', $result['token'], [
+                    'expires'  => time() + 604800,
+                    'path'     => '/',
+                    'secure'   => $secure,
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
+            } else {
+                setcookie('admin_token', $result['token'], time() + 604800, '/', '', $secure, true);
+            }
+            // 不再把 token 拼进 URL，避免泄露到浏览器历史 / 日志 / Referer
+            header('Location: index.php');
             exit;
         } else {
             $error = $result['message'];

@@ -9,6 +9,9 @@ header('Content-Type: application/json; charset=utf-8');
 require_once dirname(__DIR__, 2) . '/function.php';
 require_once dirname(__DIR__, 2) . '/auth.php';
 
+
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
 if (!Auth::check()) {
     echo json_encode(['code' => 401, 'msg' => '未登录'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -157,7 +160,7 @@ function data_statistics($appid) {
  * 调用 QQ 开放平台 API 获取机器人信息
  */
 function bot_info($appid, $secret) {
-    $url = "https://bots.qq.com/app/getAppAccessToken";
+    $url = getApiTokenUrl();
     $json = json_encode(["appId" => (string)$appid, "clientSecret" => $secret]);
     $options = [
         'http' => [
@@ -176,11 +179,9 @@ function bot_info($appid, $secret) {
     }
     $Access = $fw["access_token"];
 
-    // 沙箱使用 sandbox，正式使用正式接口
+    // 沙箱使用 sandbox，正式使用正式接口（支持后台切换新版/旧版域名）
     $bot = getBot($appid);
-    $apiBase = ($bot && ($bot['env'] ?? '') == '沙箱')
-        ? "https://sandbox.api.sgroup.qq.com"
-        : "https://api.sgroup.qq.com";
+    $apiBase = getApiBase(($bot && ($bot['env'] ?? '') == '沙箱') ? '沙箱' : '正式');
 
     $url = $apiBase . "/users/@me";
     $options = [

@@ -90,7 +90,7 @@ $bots = getBots();
                 <input type="checkbox" <?= $enabled ? 'checked' : '' ?> onchange="toggleBot('<?= $appid ?>', 'enabled', this)">
                 <span class="slider"></span>
               </label>
-              <span class="badge <?= $enabled ? 'badge-success' : 'badge-secondary' ?>" style="margin-left:6px;">
+              <span class="badge <?= $enabled ? 'badge-success' : 'badge-secondary' ?> js-badge-enabled" style="margin-left:6px;">
                 <?= $enabled ? '启用' : '禁用' ?>
               </span>
             </td>
@@ -99,7 +99,7 @@ $bots = getBots();
                 <input type="checkbox" <?= $wsEnabled ? 'checked' : '' ?> onchange="toggleBot('<?= $appid ?>', 'ws_enabled', this)">
                 <span class="slider"></span>
               </label>
-              <span class="badge <?= $wsEnabled ? 'badge-success' : 'badge-secondary' ?>" style="margin-left:6px;">
+              <span class="badge <?= $wsEnabled ? 'badge-success' : 'badge-secondary' ?> js-badge-ws_enabled" style="margin-left:6px;">
                 <?= $wsEnabled ? '已开启' : '未开启' ?>
               </span>
             </td>
@@ -164,8 +164,8 @@ $bots = getBots();
       </div>
       <div class="form-group">
         <label for="fld-ws-url">WebSocket 地址</label>
-        <input type="text" id="fld-ws-url" class="form-control" placeholder="例如 wss://api.sgroup.qq.com/websocket">
-        <div class="form-hint">仅当启用 WebSocket 时生效</div>
+        <input type="text" id="fld-ws-url" class="form-control" placeholder="例如 wss://api.bot.qq.com/websocket">
+        <div class="form-hint">一般留空自动从网关获取即可。留空=自动；仅调试特殊网关时填写</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -361,11 +361,27 @@ function deleteBotConfirm(appid) {
 // ==================== 切换状态（启用/禁用、WebSocket 开关）====================
 function toggleBot(appid, field, checkbox) {
     var value = checkbox.checked ? 1 : 0;
-    // 先记录原始状态，失败时回滚
     apiCall('bot_toggle', { appid: appid, field: field, value: value }, function(res) {
         if (!res.success) {
-            checkbox.checked = !checkbox.checked; // 回滚
+            checkbox.checked = !checkbox.checked; // 失败回滚到原状态
             alert(res.message || '状态更新失败');
+            return;
+        }
+        // 立即同步行内徽章标签，保证标签状态及时更新（以服务器返回的实际状态为准）
+        var actualEnabled = (res.enabled !== undefined) ? parseInt(res.enabled) : value;
+        checkbox.checked = (actualEnabled === 1);
+        var row = checkbox.closest('tr');
+        if (row) {
+            var badge = row.querySelector('.js-badge-' + field);
+            if (badge) {
+                if (actualEnabled === 1) {
+                    badge.className = 'badge badge-success js-badge-' + field;
+                    badge.textContent = (field === 'enabled') ? '启用' : '已开启';
+                } else {
+                    badge.className = 'badge badge-secondary js-badge-' + field;
+                    badge.textContent = (field === 'enabled') ? '禁用' : '未开启';
+                }
+            }
         }
     });
 }

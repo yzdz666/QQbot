@@ -548,6 +548,10 @@ switch ($eventType) {
 $userId = defined('用户') ? 用户 : '';
 $targetId = defined('来源') ? 来源 : '';
 $sourceType = 消息来源;
+// 引用ID: 本条消息的引用索引(REFIDX_xxx), 官方 message_reference.message_id 规范取值
+// 取自 message_scene.ext 的 msg_idx (parseQuoteInfo 精确匹配, 不会被 ref_msg_idx= 子串干扰); 无 ext 时回退 d.id
+$qInfo = parseQuoteInfo($raw);
+define('引用ID', $qInfo['own_idx'] !== '' ? $qInfo['own_idx'] : (string)($d['id'] ?? ''));
 // 参照 index.php: 优先使用 author.username 作为昵称
 $nickname = $d['author']['username'] ?? ($d['username'] ?? '');
 if ($userId) recordUser($appid, $userId, $nickname);
@@ -574,14 +578,14 @@ if ($isBotMsg && $msgId) {
     if ($existing) {
         db()->execute(
             "UPDATE messages SET raw_data = ?, content = ?, content_type = ? WHERE id = ?",
-            [json_encode($raw, JSON_UNESCAPED_UNICODE), $logContent, $logContentType, $existing['id']]
+            [json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $logContent, $logContentType, $existing['id']]
         );
         // 跳过插件处理，直接返回
         exit(0);
     }
 }
 
-logMessage($appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE));
+logMessage($appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
 // 群聊消息: 自动获取群名称（参照官方文档 GET /v2/groups/{group_openid}/info）
 if (in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请'], true) && !empty($targetId)) {

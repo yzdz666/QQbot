@@ -12,10 +12,19 @@ if (!Auth::isInstalled()) {
     exit;
 }
 
+// 安全响应头
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: same-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+
 // 检查登录状态（登录页除外）
 $currentScript = basename($_SERVER['SCRIPT_NAME']);
+$csrfToken = '';
 if ($currentScript !== 'login.php') {
     Auth::requireAuth();
+    // 先生成 CSRF token 再关闭 session 写入
+    $csrfToken = Auth::csrfToken();
     // 认证完成后立即关闭session写入，释放session锁
     // 防止页面渲染期间阻塞AJAX请求（session文件锁竞争）
     // 注意: 关闭后 $_SESSION 仍可读取，但不能修改
@@ -43,15 +52,62 @@ try {
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title><?= isset($pageTitle) ? $pageTitle . ' - ' : '' ?>官鸡机器人管理</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
 <?php if ($currentScript !== 'login.php'): ?>
-<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">&#9776;</button>
+<script>
+window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
+(function () {
+  var token = window.ADMIN_CSRF;
+  if (!token) return;
+  function isApi(url) {
+    if (!url || typeof url !== 'string') return false;
+    try { url = new URL(url, location.href).pathname; } catch (e) {}
+    return /(^|\/)api(\.php|\/)/.test(url);
+  }
+  // fetch
+  var rawFetch = window.fetch;
+  if (rawFetch) {
+    window.fetch = function (input, init) {
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD' && isApi(url)) {
+          init = init || {};
+          var headers = new Headers(init.headers || (input && input.headers) || {});
+          if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', token);
+          init.headers = headers;
+        }
+      } catch (e) {}
+      return rawFetch.call(this, input, init);
+    };
+  }
+  // XMLHttpRequest
+  var rawOpen = XMLHttpRequest.prototype.open;
+  var rawSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.__csrfUrl = url;
+    this.__csrfMethod = String(method || 'GET').toUpperCase();
+    return rawOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function () {
+    try {
+      if (this.__csrfMethod !== 'GET' && this.__csrfMethod !== 'HEAD' && isApi(this.__csrfUrl) && !this.__csrfSet) {
+        this.setRequestHeader('X-CSRF-Token', token);
+        this.__csrfSet = true;
+      }
+    } catch (e) {}
+    return rawSend.apply(this, arguments);
+  };
+})();
+</script>
+<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" aria-label="菜单">&#9776;</button>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="layout">
   <div class="sidebar">
-    <a href="index.php" class="brand">官鸡机器人</a>
+    <a href="index.php" class="brand"><span class="brand-mark">Q</span><span>QQ机器人后台</span></a>
     <div class="nav-menu">
       <div class="nav-section">概览</div>
       <a href="index.php" class="nav-item <?= $currentPage === 'index.php' ? 'active' : '' ?>">
@@ -82,11 +138,23 @@ try {
         </span>
         插件管理
       </a>
+      <a href="market.php" class="nav-item <?= $currentPage === 'market.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 5.5L8 2L14 5.5V10.5L8 14L2 10.5V5.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 5.5L8 9L14 5.5M8 9V14" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </span>
+        插件市场
+      </a>
       <a href="chat.php" class="nav-item <?= $currentPage === 'chat.php' ? 'active' : '' ?>">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 3C1 2 2 1 3 1H13C14 1 15 2 15 3V9C15 10 14 11 13 11H5L2 14V11H3C2 11 1 10 1 9V3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="4" y1="5" x2="12" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="4" y1="8" x2="9" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
         聊天记录
+      </a>
+      <a href="group_members.php" class="nav-item <?= $currentPage === 'group_members.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M1.5 13C1.5 10.5 3.5 9 6 9C8.5 9 10.5 10.5 10.5 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M12 9.5C13.8 9.5 15 10.6 15 12.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="0.75" fill="currentColor"/></svg>
+        </span>
+        群成员管理
       </a>
       <a href="simulate.php" class="nav-item <?= $currentPage === 'simulate.php' ? 'active' : '' ?>">
         <span class="nav-icon">
@@ -126,6 +194,18 @@ try {
         用户与群组
       </a>
       <div class="nav-section">系统</div>
+      <a href="logs.php" class="nav-item <?= $currentPage === 'logs.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1.5H10L13 4.5V14.5H3V1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 1.5V4.5H13" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="5.5" y1="8" x2="10.5" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="5.5" y1="10.5" x2="10.5" y2="10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5.5" cy="5.5" r="0.75" fill="currentColor"/></svg>
+        </span>
+        操作记录
+      </a>
+      <a href="database.php" class="nav-item <?= $currentPage === 'database.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="3.5" rx="5.5" ry="2" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 3.5V12C2.5 13.1 5 14 8 14C11 14 13.5 13.1 13.5 12V3.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.75C2.5 8.85 5 9.75 8 9.75C11 9.75 13.5 8.85 13.5 7.75" stroke="currentColor" stroke-width="1.5"/></svg>
+        </span>
+        数据库管理
+      </a>
       <a href="settings.php" class="nav-item <?= $currentPage === 'settings.php' ? 'active' : '' ?>">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 5V2M8 14V11M11 8H14M2 8H5M10.5 5.5L12.5 3.5M3.5 12.5L5.5 10.5M10.5 10.5L12.5 12.5M3.5 3.5L5.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -146,4 +226,18 @@ try {
     </div>
   </div>
   <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="mobile-menu-btn" type="button" onclick="toggleSidebar()" aria-label="打开菜单">☰</button>
+        <div class="breadcrumb">
+          <span class="breadcrumb-root">QQ机器人后台</span>
+          <span class="breadcrumb-sep">/</span>
+          <strong><?= htmlspecialchars($pageTitle ?? '仪表盘') ?></strong>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-status"><i></i> 服务正常</span>
+        <div class="admin-menu"><span class="admin-avatar"><?= htmlspecialchars(mb_substr($admin['username'] ?? 'A', 0, 1, 'UTF-8')) ?></span><span><?= htmlspecialchars($admin['username'] ?? 'admin') ?></span><span class="admin-caret">⌄</span></div>
+      </div>
+    </header>
 <?php endif; ?>

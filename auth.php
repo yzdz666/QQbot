@@ -49,20 +49,28 @@ class Auth {
 
         if ($admin['username'] !== $username) {
             self::recordFailedAttempt($ip);
+            后台操作记录('登录失败', '用户名不匹配: ' . $username . ' IP: ' . $ip);
             return ['success' => false, 'message' => '用户名或密码错误'];
         }
 
         if (!passwordVerify($password, $admin['password'])) {
             self::recordFailedAttempt($ip);
+            后台操作记录('登录失败', '密码错误: ' . $username . ' IP: ' . $ip);
             return ['success' => false, 'message' => '用户名或密码错误'];
         }
 
-        // 登录成功
+        // 登录成功：轮换 Session ID，防止会话固定攻击
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
         self::clearFailedAttempts($ip);
         $token = self::createSession($ip);
+        $_SESSION['admin_username'] = $username;
+        后台操作记录('管理员登录', 'IP: ' . $ip);
 
-        // 如果密码是明文，自动升级为哈希
-        if (strpos($admin['password'], 'sha256:') !== 0) {
+        // 旧版 sha256 / 明文密码自动升级为 bcrypt
+        $storedPassword = (string)$admin['password'];
+        if ($storedPassword === '' || $storedPassword[0] !== '$' || password_needs_rehash($storedPassword, PASSWORD_DEFAULT)) {
             db()->execute("UPDATE admin SET password = ? WHERE id = ?", [passwordHash($password), $admin['id']]);
         }
 
@@ -132,14 +140,11 @@ class Auth {
                 return trim($m[1]);
             }
         }
-        // 从Cookie获取
+        // 从Cookie获取（HttpOnly）
         if (isset($_COOKIE['admin_token'])) {
             return $_COOKIE['admin_token'];
         }
-        // 从GET参数获取
-        if (isset($_GET['token'])) {
-            return $_GET['token'];
-        }
+        // 安全说明：不再接受 ?token= 形式，避免 token 通过 Referer / 访问日志 / 截图泄露
         return null;
     }
 
@@ -150,6 +155,7 @@ class Auth {
         if ($token) {
             db()->execute("DELETE FROM sessions WHERE token = ?", [$token]);
         }
+        后台操作记录('管理员登出', 'IP: ' . getClientIp());
         unset($_SESSION['admin_token']);
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_destroy();
@@ -158,12 +164,42 @@ class Auth {
         return true;
     }
 
-    // 修改密码
-    public static function changePassword($username, $newPassword) {
-        if (strlen($newPassword) < 6) {
-            return ['success' => false, 'message' => '密码长度至少6位'];
+    // 当前登录管理员用户名（用于操作记录）
+    public static function currentUsername() {
+        $username = isset($_SESSION['admin_username']) ? $_SESSION['admin_username'] : '';
+        if ($username === '') {
+            $admin = db()->fetch("SELECT username FROM admin LIMIT 1");
+            $username = $admin ? $admin['username'] : '';
         }
-        db()->execute("UPDATE admin SET username = ?, password = ?", [$username, passwordHash($newPassword)]);
+        return $username;
+    }
+
+    // 修改密码（必须校验当前密码，防止会话被劫持后直接改密）
+    public static function changePassword($username, $newPassword, $currentPassword = '') {
+        if (!is_string($newPassword) || strlen($newPassword) < 8) {
+            return ['success' => false, 'message' => '新密码长度至少8位'];
+        }
+        if (!preg_match('/[A-Za-z]/', $newPassword) || !preg_match('/\d/', $newPassword)) {
+            return ['success' => false, 'message' => '新密码需同时包含字母和数字'];
+        }
+        if ((string)$currentPassword === '') {
+            return ['success' => false, 'message' => '请输入当前密码'];
+        }
+        $admin = db()->fetch("SELECT * FROM admin LIMIT 1");
+        if (!$admin || !passwordVerify($currentPassword, $admin['password'])) {
+            后台操作记录('修改密码失败', '当前密码校验失败');
+            return ['success' => false, 'message' => '当前密码不正确'];
+        }
+        $username = trim((string)$username);
+        if ($username === '') {
+            return ['success' => false, 'message' => '用户名不能为空'];
+        }
+        if ($username === $admin['username'] && $newPassword === $currentPassword) {
+            return ['success' => false, 'message' => '新密码不能与当前密码相同'];
+        }
+        db()->execute("UPDATE admin SET username = ?, password = ? WHERE id = ?",
+            [$username, passwordHash($newPassword), $admin['id']]);
+        后台操作记录('修改管理员密码', '用户名: ' . $username);
         // 清除所有会话
         db()->execute("DELETE FROM sessions");
         unset($_SESSION['admin_token']);
@@ -215,6 +251,57 @@ class Auth {
         db()->execute("DELETE FROM admin");
         db()->execute("INSERT INTO admin (username, password) VALUES (?, ?)", [$username, passwordHash($password)]);
         return true;
+    }
+
+    // ==================== CSRF / 同源防护 ====================
+
+    /** 获取（或生成）当前会话的 CSRF token */
+    public static function csrfToken() {
+        self::init();
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+
+    /** 校验 CSRF token（POST/PUT/DELETE 必需） */
+    public static function verifyCsrf() {
+        self::init();
+        $expected = $_SESSION['csrf_token'] ?? '';
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '');
+        if ($expected === '' || !is_string($token) || !hash_equals($expected, $token)) {
+            json_response(['success' => false, 'message' => 'CSRF 校验失败，请刷新页面后重试'], 403);
+        }
+    }
+
+    /**
+     * 同源校验：拦截跨站表单/AJAX（补充 SameSite，兼容旧浏览器与子域场景）
+     * 允许无 Origin/Referer 的服务端调用（如 CLI、自建脚本）。
+     */
+    public static function requireSameOrigin() {
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) return;
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+        $referer = $_SERVER['HTTP_REFERER'] ?? '';
+        $source = $origin !== '' ? $origin : $referer;
+        if ($source === '') return;
+        $sourceHost = parse_url($source, PHP_URL_HOST);
+        if ($sourceHost && strcasecmp($sourceHost, explode(':', $host)[0]) !== 0) {
+            json_response(['success' => false, 'message' => '非法来源请求'], 403);
+        }
+    }
+
+    /**
+     * 写操作防护：同源校验 + CSRF 令牌校验
+     * 前端由 admin/header.php 注入的脚本自动为 fetch / XHR 附加 X-CSRF-Token。
+     */
+    public static function requireWriteProtection() {
+        self::requireSameOrigin();
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            self::verifyCsrf();
+        }
     }
 
     // 要求登录（用于API和页面保护）

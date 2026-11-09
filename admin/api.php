@@ -33,6 +33,11 @@ register_shutdown_function(function() {
 require_once(__DIR__ . '/../function.php');
 require_once(__DIR__ . '/../auth.php');
 
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireSameOrigin();
+// 代发网关函数 (relay_auth_get/reset/toggle 需要; relay.php 被 include 时仅定义函数不执行入口)
+require_once(__DIR__ . '/../relay.php');
+
 // 检查安装
 if (!Auth::isInstalled()) {
     json_response(['success' => false, 'message' => '系统未安装'], 503);
@@ -53,6 +58,11 @@ if (!Auth::check()) {
     json_response(['success' => false, 'message' => '未登录或会话已过期'], 401);
 }
 
+// CSRF 校验：登录后的写操作必须携带令牌（前端由 header.php 自动附加）
+if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+    Auth::verifyCsrf();
+}
+
 switch ($action) {
     // ==================== 机器人管理 ====================
     case 'bot_add':
@@ -63,6 +73,7 @@ switch ($action) {
             json_response(['success' => false, 'message' => 'AppID和Secret不能为空']);
         }
         addBot($appid, $secret, $env);
+        后台操作记录('添加机器人', $appid . ' (' . $env . ')');
         json_response(['success' => true, 'message' => '机器人添加成功']);
         break;
 
@@ -76,6 +87,7 @@ switch ($action) {
             json_response(['success' => false, 'message' => 'AppID不能为空']);
         }
         updateBot($appid, $data);
+        后台操作记录('更新机器人', $appid . ' 字段: ' . implode(',', array_keys($data)), $appid);
         json_response(['success' => true, 'message' => '更新成功']);
         break;
 
@@ -85,6 +97,7 @@ switch ($action) {
             json_response(['success' => false, 'message' => 'AppID不能为空']);
         }
         deleteBot($appid);
+        后台操作记录('删除机器人', $appid, $appid);
         json_response(['success' => true, 'message' => '已删除']);
         break;
 
@@ -92,12 +105,25 @@ switch ($action) {
         $appid = $_POST['appid'] ?? '';
         $field = $_POST['field'] ?? 'enabled';
         $value = intval($_POST['value'] ?? 0);
+        // 字段白名单：防止任意字段被修改
+        if (!in_array($field, ['enabled', 'ws_enabled'], true)) {
+            json_response(['success' => false, 'message' => '不支持的状态字段: ' . htmlspecialchars($field)]);
+        }
+        $value = $value ? 1 : 0;
         $bot = getBot($appid);
         if (!$bot) {
             json_response(['success' => false, 'message' => '机器人不存在']);
         }
         updateBot($appid, [$field => $value]);
-        json_response(['success' => true, 'message' => '状态已更新']);
+        后台操作记录($field === 'enabled' ? ($value ? '启用机器人' : '停用机器人') : ($value ? '开启WS' : '关闭WS'), $appid, $appid);
+        // 返回实际写入后的状态，供前端同步徽章标签显示
+        $updatedBot = getBot($appid);
+        json_response([
+            'success' => true,
+            'message' => '状态已更新',
+            'field' => $field,
+            'enabled' => isset($updatedBot[$field]) ? intval($updatedBot[$field]) : $value
+        ]);
         break;
 
     // ==================== 获取机器人信息（头像、昵称） ====================
@@ -177,6 +203,7 @@ switch ($action) {
         if (isset($data['code']) && $data['code'] != 0) {
             json_response(['success' => false, 'message' => $data['message'] ?? '创建失败', 'raw' => $resp]);
         }
+        后台操作记录('创建指令面板', $appid, $appid);
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
@@ -208,6 +235,7 @@ switch ($action) {
         if (isset($data['code']) && $data['code'] != 0) {
             json_response(['success' => false, 'message' => $data['message'] ?? '修改失败', 'raw' => $resp]);
         }
+        后台操作记录('修改指令面板', $appid, $appid);
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
@@ -261,6 +289,7 @@ switch ($action) {
         if (isset($data['code']) && $data['code'] != 0) {
             json_response(['success' => false, 'message' => $data['message'] ?? '删除失败', 'raw' => $resp]);
         }
+        后台操作记录('删除指令面板', ($panelId ?: '') . ' ' . $appid, $appid);
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
@@ -317,6 +346,7 @@ switch ($action) {
         if (isset($data['code']) && $data['code'] != 0) {
             json_response(['success' => false, 'message' => $data['message'] ?? '设置失败', 'raw' => $resp]);
         }
+        后台操作记录('保存自定义菜单', $appid, $appid);
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
@@ -342,13 +372,14 @@ switch ($action) {
         if (isset($data['code']) && $data['code'] != 0) {
             json_response(['success' => false, 'message' => $data['message'] ?? '删除失败', 'raw' => $resp]);
         }
+        后台操作记录('删除自定义菜单', $appid, $appid);
         json_response(['success' => true, 'data' => $data, 'raw' => $resp]);
         break;
 
     // ==================== 插件管理 ====================
     case 'plugin_toggle':
         $appid = $_POST['appid'] ?? '';
-        $pluginName = $_POST['plugin_name'] ?? '';
+        $pluginName = 插件规范名($_POST['plugin_name'] ?? '');
         $enabled = intval($_POST['enabled'] ?? 0);
         if (empty($appid) || empty($pluginName)) {
             json_response(['success' => false, 'message' => '参数缺失']);
@@ -382,6 +413,7 @@ switch ($action) {
                 ]);
             }
 
+            后台操作记录($enabled === 1 ? '插件启用' : '插件禁用', $pluginName, $appid);
             json_response([
                 'success' => true,
                 'message' => '插件状态已更新',
@@ -412,6 +444,7 @@ switch ($action) {
         if (file_put_contents($file, $template) === false) {
             json_response(['success' => false, 'message' => '创建失败，请检查权限']);
         }
+        后台操作记录('插件创建', $pluginName);
         json_response(['success' => true, 'message' => '插件创建成功']);
         break;
 
@@ -419,45 +452,122 @@ switch ($action) {
         if (!isset($_FILES['plugin_file']) || $_FILES['plugin_file']['error'] !== UPLOAD_ERR_OK) {
             json_response(['success' => false, 'message' => '请选择文件']);
         }
-        $filename = $_FILES['plugin_file']['name'];
+        if ((int)$_FILES['plugin_file']['size'] > 2097152) {
+            json_response(['success' => false, 'message' => '插件文件不能超过 2MB']);
+        }
+        // 浏览器上传的原始文件名可能是 GBK（历史环境），先规范化为 UTF-8
+        $filename = 插件规范名($_FILES['plugin_file']['name']);
+        $filename = str_replace(['/', '\\'], '', $filename);
         if (!preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+\.php$/u', $filename)) {
-            json_response(['success' => false, 'message' => '文件名只允许字母、数字、横杠、下划线和中文']);
+            json_response(['success' => false, 'message' => '文件名只允许字母、数字、横杠、下划线和中文，且必须为 .php']);
+        }
+        // 双扩展名/空字节等异常文件名拦截
+        if (substr_count(strtolower($filename), '.php') !== 1 || strpos($filename, "\0") !== false) {
+            json_response(['success' => false, 'message' => '非法文件名']);
         }
         $pluginDir = __DIR__ . '/../plugin/';
         if (!is_dir($pluginDir)) {
-            mkdir($pluginDir, 0777, true);
+            mkdir($pluginDir, 0755, true);
         }
         $dest = $pluginDir . $filename;
+        $uploaded = (string)file_get_contents($_FILES['plugin_file']['tmp_name']);
+        $scan = 插件安全扫描($uploaded);
+        if ($scan['status'] === 'block') {
+            json_response([
+                'success' => false,
+                'message' => '插件包含高危代码，已拒绝上传：' . $scan['summary'],
+                'scan' => $scan,
+            ]);
+        }
         if (move_uploaded_file($_FILES['plugin_file']['tmp_name'], $dest)) {
-            json_response(['success' => true, 'message' => '插件上传成功']);
+            @chmod($dest, 0644);
+            后台操作记录('插件上传', $filename . ' 扫描:' . $scan['status']);
+            json_response([
+                'success' => true,
+                'message' => '插件上传成功' . ($scan['status'] === 'warn' ? '（扫描有提醒，请查看源码确认）' : ''),
+                'scan' => $scan,
+            ]);
         } else {
             json_response(['success' => false, 'message' => '上传失败']);
         }
         break;
 
+    case 'plugin_rename':
+        $oldName = 插件规范名(trim($_POST['old_name'] ?? ''));
+        $newName = trim($_POST['new_name'] ?? '');
+        if ($oldName === '' || $newName === '') {
+            json_response(['success' => false, 'message' => '原插件名和新名称不能为空']);
+        }
+        if (!preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+$/u', $newName)) {
+            json_response(['success' => false, 'message' => '新名称只允许字母、数字、下划线、横杠和中文']);
+        }
+        if ($oldName === $newName) {
+            json_response(['success' => false, 'message' => '新名称与原名称相同']);
+        }
+        // 由规范名定位真实文件(兼容 GBK 等历史文件名)
+        $oldFile = 插件真实文件($oldName);
+        if ($oldFile === null || !is_file($oldFile)) {
+            json_response(['success' => false, 'message' => '原插件文件不存在']);
+        }
+        $newFile = __DIR__ . '/../plugin/' . $newName . '.php';
+        if (file_exists($newFile)) {
+            json_response(['success' => false, 'message' => '目标文件名已存在: ' . $newName . '.php']);
+        }
+        if (!@rename($oldFile, $newFile)) {
+            json_response(['success' => false, 'message' => '重命名失败，请检查 plugin 目录写权限']);
+        }
+        // 同步所有机器人的插件启用状态（旧名 → 新名；含历史 GBK 字节记录按规范名比对）
+        try {
+            db()->execute(
+                "UPDATE plugin_status SET plugin_name = ? WHERE plugin_name = ?",
+                [$newName, $oldName]
+            );
+            $stale = db()->fetchAll("SELECT id, plugin_name FROM plugin_status");
+            foreach ($stale as $row) {
+                if ($row['plugin_name'] !== $newName && 插件规范名($row['plugin_name']) === $oldName) {
+                    db()->execute(
+                        "UPDATE plugin_status SET plugin_name = ? WHERE id = ?",
+                        [$newName, $row['id']]
+                    );
+                }
+            }
+        } catch (Exception $e) {}
+        后台操作记录('插件重命名', $oldName . ' → ' . $newName);
+        json_response(['success' => true, 'message' => '插件已重命名为 ' . $newName]);
+        break;
+
     case 'plugin_delete':
-        $pluginName = $_POST['plugin_name'] ?? '';
-        if (!preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+$/u', $pluginName)) {
+        $pluginName = 插件名过滤($_POST['plugin_name'] ?? '');
+        if ($pluginName === false) {
             json_response(['success' => false, 'message' => '无效的插件名']);
         }
-        $file = __DIR__ . '/../plugin/' . $pluginName . '.php';
-        if (file_exists($file)) {
-            unlink($file);
-            // 同时删除所有bot的插件状态
-            db()->execute("DELETE FROM plugin_status WHERE plugin_name = ?", [$pluginName]);
-            json_response(['success' => true, 'message' => '插件已删除']);
-        } else {
-            json_response(['success' => false, 'message' => '插件文件不存在']);
+        // 由规范名定位真实文件(兼容 GBK 等历史文件名)
+        $file = 插件真实文件($pluginName);
+        if ($file !== null) {
+            @unlink($file);
         }
+        // 同时删除所有 bot 的该插件状态(含历史 GBK 字节记录: 按规范名比对清理)
+        try {
+            db()->execute("DELETE FROM plugin_status WHERE plugin_name = ?", [$pluginName]);
+            $stale = db()->fetchAll("SELECT id, plugin_name FROM plugin_status");
+            foreach ($stale as $row) {
+                if (插件规范名($row['plugin_name']) === $pluginName) {
+                    db()->execute("DELETE FROM plugin_status WHERE id = ?", [$row['id']]);
+                }
+            }
+        } catch (Exception $e) {}
+        后台操作记录('插件删除', $pluginName);
+        json_response(['success' => true, 'message' => '插件已删除']);
         break;
 
     case 'plugin_read':
-        $pluginName = $_POST['plugin_name'] ?? $_GET['plugin_name'] ?? '';
+        $pluginName = 插件规范名($_POST['plugin_name'] ?? $_GET['plugin_name'] ?? '');
         if (!preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+$/u', $pluginName)) {
             json_response(['success' => false, 'message' => '无效的插件名']);
         }
-        $file = __DIR__ . '/../plugin/' . $pluginName . '.php';
-        if (!file_exists($file)) {
+        // 由规范名定位真实文件，兼容 GBK 等历史文件名（此前直接拼 UTF-8 路径会读不到）
+        $file = 插件真实文件($pluginName);
+        if ($file === null || !is_file($file)) {
             json_response(['success' => false, 'message' => '插件文件不存在']);
         }
         $content = file_get_contents($file);
@@ -468,7 +578,7 @@ switch ($action) {
         break;
 
     case 'plugin_write':
-        $pluginName = $_POST['plugin_name'] ?? '';
+        $pluginName = 插件规范名($_POST['plugin_name'] ?? '');
         $content = $_POST['content'] ?? '';
         if (!preg_match('/^[\w\-\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}]+$/u', $pluginName)) {
             json_response(['success' => false, 'message' => '无效的插件名']);
@@ -484,12 +594,15 @@ switch ($action) {
         }
         $pluginDir = __DIR__ . '/../plugin/';
         if (!is_dir($pluginDir)) {
-            mkdir($pluginDir, 0777, true);
+            mkdir($pluginDir, 0755, true);
         }
-        $file = $pluginDir . $pluginName . '.php';
+        // 已存在同规范名文件（可能是 GBK 文件名）时写回原文件，避免产生重复插件
+        $existing = 插件真实文件($pluginName);
+        $file = $existing !== null ? $existing : ($pluginDir . $pluginName . '.php');
         if (file_put_contents($file, $content) === false) {
             json_response(['success' => false, 'message' => '写入失败，请检查权限']);
         }
+        @chmod($file, 0644);
         json_response(['success' => true, 'message' => '保存成功']);
         break;
 
@@ -497,10 +610,11 @@ switch ($action) {
     case 'change_password':
         $username = trim($_POST['username'] ?? '');
         $newPassword = $_POST['new_password'] ?? '';
-        if (empty($username) || strlen($newPassword) < 6) {
-            json_response(['success' => false, 'message' => '用户名不能为空且密码至少6位']);
+        $currentPassword = $_POST['current_password'] ?? '';
+        if (empty($username) || strlen($newPassword) < 8) {
+            json_response(['success' => false, 'message' => '用户名不能为空且新密码至少8位']);
         }
-        $result = Auth::changePassword($username, $newPassword);
+        $result = Auth::changePassword($username, $newPassword, $currentPassword);
         json_response($result);
         break;
 
@@ -510,6 +624,7 @@ switch ($action) {
         $model = trim($_POST['model'] ?? 'gpt-4o-mini');
         db()->execute("UPDATE ai_config SET base_url = ?, api_key = ?, model = ? WHERE id = 1",
             [$baseUrl, $apiKey, $model]);
+        后台操作记录('保存AI配置', $baseUrl);
         json_response(['success' => true, 'message' => 'AI配置已保存']);
         break;
 
@@ -520,7 +635,37 @@ switch ($action) {
             json_response(['success' => false, 'message' => '键名不能为空']);
         }
         db()->setSetting($key, $value);
+        后台操作记录('保存设置', $key . ' = ' . $value);
         json_response(['success' => true, 'message' => '设置已保存']);
+        break;
+
+    // ==================== 代发网关鉴权 (relay.php) ====================
+    case 'relay_auth_get':
+        // 查看代发签名密钥与开关状态 (密钥用于外部脚本计算 HMAC-SHA256 签名)
+        json_response([
+            'success' => true,
+            'enabled' => relay_auth_enabled(),
+            'secret' => relay_get_secret(),
+            'ts_window' => RELAY_TS_WINDOW,
+            'sign_algo' => 'HMAC-SHA256("{timestamp}\\n{nonce}\\n{body}", relay_secret)',
+        ]);
+        break;
+
+    case 'relay_auth_reset':
+        // 重置签名密钥 (旧密钥立即失效, 需同步更新所有调用方)
+        db()->setSetting('relay_secret', bin2hex(random_bytes(32)));
+        wlog('{"relay_info":"代发签名密钥已由管理员重置"}', null);
+        后台操作记录('重置代发鉴权密钥', '');
+        json_response(['success' => true, 'message' => '密钥已重置', 'secret' => relay_get_secret()]);
+        break;
+
+    case 'relay_auth_toggle':
+        // 开启/关闭代发鉴权 (关闭后任何人可调用代发入口, 仅建议内网使用)
+        $enable = ($_POST['enable'] ?? '1') === '1';
+        db()->setSetting('relay_auth_enabled', $enable ? '1' : '0');
+        wlog('{"relay_info":"代发鉴权已' . ($enable ? '开启' : '关闭') . '"}', null);
+        后台操作记录('代发鉴权' . ($enable ? '开启' : '关闭'), '');
+        json_response(['success' => true, 'message' => '代发鉴权已' . ($enable ? '开启' : '关闭'), 'enabled' => $enable]);
         break;
 
     // ==================== 消息 ====================
@@ -561,6 +706,7 @@ switch ($action) {
         } else {
             db()->execute("DELETE FROM messages WHERE appid = ?", [$appid]);
         }
+        后台操作记录('清空消息记录', $appid !== '' ? $appid : '全部机器人', $appid);
         json_response(['success' => true, 'message' => '消息已清空']);
         break;
 
@@ -571,7 +717,177 @@ switch ($action) {
         } else {
             db()->execute("DELETE FROM system_logs WHERE appid = ?", [$appid]);
         }
+        后台操作记录('清空系统日志', $appid !== '' ? $appid : '全部机器人', $appid);
         json_response(['success' => true, 'message' => '日志已清空']);
+        break;
+
+    // ==================== 操作记录（后台操作可视化） ====================
+    case 'oplog_list':
+        $page    = max(1, intval($_POST['page'] ?? $_GET['page'] ?? 1));
+        $size    = min(200, max(10, intval($_POST['size'] ?? $_GET['size'] ?? 30)));
+        $kw      = trim($_POST['kw'] ?? $_GET['kw'] ?? '');
+        $logType = trim($_POST['log_type'] ?? $_GET['log_type'] ?? '');
+        $appid   = trim($_POST['appid'] ?? $_GET['appid'] ?? '');
+
+        $where = [];
+        $params = [];
+        // 仅展示后台操作类日志（系统/运行日志走消息日志页），log_type 模糊兼容历史扩展
+        $where[] = "(log_type = '后台操作' OR content LIKE '[%]')";
+        if ($kw !== '') {
+            $where[] = "(content LIKE ? OR appid LIKE ?)";
+            $params[] = '%' . $kw . '%';
+            $params[] = '%' . $kw . '%';
+        }
+        if ($appid !== '') {
+            $where[] = "appid = ?";
+            $params[] = $appid;
+        }
+        $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+
+        try {
+            $total = (int) db()->fetchColumn("SELECT COUNT(*) FROM system_logs" . $whereSql, $params);
+            $rows = db()->fetchAll(
+                "SELECT id, appid, log_type, content, level, created_at
+                 FROM system_logs" . $whereSql . "
+                 ORDER BY id DESC LIMIT ? OFFSET ?",
+                array_merge($params, [$size, ($page - 1) * $size])
+            );
+            // 解析 content "[操作](用户) 详情" 结构
+            $items = [];
+            foreach ($rows as $r) {
+                $op = $r['content']; $user = ''; $detail = '';
+                if (preg_match('/^\[([^\]]+)\](?:\(([^)]*)\))?(.*)$/us', (string)$r['content'], $m)) {
+                    $op = $m[1];
+                    $user = $m[2] ?? '';
+                    $detail = trim($m[3] ?? '');
+                }
+                $items[] = [
+                    'id' => (int)$r['id'],
+                    'time' => $r['created_at'],
+                    'op' => $op,
+                    'user' => $user,
+                    'detail' => $detail,
+                    'appid' => $r['appid'],
+                    'raw' => $r['content'],
+                ];
+            }
+            json_response([
+                'success' => true,
+                'items' => $items,
+                'total' => $total,
+                'page' => $page,
+                'size' => $size,
+                'pages' => max(1, (int)ceil($total / $size)),
+            ]);
+        } catch (Exception $e) {
+            json_response(['success' => false, 'message' => '查询失败: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'oplog_clear':
+        // scope: all=清空全部后台操作记录 / 7d / 30d / 90d = 清理指定天数之前的记录
+        $scope = trim($_POST['scope'] ?? 'all');
+        switch ($scope) {
+            case '7d':  $days = 7;  break;
+            case '30d': $days = 30; break;
+            case '90d': $days = 90; break;
+            case 'all': $days = 0;  break;
+            default:
+                json_response(['success' => false, 'message' => '无效的清理范围']);
+        }
+        try {
+            if ($days > 0) {
+                $cutoff = date('Y-m-d H:i:s', time() - $days * 86400);
+                $count = (int) db()->fetchColumn(
+                    "SELECT COUNT(*) FROM system_logs WHERE (log_type = '后台操作' OR content LIKE '[%]') AND created_at < ?",
+                    [$cutoff]
+                );
+                db()->execute(
+                    "DELETE FROM system_logs WHERE (log_type = '后台操作' OR content LIKE '[%]') AND created_at < ?",
+                    [$cutoff]
+                );
+            } else {
+                $count = (int) db()->fetchColumn(
+                    "SELECT COUNT(*) FROM system_logs WHERE (log_type = '后台操作' OR content LIKE '[%]')"
+                );
+                db()->execute(
+                    "DELETE FROM system_logs WHERE (log_type = '后台操作' OR content LIKE '[%]')"
+                );
+            }
+            json_response(['success' => true, 'message' => "已清理 {$count} 条操作记录", 'count' => $count]);
+        } catch (Exception $e) {
+            json_response(['success' => false, 'message' => '清理失败: ' . $e->getMessage()]);
+        }
+        break;
+
+    // ==================== 数据库管理（分表清理 / VACUUM 回收空间） ====================
+    case 'db_clear':
+        // 白名单：仅允许清理运行数据表，防止误删配置；days>0 表示仅清理该天数之前的数据（仅限带时间列的表）
+        $allow = [
+            'messages'      => 'created_at',
+            'system_logs'   => 'created_at',
+            'event_dedup'   => null,
+            'ip_records'    => 'created_at',
+            'statistics'    => null,
+            'users'         => null,
+            'group_remarks' => null,
+        ];
+        $table = trim($_POST['table'] ?? '');
+        $days  = intval($_POST['days'] ?? 0);
+        // 注意: 白名单中部分表值为 null，isset() 对 null 键返回 false，必须用 array_key_exists
+        if (!array_key_exists($table, $allow)) {
+            json_response(['success' => false, 'message' => '不允许清理该表']);
+        }
+        if ($days !== 0 && $days !== 30 && $days !== 90) {
+            json_response(['success' => false, 'message' => '无效的清理范围']);
+        }
+        try {
+            $timeCol = $allow[$table];
+            if ($days > 0 && $timeCol !== null) {
+                $cutoff = date('Y-m-d H:i:s', time() - $days * 86400);
+                $count = (int) db()->fetchColumn("SELECT COUNT(*) FROM \"{$table}\" WHERE \"{$timeCol}\" < ?", [$cutoff]);
+                db()->execute("DELETE FROM \"{$table}\" WHERE \"{$timeCol}\" < ?", [$cutoff]);
+                后台操作记录('清理数据库', "表 {$table} 清理 {$days} 天前数据，删除 {$count} 行");
+                json_response(['success' => true, 'message' => "已清理 {$table} 表 {$count} 行数据（{$days} 天前）", 'count' => $count]);
+            } else {
+                $count = (int) db()->fetchColumn("SELECT COUNT(*) FROM \"{$table}\"");
+                db()->execute("DELETE FROM \"{$table}\"");
+                后台操作记录('清理数据库', "清空表 {$table}，删除 {$count} 行");
+                json_response(['success' => true, 'message' => "已清空 {$table} 表 {$count} 行数据", 'count' => $count]);
+            }
+        } catch (Exception $e) {
+            json_response(['success' => false, 'message' => '清理失败: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'db_vacuum':
+        // 重建数据库文件，回收全部空闲页（历史删除导致的体积膨胀）
+        try {
+            @set_time_limit(300);
+            $dbFile = '';
+            foreach (db()->fetchAll('PRAGMA database_list') as $r) {
+                if ($r['name'] === 'main') { $dbFile = $r['file']; break; }
+            }
+            if ($dbFile === '') {
+                json_response(['success' => false, 'message' => '无法定位数据库文件']);
+            }
+            clearstatcache(true, $dbFile);
+            $before = @filesize($dbFile) ?: 0;
+            $pdo = db()->getPdo();
+            // 先 checkpoint 并截断 WAL，再 VACUUM
+            try { $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (Exception $e) {}
+            $pdo->exec('VACUUM');
+            clearstatcache(true, $dbFile);
+            $after = @filesize($dbFile) ?: 0;
+            $msg = 'VACUUM 完成：' . round($before / 1048576, 1) . ' MB → ' . round($after / 1048576, 1) . ' MB';
+            if ($after < $before) {
+                $msg .= '（回收 ' . round(($before - $after) / 1048576, 1) . ' MB）';
+            }
+            后台操作记录('数据库VACUUM', $msg);
+            json_response(['success' => true, 'message' => $msg, 'before' => $before, 'after' => $after]);
+        } catch (Exception $e) {
+            json_response(['success' => false, 'message' => 'VACUUM 失败: ' . $e->getMessage() . '（若提示 database is locked，请先在机器人管理页停止 WS 服务或稍后重试）']);
+        }
         break;
 
     case 'log_count':
@@ -590,6 +906,7 @@ switch ($action) {
 
     case 'clear_events':
         db()->execute("DELETE FROM event_dedup");
+        后台操作记录('清空事件去重记录', '');
         json_response(['success' => true, 'message' => '事件记录已清空']);
         break;
 
@@ -599,16 +916,18 @@ switch ($action) {
             json_response(['success' => false, 'message' => 'IP不能为空']);
         }
         Auth::unbanIp($ip);
+        后台操作记录('解封IP', $ip);
         json_response(['success' => true, 'message' => 'IP已解封']);
         break;
 
     // ==================== 导出 ====================
     case 'export_config':
+        // 安全加固：不再导出管理员密码哈希（旧版会把 sha256 哈希写入导出文件）
         $config = ['admin' => '', 'password' => ''];
-        $admin = db()->fetch("SELECT * FROM admin LIMIT 1");
+        $admin = db()->fetch("SELECT username FROM admin LIMIT 1");
         if ($admin) {
             $config['admin'] = $admin['username'];
-            $config['password'] = $admin['password'];
+            $config['password'] = '';
         }
 
         $bots = getBots();
@@ -655,7 +974,9 @@ switch ($action) {
             json_response(['success' => false, 'message' => '机器人不存在']);
         }
 
-        // 设置上下文
+        // [bugfix] 原版缺失 bot.php 加载, 导致文字()未定义 Fatal Error, 后台"测试发送"必然失败
+        // 注意: 必须先定义上下文常量再加载 bot.php —— bot.php 顶部会将未定义的常量兜底 define 为空串,
+        //       若先加载 bot.php, 消息来源='' 会让 文字() 的 switch 无匹配而返回 null
         if (!defined('appid')) define('appid', $bot['appid']);
         if (!defined('secret')) define('secret', $bot['secret']);
         if (!defined('type')) define('type', $bot['env']);
@@ -663,11 +984,14 @@ switch ($action) {
         if (!defined('来源')) define('来源', $targetId);
         if (!defined('消息ID')) define('消息ID', '');
         if (!defined('事件ID')) define('事件ID', '');
+        require_once(__DIR__ . '/../bot.php');
 
         $resp = 文字($message);
-        $data = json_decode($resp, true);
+        // 加固: 文字() 在上下文异常时可能返回 null, json_decode(null) 在 PHP8 会触发 deprecation
+        $data = is_string($resp) ? json_decode($resp, true) : null;
 
         if (isset($data['id']) || (isset($data['code']) && $data['code'] == 0)) {
+            后台操作记录('测试发送', $appid . ' ' . ($_POST['type'] ?? ''), $appid);
             json_response(['success' => true, 'message' => '发送成功', 'response' => $data]);
         } else {
             json_response(['success' => false, 'message' => '发送失败: ' . ($data['message'] ?? '未知错误'), 'response' => $data]);
@@ -806,6 +1130,7 @@ switch ($action) {
             }
         }
 
+        后台操作记录('导入历史日志', "成功 {$imported} 条, 失败 {$errors} 条");
         json_response(['success' => true, 'message' => "导入完成：成功 {$imported} 条" . ($errors > 0 ? "，失败 {$errors} 条" : ''), 'imported' => $imported, 'errors' => $errors]);
         break;
 
@@ -824,11 +1149,10 @@ switch ($action) {
             }
         }
 
-        // 确保日志目录存在
+        // 确保日志目录存在且尽量可写（修复 www/root 属主不一致问题）
         $logDir = $wsRoot . '/data/logs/';
-        if (!is_dir($logDir)) {
-            @mkdir($logDir, 0777, true);
-        }
+        ensureWritableDir($logDir);
+        ensureWritableDir($wsRoot . '/data');
 
         // 检查是否有启用了 WS 的机器人
         $bots = getBots();
@@ -850,11 +1174,11 @@ switch ($action) {
 
             if (!$result['success']) {
                 // 直接启动失败，降级到标志文件方案
-                file_put_contents($startFlag, date('Y-m-d H:i:s'));
+                $flagWrite = writeFileSafe($startFlag, date('Y-m-d H:i:s'));
                 json_response([
-                    'success' => true,
-                    'message' => '已提交启动请求，守护进程将通过定时任务在1分钟内启动',
-                    'mode' => 'cron',
+                    'success' => false,
+                    'message' => '直接启动失败: ' . $result['error']
+                               . ($flagWrite['success'] ? '' : '；' . $flagWrite['message']),
                 ]);
             }
 
@@ -881,6 +1205,7 @@ switch ($action) {
                 }
             }
 
+            后台操作记录('启动WS守护进程', 'PID:' . $newPid);
             json_response([
                 'success' => true,
                 'message' => 'WebSocket 守护进程已启动' . ($newPid > 0 ? ' (PID:' . $newPid . ')' : ''),
@@ -889,8 +1214,12 @@ switch ($action) {
             ]);
         } else {
             // 服务器禁用了所有进程管理函数 → 使用标志文件 + 定时任务方案
-            file_put_contents($startFlag, date('Y-m-d H:i:s'));
-            
+            $flagWrite = writeFileSafe($startFlag, date('Y-m-d H:i:s'));
+            if (!$flagWrite['success']) {
+                json_response(['success' => false, 'message' => '写入启动标志失败: ' . $flagWrite['message']]);
+            }
+
+            后台操作记录('启动WS守护进程', 'cron模式');
             json_response([
                 'success' => true,
                 'message' => '已提交启动请求，守护进程将通过定时任务在1分钟内自动启动。请确保已配置 cron 定时任务：* * * * * /bin/bash ' . $wsRoot . '/ws_monitor.sh',
@@ -907,21 +1236,25 @@ switch ($action) {
 
         if (!file_exists($pidFile)) {
             // 写入停止标志，防止定时任务自动重启
-            file_put_contents($stopFlag, date('Y-m-d H:i:s'));
+            $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
             @unlink($wsRoot . '/data/ws_autostart.flag');
-            json_response(['success' => true, 'message' => '守护进程未运行，已清除自动启动']);
+            json_response(['success' => true, 'message' => '守护进程未运行，已清除自动启动'
+                . ($flagWrite['success'] ? '' : '（停止标志写入失败: ' . $flagWrite['message'] . '）')]);
         }
 
         $pid = intval(file_get_contents($pidFile));
         if ($pid <= 0) {
             @unlink($pidFile);
-            file_put_contents($stopFlag, date('Y-m-d H:i:s'));
+            $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
             @unlink($wsRoot . '/data/ws_autostart.flag');
             json_response(['success' => true, 'message' => 'PID文件无效，已清理']);
         }
 
         // 写入停止标志，防止定时任务自动重启
-        file_put_contents($stopFlag, date('Y-m-d H:i:s'));
+        $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
+        if (!$flagWrite['success']) {
+            json_response(['success' => false, 'message' => '写入停止标志失败: ' . $flagWrite['message']]);
+        }
         @unlink($wsRoot . '/data/ws_autostart.flag');
 
         // 尝试通过 posix_kill 终止进程（宝塔面板未禁用此函数）
@@ -964,6 +1297,7 @@ switch ($action) {
         db()->setSetting('ws_daemon_status', $statusData);
 
         if ($killed && !isProcessRunning($pid)) {
+            后台操作记录('停止WS守护进程', '');
             json_response(['success' => true, 'message' => 'WebSocket 守护进程已停止']);
         } else {
             json_response(['success' => true, 'message' => '已提交停止请求，守护进程将通过定时任务停止']);
@@ -1055,7 +1389,11 @@ switch ($action) {
         $autostartFile = $wsRoot . '/data/ws_autostart.flag';
         db()->setSetting('ws_auto_start', $enabled ? '1' : '0');
         if ($enabled) {
-            file_put_contents($autostartFile, '1');
+            ensureWritableDir(dirname($autostartFile));
+            $writeResult = writeFileSafe($autostartFile, '1');
+            if (!$writeResult['success']) {
+                json_response(['success' => false, 'message' => '数据库已保存，但标志文件写入失败: ' . $writeResult['message']]);
+            }
         } else {
             @unlink($autostartFile);
         }
@@ -1065,8 +1403,11 @@ switch ($action) {
     case 'ws_clear_logs':
         $wsRoot = dirname(__DIR__);
         $logFile = $wsRoot . '/data/logs/ws_daemon.log';
-        if (file_exists($logFile)) {
-            file_put_contents($logFile, '');
+        // 修复 Permission denied: 日志文件可能由 root(cron) 创建，www用户无权直接截断
+        // truncateFileSafe 会依次尝试: 直接截断 → chmod 0666后重试 → 目录可写时删除重建
+        $clearResult = truncateFileSafe($logFile);
+        if (!$clearResult['success']) {
+            json_response(['success' => false, 'message' => '清空日志失败: ' . $clearResult['message']]);
         }
         json_response(['success' => true, 'message' => '日志已清空']);
         break;

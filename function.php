@@ -98,7 +98,7 @@ function wlog($content, $appid_param = null) {
     try {
         db()->execute(
             "INSERT INTO system_logs (appid, log_type, content, level) VALUES (?, ?, ?, ?)",
-            [$logAppId, 'system', is_array($content) ? json_encode($content, JSON_UNESCAPED_UNICODE) : (string)$content, 'INFO']
+            [$logAppId, 'system', is_array($content) ? json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string)$content, 'INFO']
         );
     } catch (Exception $e) {
         // 数据库写入失败，静默忽略
@@ -157,6 +157,51 @@ function logMessage($appid, $direction, $sourceType, $targetId, $contentType, $c
     }
 }
 
+// ==================== 后台本地上传媒体持久化 ====================
+// 后台上传的图片/语音/视频/文件以二进制形式经官方 /files 接口(base64 file_data)发送,
+// 官方不回传可展示的URL; 此处把二进制留存到 data/uploads/, 日志记录站内相对URL,
+// 由 admin/api/chat_api.php?action=media 鉴权后流式输出, 使聊天记录页可回看媒体内容。
+
+/**
+ * 保存二进制媒体到 data/uploads/{appid}/
+ * @param string $data 二进制内容
+ * @param string $ext  扩展名(不含点, 如 jpg/png/mp4/silk/pdf)
+ * @return string 站内相对URL (api/chat_api.php?action=media&f=...); 失败返回 ''
+ */
+function 保存本地媒体($data, $ext = 'bin') {
+    try {
+        if ($data === '' || $data === false || $data === null) return '';
+        $ext = preg_replace('/[^A-Za-z0-9]/', '', (string)$ext);
+        if ($ext === '' || strlen($ext) > 8) $ext = 'bin';
+        $appid = defined('appid') ? preg_replace('/[^A-Za-z0-9_\-]/', '', (string)appid) : 'unknown';
+        if ($appid === '') $appid = 'unknown';
+        $dir = __DIR__ . '/data/uploads/' . $appid . '/' . date('Ym');
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true)) return '';
+        $name = date('d_His') . '_' . bin2hex(random_bytes(5)) . '.' . $ext;
+        if (@file_put_contents($dir . '/' . $name, $data) === false) return '';
+        // 相对URL: 后台页面均在 admin/ 下, 页面相对路径部署于子目录也可用
+        return 'api/chat_api.php?action=media&f=' . rawurlencode($appid . '/' . date('Ym') . '/' . $name);
+    } catch (Exception $e) {
+        return '';
+    }
+}
+
+/**
+ * 由 保存本地媒体 所存文件标识(appid/年月/文件名)反解出 data/uploads 下的真实路径 (带路径穿越防护)
+ * @param string $f 文件标识, 如 "88888888/202609/09_HHMMSS_ab12cd.jpg"
+ * @return string|null 绝对路径或 null
+ */
+function 本地媒体路径($f) {
+    $f = trim((string)$f);
+    if ($f === '' || strpos($f, '..') !== false || strpos($f, "\0") !== false) return null;
+    $f = preg_replace('#^/+#', '', $f);
+    $base = realpath(__DIR__ . '/data/uploads');
+    if ($base === false) return null;
+    $real = realpath($base . '/' . $f);
+    if ($real === false || strpos($real, $base . DIRECTORY_SEPARATOR) !== 0) return null;
+    return $real;
+}
+
 // ==================== 消息附件解析函数 ====================
 
 /**
@@ -196,8 +241,73 @@ function parseMessageAttachment($rawData) {
     $textContent = trim($d['content'] ?? '');
     $attachments = $d['attachments'] ?? [];
 
-    // 没有附件，返回纯文字
+    // 没有顶层附件时, 兜底从 msg_elements 提取本条自身媒体
+    // (QQ v2 真实事件格式: 图片/视频/语音等媒体在 msg_elements[].attachments; 引用消息的元素属于被引用内容, 不算本条)
     if (empty($attachments) || !is_array($attachments)) {
+        $attachments = [];
+        $ownIdx = '';
+        $isReplyEvt = intval($d['message_type'] ?? 0) === 103;
+        if (isset($d['message_scene']['ext']) && is_array($d['message_scene']['ext'])) {
+            foreach ($d['message_scene']['ext'] as $extStr) {
+                if (!is_string($extStr)) continue;
+                if ($ownIdx === '' && preg_match('/(?<!ref_)msg_idx=([^&]+)/', $extStr, $m)) {
+                    $ownIdx = $m[1];
+                }
+                if (strpos($extStr, 'ref_msg_idx=') !== false) {
+                    $isReplyEvt = true;
+                }
+            }
+        }
+        $elements = (isset($d['msg_elements']) && is_array($d['msg_elements'])) ? $d['msg_elements'] : [];
+        foreach ($elements as $el) {
+            if (!is_array($el) || empty($el['attachments']) || !is_array($el['attachments'])) continue;
+            if ($ownIdx !== '') {
+                // 仅取本条自身元素 (msg_idx == 自己的 msg_idx), 引用消息的被引用元素不算
+                if (($el['msg_idx'] ?? '') === $ownIdx) {
+                    $attachments = $el['attachments'];
+                    break;
+                }
+            } elseif (!$isReplyEvt) {
+                // 无 msg_idx 且非引用事件: 带附件的元素视为本条媒体
+                foreach ($el['attachments'] as $a) {
+                    if (is_array($a)) $attachments[] = $a;
+                }
+            }
+        }
+    }
+
+    // 仍然没有附件时: 先做 Markdown 消息判定, 再回退纯文字
+    if (empty($attachments) || !is_array($attachments)) {
+        // ==================== Markdown 消息判定 ====================
+        // QQ v2 接收的 markdown 消息(msg_type=2)无 attachments, 内容为 markdown 源码
+        // (含 ![图片](url)、[@昵称]、[按钮](mqqapi://...) 等)。此前一律判为"文字"导致后台
+        // 无法渲染 MD 卡片, 此处三重判定: 显式 msg_type / 元素 content_type / 内容强特征。
+        $mdDetected = false;
+        $mdElementContent = '';
+        if (intval($d['msg_type'] ?? 0) === 2) {
+            // 显式 msg_type=2
+            $mdDetected = true;
+        } elseif (isset($d['msg_elements']) && is_array($d['msg_elements'])) {
+            foreach ($d['msg_elements'] as $el) {
+                if (is_array($el) && strtolower((string)($el['content_type'] ?? '')) === 'markdown') {
+                    $mdDetected = true;
+                    if ($mdElementContent === '' && isset($el['content']) && trim((string)$el['content']) !== '') {
+                        $mdElementContent = (string)$el['content'];
+                    }
+                }
+            }
+        }
+        if (!$mdDetected && $textContent !== ''
+            && preg_match('/!\[[^\]\n]*\]\s*\(|\]\(mqqapi:/u', $textContent)) {
+            // 内容强特征兜底(图片语法/QQ内联按钮, 普通聊天文本几乎不会出现)
+            $mdDetected = true;
+        }
+        if ($mdDetected) {
+            $result['content_type'] = 'MD';
+            // 优先 d.content (QQ 接收事件通常携带完整源码); 缺失时回退 markdown 元素拼接
+            $result['content'] = $textContent !== '' ? $textContent : $mdElementContent;
+            return $result;
+        }
         $result['content'] = $textContent;
         return $result;
     }
@@ -274,6 +384,171 @@ function parseMessageAttachment($rawData) {
     return $result;
 }
 
+// ==================== 引用(回复)消息解析函数 ====================
+
+/**
+ * 从被引用元素提取附件列表 (供引用块缩略预览使用)
+ * 兼容多种可能的事件形态: attachments[] 数组 / url、image_url 等单字段 / file_info 对象
+ * @param array|null $el 被引用的 msg_elements 元素
+ * @return array [{type:image|video|voice|file, url, filename, width, height}] (最多9个)
+ */
+function extractQuoteAttachments($el) {
+    $out = [];
+    if (!is_array($el)) return $out;
+
+    $candidates = [];
+    if (isset($el['attachments']) && is_array($el['attachments'])) {
+        foreach ($el['attachments'] as $a) {
+            if (is_array($a)) $candidates[] = $a;
+        }
+    }
+    // 单字段兜底 (不同事件版本字段名可能不同)
+    $flat = [];
+    foreach (['image_url' => 'image', 'video_url' => 'video', 'voice_url' => 'audio'] as $k => $ct) {
+        if (!empty($el[$k]) && is_string($el[$k])) {
+            $flat[] = ['url' => $el[$k], 'content_type' => $ct];
+        }
+    }
+    if (!empty($el['url']) && is_string($el['url'])) {
+        $flat[] = ['url' => $el['url'], 'content_type' => ''];
+    }
+    if (isset($el['file_info']) && is_array($el['file_info'])) {
+        $flat[] = $el['file_info'];
+    }
+
+    foreach (array_merge($candidates, $flat) as $a) {
+        $url = trim((string)($a['url'] ?? ''), "` \t\n\r ");
+        if ($url === '') continue;
+        // 允许绝对URL(http/https)与站内相对路径(后台本地媒体: api/chat_api.php?action=media / /xxx)
+        if (!preg_match('/^https?:\/\//i', $url) && $url[0] !== '/' && strpos($url, 'api/') !== 0) continue;
+        $ct  = strtolower((string)($a['content_type'] ?? ''));
+        $fn  = (string)($a['filename'] ?? ($a['file_name'] ?? ''));
+        $type = 'file';
+        if (strpos($ct, 'image/') === 0 || $ct === 'image') {
+            $type = 'image';
+        } elseif (strpos($ct, 'video/') === 0 || $ct === 'video') {
+            $type = 'video';
+        } elseif (strpos($ct, 'audio/') === 0 || in_array($ct, ['voice', 'audio', 'silk', 'application/silk'], true)) {
+            $type = 'voice';
+        } else {
+            // 按扩展名兜底判断
+            $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true)) $type = 'image';
+            elseif (in_array($ext, ['mp4', 'mov', 'avi', 'mkv', 'webm'], true)) $type = 'video';
+            elseif (in_array($ext, ['mp3', 'wav', 'silk', 'amr', 'aac', 'm4a'], true)) $type = 'voice';
+        }
+        $out[] = [
+            'type'     => $type,
+            'url'      => $url,
+            'filename' => $fn,
+            'width'    => isset($a['width']) ? intval($a['width']) : null,
+            'height'   => isset($a['height']) ? intval($a['height']) : null
+        ];
+        if (count($out) >= 9) break; // 上限保护
+    }
+    return $out;
+}
+
+/**
+ * 从原始事件数据解析引用(回复)消息信息 (message_type=103)
+ * 事件结构 (GROUP_MESSAGE_CREATE 实测):
+ *   d.message_scene.ext[]: "ref_msg_idx=REFIDX_xxx" (被引用消息), "msg_idx=REFIDX_yyy" (本条)
+ *   d.msg_elements[]:      被引用消息的元素列表 (msg_idx == ref_msg_idx 的项即被引用内容)
+ *   d.content / d.parallel_message.msg_nodes[]: 本条消息自身的文字
+ * ⚠️ "ref_msg_idx=" 包含子串 "msg_idx=", 提取时必须精确匹配键名
+ * @param array|string|null $rawData 完整原始事件 (数组或JSON字符串)
+ * @return array{own_idx:string, ref_idx:string, quote:array|null}
+ *   quote = ['ref_idx'=>string, 'message_type'=>int, 'content'=>string, 'attachments'=>array]
+ */
+function parseQuoteInfo($rawData) {
+    if (is_string($rawData)) {
+        $decoded = json_decode($rawData, true);
+        $rawData = is_array($decoded) ? $decoded : null;
+    }
+    if (!is_array($rawData)) {
+        return ['own_idx' => '', 'ref_idx' => '', 'quote' => null];
+    }
+    $d = is_array($rawData['d'] ?? null) ? $rawData['d'] : [];
+
+    // 1) 提取 message_scene.ext 中的消息索引
+    $ownIdx = '';
+    $refIdx = '';
+    if (isset($d['message_scene']['ext']) && is_array($d['message_scene']['ext'])) {
+        foreach ($d['message_scene']['ext'] as $extStr) {
+            if (!is_string($extStr)) continue;
+            if ($refIdx === '' && preg_match('/(?:^|&)ref_msg_idx=([^&]+)/', $extStr, $m)) {
+                $refIdx = $m[1];
+            }
+            if ($ownIdx === '' && preg_match('/(?<!ref_)msg_idx=([^&]+)/', $extStr, $m)) {
+                $ownIdx = $m[1];
+            }
+        }
+    }
+
+    // 1.5) 发送记录兼容: 记录发送 存储的官方发送响应形如 {"id":"...","ext_info":{"ref_idx":"REFIDX_xxx"}}
+    //      提取 ref_idx 作为机器人本条消息的引用索引, 使后台聊天页可引用机器人自己发的消息
+    if ($ownIdx === '') {
+        $extInfo = (isset($rawData['ext_info']) && is_array($rawData['ext_info'])) ? $rawData['ext_info'] : [];
+        if (!empty($extInfo['ref_idx'])) {
+            $ownIdx = (string)$extInfo['ref_idx'];
+        } elseif (isset($rawData['ref_idx']) && is_string($rawData['ref_idx']) && $rawData['ref_idx'] !== '') {
+            $ownIdx = $rawData['ref_idx'];
+        }
+    }
+
+    // 2) 判断是否为回复/引用消息
+    // ⚠️ 不能用 !empty($elements) 判定: QQ v2 群事件中普通消息(含图片等媒体消息)也携带
+    //    msg_elements (内含本条自身元素, msg_idx == 自己的 msg_idx), 会把直接图片消息误判为引用。
+    //    可靠判据: ext 中存在 ref_msg_idx, 或事件级 message_type=103 (群回复消息)
+    $elements = (isset($d['msg_elements']) && is_array($d['msg_elements'])) ? $d['msg_elements'] : [];
+    $isReply = $refIdx !== '' || intval($d['message_type'] ?? 0) === 103;
+    if (!$isReply) {
+        return ['own_idx' => $ownIdx, 'ref_idx' => $refIdx, 'quote' => null];
+    }
+
+    // 3) 定位被引用元素 (msg_idx == ref_msg_idx)
+    $el = null;
+    if ($refIdx !== '') {
+        foreach ($elements as $e) {
+            if (is_array($e) && ($e['msg_idx'] ?? '') === $refIdx) {
+                $el = $e;
+                break;
+            }
+        }
+    }
+    $elType  = $el ? intval($el['message_type'] ?? -1) : -1;
+    $content = $el ? trim((string)($el['content'] ?? '')) : '';
+    $atts    = extractQuoteAttachments($el);
+
+    // 4) 引用文案: 媒体引用用类型占位, 其余按元素类型给占位
+    if ($content === '' && !empty($atts)) {
+        $labels = ['image' => '图片', 'video' => '视频', 'voice' => '语音', 'file' => '文件'];
+        $names  = array_values(array_unique(array_map(function ($a) use ($labels) {
+            return $labels[$a['type']] ?? '文件';
+        }, $atts)));
+        $content = '[引用' . implode('/', $names) . ']';
+    } elseif ($content === '') {
+        // 元素缺失/未命中时按类型给占位 (0文字 1图文 2markdown 3ark 4embed 5媒体)
+        $typeNames = [0 => '[引用文字消息]', 1 => '[引用图文消息]', 2 => '[引用Markdown消息]',
+                      3 => '[引用Ark卡片]', 4 => '[引用Embed卡片]', 5 => '[引用媒体消息]'];
+        $content = $typeNames[$elType] ?? '[引用消息]';
+    }
+    if (mb_strlen($content) > 500) {
+        $content = mb_substr($content, 0, 500) . '…';
+    }
+
+    return [
+        'own_idx' => $ownIdx,
+        'ref_idx' => $refIdx,
+        'quote'   => [
+            'ref_idx'      => $refIdx,
+            'message_type' => $elType,
+            'content'      => $content,
+            'attachments'  => $atts
+        ]
+    ];
+}
+
 // ==================== 网络请求函数 ====================
 
 function curl($url, $method, $headers, $params){
@@ -289,10 +564,19 @@ function curl($url, $method, $headers, $params){
         parse_str($headers, $headers);
     }
     $ch = curl_init();
+    // 默认校验证书；仅在明确设置 ssl_insecure=1 时降级（兼容极老旧 CA 环境）
+    static $sslInsecure = null;
+    if ($sslInsecure === null) {
+        try {
+            $sslInsecure = db()->getSetting('ssl_insecure', '0') === '1';
+        } catch (Throwable $e) {
+            $sslInsecure = false;
+        }
+    }
     curl_setopt($ch, CURLOPT_VERBOSE, 0);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !$sslInsecure);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $sslInsecure ? 0 : 2);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     switch ($method){
@@ -345,10 +629,18 @@ function curlMultipart($url, $headers, $fields) {
         return stripos($h, 'Content-Type:') !== 0;
     }));
     $ch = curl_init();
+    static $sslInsecure2 = null;
+    if ($sslInsecure2 === null) {
+        try {
+            $sslInsecure2 = db()->getSetting('ssl_insecure', '0') === '1';
+        } catch (Throwable $e) {
+            $sslInsecure2 = false;
+        }
+    }
     curl_setopt($ch, CURLOPT_VERBOSE, 0);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !$sslInsecure2);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $sslInsecure2 ? 0 : 2);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -488,26 +780,159 @@ function generateToken($length = 32) {
 }
 
 function passwordHash($password) {
-    $salt = bin2hex(random_bytes(16));
-    $hash = hash('sha256', $salt . $password);
-    return 'sha256:' . $salt . ':' . $hash;
+    // 使用 PHP 内置 bcrypt/argon2（自适应成本，抗离线暴力破解）
+    return password_hash($password, PASSWORD_DEFAULT);
 }
 
 function passwordVerify($password, $stored) {
+    $stored = (string)$stored;
+    // 新版 bcrypt / argon2 哈希
+    if ($stored !== '' && $stored[0] === '$') {
+        return password_verify($password, $stored);
+    }
+    // 兼容旧版 sha256 加盐哈希（登录成功后由 Auth::login 自动升级）
     if (strpos($stored, 'sha256:') === 0) {
         $parts = explode(':', $stored);
         if (count($parts) !== 3) return false;
-        $salt = $parts[1];
-        $hash = $parts[2];
-        return hash_equals($hash, hash('sha256', $salt . $password));
+        return hash_equals($parts[2], hash('sha256', $parts[1] . $password));
     }
-    // 明文兼容
-    return $password === $stored;
+    // 明文兼容（仅用于极旧数据，登录后自动升级）
+    return hash_equals($stored, (string)$password);
 }
 
 function isWeakPassword($password) {
     $weak = ['admin', '123456', 'password', 'admin123', '12345678', ''];
     return in_array(strtolower($password), $weak);
+}
+
+// ==================== 安全文件写入助手（修复 Permission denied 问题） ====================
+// 场景: data/logs/ws_daemon.log 等文件可能由 root(cron/终端) 创建，
+// PHP-FPM(www用户) 无权写入导致 file_put_contents 报 "Failed to open stream: Permission denied"
+// 策略: 常规写入 → 尝试 chmod 0666 后重写 → 目录可写时删除重建 → 全部失败返回错误及修复建议
+
+/**
+ * 确保目录存在且尽量可写
+ * @param string $dir 目录路径
+ * @return bool
+ */
+function ensureWritableDir($dir) {
+    if (!is_dir($dir)) {
+        if (!@mkdir($dir, 0777, true) && !is_dir($dir)) {
+            return false;
+        }
+        // 尝试放开权限，保证 www/root 双向可写
+        @chmod($dir, 0777);
+    }
+    return is_writable($dir);
+}
+
+/**
+ * 安全写入文件（自动降级修复权限问题）
+ * @param string $file    目标文件
+ * @param string $content 写入内容
+ * @param bool   $append  是否追加写入
+ * @return array ['success'=>bool, 'message'=>string]
+ */
+function writeFileSafe($file, $content, $append = false) {
+    // 先确保目录存在
+    if (!ensureWritableDir(dirname($file))) {
+        return [
+            'success' => false,
+            'message' => '目录不可写: ' . dirname($file)
+        ];
+    }
+
+    $flags = ($append ? FILE_APPEND : 0) | LOCK_EX;
+    // 第一次尝试直接写入（抑制warning，由本函数返回错误）
+    $result = @file_put_contents($file, $content, $flags);
+    if ($result !== false) {
+        return ['success' => true, 'message' => ''];
+    }
+
+    // 第二次: 文件存在但属主不对（如 root 创建），尝试 chmod 后重写
+    if (file_exists($file)) {
+        if (@chmod($file, 0666)) {
+            $result = @file_put_contents($file, $content, $flags);
+            if ($result !== false) {
+                return ['success' => true, 'message' => ''];
+            }
+        }
+        // 第三次: 目录可写时，删除旧文件重建（要求目录属主正确）
+        if (is_writable(dirname($file))) {
+            @unlink($file);
+            clearstatcache(true, $file);
+            $result = @file_put_contents($file, $content, $flags);
+            if ($result !== false) {
+                @chmod($file, 0666);
+                return ['success' => true, 'message' => ''];
+            }
+        }
+    }
+
+    // 全部失败: 给出可操作的修复建议
+    return [
+        'success' => false,
+        'message' => '无法写入文件: ' . basename($file) . '（Permission denied）。'
+                   . '该文件可能由 root 用户创建，请在SSH执行: '
+                   . 'chown -R www:www ' . dirname(dirname($file)) . ' && chmod -R 755 ' . dirname($file)
+                   . ' （或临时 chmod -R 777 ' . dirname($file) . '）'
+    ];
+}
+
+/**
+ * 安全清空文件内容（用于清空日志等场景）
+ * @param string $file 目标文件
+ * @return array ['success'=>bool, 'message'=>string]
+ */
+function truncateFileSafe($file) {
+    if (!file_exists($file)) {
+        return ['success' => true, 'message' => ''];
+    }
+    return writeFileSafe($file, '');
+}
+
+// ==================== API 接口域名集中管理 ====================
+// 官方 2026-08-10 起所有接口域名统一为 https://api.bot.qq.com（正式/沙箱相同），
+// access_token 接口同步迁移至 https://api.bot.qq.com/app/getAppAccessToken。
+// 旧版 api.sgroup.qq.com / sandbox.api.sgroup.qq.com 已被官方停用，相关切换代码已移除。
+/**
+ * 获取QQ机器人API基础域名（正式/沙箱统一为 api.bot.qq.com）
+ * @param string $env 环境（正式/沙箱，保留参数兼容历史调用）
+ * @return string 例如 https://api.bot.qq.com
+ */
+function getApiBase($env = '正式') {
+    return 'https://api.bot.qq.com';
+}
+
+/**
+ * 获取 access_token 接口地址
+ * 官方文档: https://api.bot.qq.com/app/getAppAccessToken
+ * @return string
+ */
+function getApiTokenUrl() {
+    return 'https://api.bot.qq.com/app/getAppAccessToken';
+}
+
+/**
+ * 清理QQ接口返回文本中的HTML实体（如 &nbsp;）与多余空白
+ * @param string $str
+ * @return string
+ */
+function cleanApiText($str) {
+    $str = (string)$str;
+    if ($str === '') {
+        return '';
+    }
+    $decoded = html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // 多次解码防止二次编码实体（&amp;nbsp; 等）
+    $again = html_entity_decode($decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if ($again !== $decoded) {
+        $decoded = $again;
+    }
+    // 将不间断空格/制表符归一为普通空格，压缩连续空白
+    $decoded = str_replace(["\xc2\xa0", "\t", "\r"], ' ', $decoded);
+    $decoded = preg_replace('/ {2,}/', ' ', $decoded);
+    return trim($decoded);
 }
 
 // ==================== 安全进程管理函数 ====================
@@ -760,6 +1185,349 @@ function getPhpBinary() {
     return $phpBin;
 }
 
+// ==================== 插件名规范化辅助（修复 GBK 等非 UTF-8 文件名插件后台显示为乱码/空白的问题） ====================
+
+/**
+ * 将插件文件名字节规范化为 UTF-8 显示名
+ * 第三方插件常由 Windows 打包, 文件名为 GBK/GB18030 字节序列:
+ * PHP8 下 htmlspecialchars() 输出乱码、json_encode() 直接返回 false,
+ * 导致插件过多时(安装的第三方插件越多概率越大)后台插件名显示异常。
+ * 已是合法 UTF-8 时原样返回(幂等, 对 DB 中旧值也适用)。
+ */
+function 插件规范名($rawName) {
+    $rawName = (string)$rawName;
+    if ($rawName === '' || mb_check_encoding($rawName, 'UTF-8')) return $rawName;
+    foreach (['GB18030', 'GBK', 'BIG5', 'EUC-CN'] as $enc) {
+        $conv = @mb_convert_encoding($rawName, 'UTF-8', $enc);
+        if (is_string($conv) && $conv !== '' && mb_check_encoding($conv, 'UTF-8')) {
+            return $conv;
+        }
+    }
+    // 兑底: 无效字节替换为 U+FFFD, 保证 json_encode/htmlspecialchars 不再失败
+    return mb_scrub($rawName, 'UTF-8');
+}
+
+/**
+ * 由规范化插件名定位 plugin 目录下的真实文件(处理 GBK 等历史文件名)
+ * 优先精确匹配 UTF-8 文件名, 再扫描目录按规范名比对; 未找到返回 null
+ */
+function 插件真实文件($name) {
+    $name = 插件规范名($name);
+    if ($name === '' || strpos($name, '/') !== false || strpos($name, "\\") !== false) return null;
+    $dir = APP_ROOT . 'plugin/';
+    if (!is_dir($dir)) return null;
+    $direct = $dir . $name . '.php';
+    if (is_file($direct)) return $direct;
+    $files = glob($dir . '*.php');
+    if (is_array($files)) {
+        foreach ($files as $f) {
+            if (插件规范名(basename($f, '.php')) === $name) return $f;
+        }
+    }
+    return null;
+}
+
+/**
+ * 插件名安全校验(用于读/写/删除等文件操作)
+ * 相比旧正则(仅字母数字中文)放宽为: 允许空格/括号/引号/表情等任意文件系统合法字符,
+ * 仅拦截路径穿越与空名; 返回规范化后的名称, 不合法返回 false
+ */
+function 插件名过滤($name) {
+    $name = trim((string)$name);
+    if ($name === '' || $name === '.' || $name === '..') return false;
+    if (strpos($name, "/") !== false || strpos($name, "\\") !== false || strpos($name, "\0") !== false) return false;
+    return 插件规范名($name);
+}
+
+/**
+ * 解析插件文件头元信息
+ * 支持 @name/@version/@author/@description/@category/@link/@license 与
+ * "Plugin Name:" 风格的 WordPress 头。
+ *
+ * @param string $fileOrName 插件文件绝对路径或插件名
+ * @return array{name:string,version:string,author:string,description:string,category:string,link:string,license:string,file:string}
+ */
+function 插件元信息($fileOrName) {
+    $file = is_file($fileOrName) ? $fileOrName : 插件真实文件($fileOrName);
+    $result = ['name' => '', 'version' => '', 'author' => '', 'description' => '', 'category' => '', 'link' => '', 'license' => '', 'file' => (string)$file];
+    if ($file === null || !is_file($file)) {
+        return $result;
+    }
+    $result['name'] = basename($file, '.php');
+    $head = @file_get_contents($file, false, null, 0, 8192);
+    if ($head === false) return $result;
+
+    $map = [
+        'name'        => ['@name', '@plugin-name', 'Plugin Name:'],
+        'version'     => ['@version', '@plugin-version', 'Version:'],
+        'author'      => ['@author', '@plugin-author', 'Author:'],
+        'description' => ['@description', '@plugin-description', 'Description:'],
+        'category'    => ['@category', '@plugin-category', 'Category:'],
+        'link'        => ['@link', '@plugin-link', 'Plugin URI:'],
+        'license'     => ['@license', 'License:'],
+    ];
+    foreach ($map as $field => $tags) {
+        foreach ($tags as $tag) {
+            $pattern = '/' . preg_quote($tag, '/') . '\s*[:：]?\s*([^\r\n\*]+)/iu';
+            if (preg_match($pattern, $head, $m)) {
+                $value = trim($m[1]);
+                if ($value !== '') {
+                    if ($field === 'name' && $value === $result['name']) break;
+                    $result[$field] = $value;
+                    break;
+                }
+            }
+        }
+    }
+    return $result;
+}
+
+/**
+ * 插件代码静态安全扫描（安装/上传前调用）
+ * 说明：静态规则只能降低风险，不能替代人工审计。
+ *
+ * @param string $code PHP 源码
+ * @return array{status:string,issues:array,summary:string}
+ */
+function 插件安全扫描($code) {
+    $code = (string)$code;
+    if (trim($code) === '') {
+        return ['status' => 'block', 'issues' => [['level' => 'block', 'line' => 1, 'code' => 'empty', 'message' => '代码为空']], 'summary' => '代码为空'];
+    }
+    if (stripos($code, '<?php') === false) {
+        return ['status' => 'block', 'issues' => [['level' => 'block', 'line' => 1, 'code' => 'no_php', 'message' => '缺少 <?php 起始标签']], 'summary' => '不是有效的 PHP 文件'];
+    }
+    $issues = [];
+    try {
+        token_get_all($code, TOKEN_PARSE);
+    } catch (Throwable $e) {
+        $issues[] = ['level' => 'block', 'line' => max(1, (int)$e->getLine()), 'code' => 'syntax', 'message' => 'PHP 语法错误：' . $e->getMessage()];
+    }
+
+    // 注释与字符串替换为空格，避免文档里的 eval 字样误报
+    $clean = '';
+    foreach (token_get_all($code) as $token) {
+        if (is_array($token)) {
+            if (in_array($token[0], [T_COMMENT, T_DOC_COMMENT, T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE], true)) {
+                $clean .= preg_replace('/[^\n]/', ' ', $token[1]);
+            } else {
+                $clean .= $token[1];
+            }
+        } else {
+            $clean .= $token;
+        }
+    }
+    $lineOf = function ($offset) use ($clean) {
+        return substr_count(substr($clean, 0, max(0, $offset)), "\n") + 1;
+    };
+
+    $blockRules = [
+        'eval'            => ['/\beval\s*\(/i', 'eval() 可执行任意代码'],
+        'assert'          => ['/\bassert\s*\(/i', 'assert() 可被用于执行代码'],
+        'create_function' => ['/\bcreate_function\s*\(/i', 'create_function() 可动态创建函数'],
+        'shell'           => ['/\b(shell_exec|system|passthru|proc_open|popen|pcntl_exec)\s*\(/i', '调用系统命令执行函数'],
+        'backtick'        => ['/`[^`\n]{1,500}`/', '反引号执行系统命令'],
+        'preg_e'          => ['/preg_replace\s*\(\s*([\'"])[^\'"]*\/[a-z]*e[a-z]*\1/i', 'preg_replace /e 修饰符可执行代码'],
+    ];
+    foreach ($blockRules as $ruleCode => $rule) {
+        if (preg_match_all($rule[0], $clean, $matches, PREG_OFFSET_CAPTURE)) {
+            foreach ($matches[0] as $m) {
+                $issues[] = ['level' => 'block', 'line' => $lineOf($m[1]), 'code' => $ruleCode, 'message' => $rule[1]];
+            }
+        }
+    }
+    $warnRules = [
+        'file_write'  => ['/\b(file_put_contents|fwrite|fopen|rename|copy|unlink|rmdir|chmod)\s*\(/i', '存在文件写入/删除操作，请确认路径受控'],
+        'network'     => ['/\b(curl_init|curl_exec|fsockopen|stream_socket_client|mail)\s*\(/i', '存在网络/邮件调用，请确认目标可信'],
+        'dynamic'     => ['/\b(base64_decode|gzinflate|str_rot13|extract|parse_str)\s*\(/i', '存在动态解码/变量导入，请人工确认用途'],
+        'globals'     => ['/\$GLOBALS\b/', '直接操作 $GLOBALS'],
+        'include_var' => ['/\b(include|require)(_once)?\s*\(?\s*\$/', '动态包含文件，可能存在任意文件包含风险'],
+        'db'          => ['/\bnew\s+PDO\s*\(/i', '插件直接创建数据库连接，请确认不会破坏主库'],
+    ];
+    foreach ($warnRules as $ruleCode => $rule) {
+        if (preg_match_all($rule[0], $clean, $matches, PREG_OFFSET_CAPTURE)) {
+            foreach (array_slice($matches[0], 0, 8) as $m) {
+                $issues[] = ['level' => 'warn', 'line' => $lineOf($m[1]), 'code' => $ruleCode, 'message' => $rule[1]];
+            }
+        }
+    }
+
+    $seen = [];
+    $unique = [];
+    foreach ($issues as $issue) {
+        $key = $issue['level'] . '|' . $issue['line'] . '|' . $issue['code'];
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $unique[] = $issue;
+    }
+    usort($unique, function ($a, $b) {
+        return $a['line'] === $b['line'] ? strcmp($a['code'], $b['code']) : $a['line'] <=> $b['line'];
+    });
+    $hasBlock = false; $hasWarn = false;
+    foreach ($unique as $issue) {
+        if ($issue['level'] === 'block') $hasBlock = true;
+        if ($issue['level'] === 'warn') $hasWarn = true;
+    }
+    $status = $hasBlock ? 'block' : ($hasWarn ? 'warn' : 'pass');
+    $summary = $status === 'pass' ? '未发现明显风险' : ($status === 'warn' ? '存在需人工确认的调用' : '检测到高危代码，禁止直接安装');
+    return ['status' => $status, 'issues' => $unique, 'summary' => $summary];
+}
+
+/**
+ * 解析插件市场地址：优先使用后台保存的配置，否则按当前部署位置推断 /market。
+ */
+function 市场地址() {
+    $saved = '';
+    try {
+        $saved = (string)db()->getSetting('market_base_url', '');
+    } catch (Exception $e) {}
+    if ($saved !== '' && preg_match('#^https?://#i', $saved)) {
+        return rtrim($saved, '/');
+    }
+    if (PHP_SAPI === 'cli') return '';
+    $scheme = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') || intval($_SERVER['SERVER_PORT'] ?? 0) === 443 ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (!preg_match('/^[A-Za-z0-9\.\-]+(:\d+)?$/', $host)) $host = 'localhost';
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/admin/market.php';
+    // 支持 /admin/market.php 与 /admin/api/market.php 两种入口
+    $root = str_replace('\\', '/', dirname($script));
+    $root = preg_replace('#/(admin/api|admin)$#', '', $root);
+    $root = rtrim($root, '/');
+    if ($root === '.' || $root === '/') $root = '';
+    return $scheme . '://' . $host . $root . '/market';
+}
+
+/**
+ * 访问市场 HTTP（带超时/大小/协议限制，校验证书）
+ *
+ * @return array{ok:bool,body:string,status:int,headers:array,error:string}
+ */
+function 市场请求($url, $maxBytes = 2097152, $timeout = 10) {
+    if (!preg_match('#^https?://#i', $url)) {
+        return ['ok' => false, 'body' => '', 'status' => 0, 'headers' => [], 'error' => '仅支持 http/https 地址'];
+    }
+    $ch = curl_init($url);
+    $headers = [];
+    $body = '';
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'GuanjiBot-MarketClient/1.0');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json,text/plain,*/*']);
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$headers) {
+        $pos = strpos($line, ':');
+        if ($pos !== false) {
+            $name = strtolower(trim(substr($line, 0, $pos)));
+            $headers[$name] = trim(substr($line, $pos + 1));
+        }
+        return strlen($line);
+    });
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$body, $maxBytes) {
+        if (strlen($body) + strlen($chunk) > $maxBytes) return 0;
+        $body .= $chunk;
+        return strlen($chunk);
+    });
+    $ok = curl_exec($ch);
+    $err = curl_error($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($ok === false) {
+        return ['ok' => false, 'body' => $body, 'status' => $status, 'headers' => $headers, 'error' => $err !== '' ? $err : '请求失败或响应超过大小限制'];
+    }
+    return ['ok' => true, 'body' => $body, 'status' => $status, 'headers' => $headers, 'error' => ''];
+}
+
+/**
+ * 在基地地址上拼接接口路径
+ *
+ * 保留基地地址自带的查询参数（例如托管平台分享链接的 ?sharecode=xxx），
+ * 避免直接字符串拼接得到 https://host/?sharecode=x/api.php 这类错误地址。
+ */
+function 市场链接($base, $path, $params = []) {
+    $base = trim((string)$base);
+    $parts = parse_url($base);
+    if (!$parts || empty($parts['host'])) {
+        $url = rtrim($base, '/') . '/' . ltrim($path, '/');
+        return $params ? $url . '?' . http_build_query($params) : $url;
+    }
+    $scheme = (($parts['scheme'] ?? 'https') === 'http') ? 'http' : 'https';
+    $url = $scheme . '://' . $parts['host'];
+    if (!empty($parts['port'])) {
+        $url .= ':' . (int)$parts['port'];
+    }
+    $url .= rtrim($parts['path'] ?? '', '/') . '/' . ltrim($path, '/');
+    $query = [];
+    if (!empty($parts['query'])) {
+        parse_str($parts['query'], $query);
+    }
+    foreach ($params as $k => $v) {
+        $query[$k] = $v;
+    }
+    if ($query) {
+        $url .= '?' . http_build_query($query);
+    }
+    return $url;
+}
+
+/**
+ * 调用插件市场 API 并解析 JSON
+ * @return array 市场返回结构；失败时返回 success=false 与 message
+ */
+function 市场API($base, $action, $params = [], $timeout = 10) {
+    $base = rtrim((string)$base, '/');
+    if ($base === '') {
+        return ['success' => false, 'message' => '未配置插件市场地址'];
+    }
+    $url = 市场链接($base, '/api.php', array_merge(['action' => $action], $params));
+    $resp = 市场请求($url, 2097152, $timeout);
+    if (!$resp['ok']) {
+        return ['success' => false, 'message' => '无法连接插件市场：' . $resp['error'], '_http' => $resp['status']];
+    }
+    if ($resp['status'] !== 200) {
+        return ['success' => false, 'message' => '市场返回 HTTP ' . $resp['status'], '_http' => $resp['status']];
+    }
+    $data = json_decode($resp['body'], true);
+    if (!is_array($data)) {
+        return ['success' => false, 'message' => '市场响应格式错误（可能不是官鸡插件市场）', '_http' => $resp['status']];
+    }
+    return $data;
+}
+
+/** 格式化字节数为可读大小 */
+function 格式化大小($bytes) {
+    $bytes = (int)$bytes;
+    if ($bytes >= 1073741824) return number_format($bytes / 1073741824, 2) . ' GB';
+    if ($bytes >= 1048576) return number_format($bytes / 1048576, 2) . ' MB';
+    if ($bytes >= 1024) return number_format($bytes / 1024, 1) . ' KB';
+    return $bytes . ' B';
+}
+
+// ==================== 后台操作记录（写入 system_logs, 在「操作记录」页可视化） ====================
+
+/**
+ * 记录一条后台管理员操作
+ * @param string $action 动作名, 如 "插件启用" "机器人删除"
+ * @param string $detail 详情(纯文本, 不含敏感信息)
+ * @param string $appid 关联机器人(可空)
+ */
+function 后台操作记录($action, $detail = '', $appid = '') {
+    try {
+        $user = class_exists('Auth') && method_exists('Auth', 'currentUsername') ? Auth::currentUsername() : '';
+        $line = '[' . $action . ']' . ($user !== '' ? '(' . $user . ')' : '') . ($detail !== '' ? ' ' . $detail : '');
+        db()->execute(
+            "INSERT INTO system_logs (appid, log_type, content, level) VALUES (?, '后台操作', ?, 'INFO')",
+            [$appid !== '' ? $appid : 'admin', $line]
+        );
+    } catch (Exception $e) {
+        // 记录失败不影响主流程
+    }
+}
+
 // ==================== 机器人管理函数 ====================
 
 function getBots() {
@@ -793,7 +1561,7 @@ function updateBot($appid, $data) {
     foreach (['secret', 'env', 'ws_enabled', 'ws_url', 'enabled', 'robot_qq', 'owner_ids', 'nickname', 'avatar'] as $field) {
         if (isset($data[$field])) {
             $fields[] = "$field = ?";
-            $params[] = is_array($data[$field]) ? json_encode($data[$field], JSON_UNESCAPED_UNICODE) : $data[$field];
+            $params[] = is_array($data[$field]) ? json_encode($data[$field], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : $data[$field];
         }
     }
     if (empty($fields)) return false;
@@ -813,6 +1581,10 @@ function markEventProcessed($eventId, $appid = null) {
     if (empty($eventId)) return;
     try {
         db()->execute("INSERT OR IGNORE INTO event_dedup (event_id, appid) VALUES (?, ?)", [$eventId, $appid]);
+        // [bugfix] 原版只增不删, event_dedup 表无限膨胀; 去重仅需覆盖官方重试窗口, 保留3天即可
+        if (random_int(1, 50) === 1) { // 2% 概率顺带清理, 避免每次写事件都多一条 DELETE
+            db()->execute("DELETE FROM event_dedup WHERE created_at < datetime('now','localtime','-3 day')");
+        }
     } catch (Exception $e) {}
 }
 
@@ -938,8 +1710,8 @@ function getSystemInfo() {
  * @return array|null    返回 ['username'=>..., 'avatar'=>...] 或 null
  */
 function getBotInfo($appid, $secret, $env = '正式') {
-    // 第一步：获取 access_token
-    $tokenUrl = 'https://bots.qq.com/app/getAppAccessToken';
+    // 第一步：获取 access_token（域名统一后走 api.bot.qq.com，与接口域名模式保持一致）
+    $tokenUrl = getApiTokenUrl();
     $postData = json_encode([
         'appId'        => (string)$appid,
         'clientSecret' => $secret
@@ -954,10 +1726,8 @@ function getBotInfo($appid, $secret, $env = '正式') {
 
     $accessToken = $tokenData['access_token'];
 
-    // 第二步：根据环境选择 API 域名
-    $apiBase = ($env === '沙箱') 
-        ? 'https://sandbox.api.sgroup.qq.com' 
-        : 'https://api.sgroup.qq.com';
+    // 第二步：根据环境选择 API 域名（支持后台切换新版/旧版域名）
+    $apiBase = getApiBase($env);
     $infoUrl = $apiBase . '/users/@me';
 
     $headers = [
@@ -1037,21 +1807,31 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         return ['success' => false, 'message' => 'appid 或 group_openid 为空'];
     }
 
-    // 非强制刷新时，先检查数据库是否已有完整的群信息（含简介/分类/标签/成员数）
+    // 非强制刷新时，先检查数据库缓存（群名称/简介/分类/标签/成员数等字段）
+    // 缓存有效期 TTL_GROUP_INFO_TTL 秒(默认30分钟)，过期后自动重新拉取，确保群标签状态及时更新
+    if (!defined('TTL_GROUP_INFO_TTL')) define('TTL_GROUP_INFO_TTL', 1800);
     if (!$force) {
         $existing = db()->fetch(
-            "SELECT group_name, group_finger_memo, group_class_text, group_tags, group_member_num FROM groups WHERE appid = ? AND group_id = ?",
+            "SELECT group_name, group_finger_memo, group_class_text, group_tags, group_member_num, info_updated_at FROM groups WHERE appid = ? AND group_id = ?",
             [$appid, $groupOpenid]
         );
-        // 仅当群名称 AND 详细字段（成员数/简介/分类/标签）均已存在时才命中缓存
-        // 避免仅有 group_name 而缺少其他字段时跳过 API 调用
-        if ($existing && !empty($existing['group_name']) && (
-            !empty($existing['group_finger_memo']) ||
-            !empty($existing['group_class_text']) ||
-            !empty($existing['group_tags']) ||
-            intval($existing['group_member_num']) > 0
-        )) {
-            return ['success' => true, 'message' => '已缓存', 'data' => $existing];
+        if ($existing && !empty($existing['group_name'])) {
+            // 检查缓存是否仍在有效期内
+            $infoUpdatedAt = strtotime((string)($existing['info_updated_at'] ?? ''));
+            $cacheFresh = ($infoUpdatedAt !== false && (time() - $infoUpdatedAt) < TTL_GROUP_INFO_TTL);
+            if (!$cacheFresh) {
+                // 缓存过期：重新从API拉取最新群信息（含标签），失败时降级用旧缓存
+                $refreshed = null;
+                try {
+                    $refreshed = fetchAndUpdateGroupInfo($appid, $groupOpenid, true);
+                } catch (Throwable $e) {
+                    $refreshed = null;
+                }
+                if (is_array($refreshed) && !empty($refreshed['success'])) {
+                    return $refreshed;
+                }
+            }
+            return ['success' => true, 'message' => $cacheFresh ? '已缓存' : '已过期(使用旧缓存)', 'data' => $existing];
         }
     }
 
@@ -1060,8 +1840,8 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         return ['success' => false, 'message' => '机器人不存在'];
     }
 
-    // 第一步：获取 access_token
-    $tokenUrl = 'https://bots.qq.com/app/getAppAccessToken';
+    // 第一步：获取 access_token（域名统一后走 api.bot.qq.com）
+    $tokenUrl = getApiTokenUrl();
     $postData = json_encode([
         'appId'        => (string)$appid,
         'clientSecret' => $bot['secret']
@@ -1075,10 +1855,8 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
 
     $accessToken = $tokenData['access_token'];
 
-    // 第二步：调用获取群信息接口
-    $apiBase = ($bot['env'] === '沙箱')
-        ? 'https://sandbox.api.sgroup.qq.com'
-        : 'https://api.sgroup.qq.com';
+    // 第二步：调用获取群信息接口（支持后台切换新版/旧版域名）
+    $apiBase = getApiBase($bot['env'] ?? '正式');
     $infoUrl = $apiBase . '/v2/groups/' . $groupOpenid . '/info';
 
     $headers = [
@@ -1094,20 +1872,25 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         return ['success' => false, 'message' => '获取群信息失败: ' . $errMsg];
     }
 
-    $groupName = $infoData['group_name'] ?? '';
-    $fingerMemo = $infoData['group_finger_memo'] ?? '';
-    $classText = $infoData['group_class_text'] ?? '';
+    $groupName = cleanApiText($infoData['group_name'] ?? '');
+    $fingerMemo = cleanApiText($infoData['group_finger_memo'] ?? '');
+    $classText = cleanApiText($infoData['group_class_text'] ?? '');
     $tags = $infoData['group_tags'] ?? [];
-    $tagsStr = is_array($tags) ? implode(',', $tags) : (string)$tags;
+    if (is_array($tags)) {
+        $tags = array_map('cleanApiText', $tags);
+        $tagsStr = implode(',', array_filter($tags, function ($t) { return $t !== ''; }));
+    } else {
+        $tagsStr = cleanApiText($tags);
+    }
     $memberNum = intval($infoData['group_member_num'] ?? 0);
 
-    // 第三步：存入数据库
+    // 第三步：存入数据库（同时记录 info_updated_at 用于TTL判断，保证标签状态及时更新）
     db()->execute(
         "INSERT OR IGNORE INTO groups (appid, group_id, group_name, remark, custom_avatar) VALUES (?, ?, '', '', '')",
         [$appid, $groupOpenid]
     );
     db()->execute(
-        "UPDATE groups SET group_name = ?, group_finger_memo = ?, group_class_text = ?, group_tags = ?, group_member_num = ?, last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+        "UPDATE groups SET group_name = ?, group_finger_memo = ?, group_class_text = ?, group_tags = ?, group_member_num = ?, info_updated_at = datetime('now','localtime'), last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
         [$groupName, $fingerMemo, $classText, $tagsStr, $memberNum, $appid, $groupOpenid]
     );
 

@@ -1,0 +1,8 @@
+# 禁止直接访问市场库文件（仅允许 PHP 内部 include）
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

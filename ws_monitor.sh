@@ -35,6 +35,25 @@ STATUS_FILE="$APP_DIR/data/ws_monitor_status.json"
 # 确保目录存在
 mkdir -p "$APP_DIR/data/logs" 2>/dev/null
 
+# 权限策略：Web/PHP 与 WS 必须使用同一运行用户，避免 root 运行 WS 后
+# SQLite/WAL/日志/PID 文件变成 root 属主，进而导致后台出现
+# "PDOException: unable to open database file"。
+WWW_USER=""
+for candidate in www www-data nginx apache; do
+    if id "$candidate" >/dev/null 2>&1; then
+        WWW_USER="$candidate"
+        break
+    fi
+done
+
+# 创建目录并仅设置合理权限；不要使用 chmod -R 777。
+mkdir -p "$APP_DIR/data/logs" 2>/dev/null
+if [ -n "$WWW_USER" ] && [ "$(id -u)" = "0" ]; then
+    chown -R "$WWW_USER":"$WWW_USER" "$APP_DIR/data" 2>/dev/null || chown -R "$WWW_USER" "$APP_DIR/data" 2>/dev/null
+fi
+chmod 750 "$APP_DIR/data" 2>/dev/null
+chmod 750 "$APP_DIR/data/logs" 2>/dev/null
+
 # 查找 PHP 可执行文件
 find_php() {
     # 尝试常见路径
@@ -112,8 +131,14 @@ start_daemon() {
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动 WebSocket 守护进程..." >> "$MONITOR_LOG"
 
-    # 使用 nohup 后台启动
-    nohup "$PHP_BIN" "$APP_DIR/ws_client.php" >> "$LOG_FILE" 2>&1 &
+    # 使用与 Web/PHP 相同的用户启动，避免 root 创建 SQLite/WAL/PID 文件。
+    if [ "$(id -u)" = "0" ] && [ -n "$WWW_USER" ] && command -v runuser >/dev/null 2>&1; then
+        runuser -u "$WWW_USER" -- nohup "$PHP_BIN" "$APP_DIR/ws_client.php" >> "$LOG_FILE" 2>&1 &
+    elif [ "$(id -u)" = "0" ] && [ -n "$WWW_USER" ] && command -v su >/dev/null 2>&1; then
+        su -s /bin/bash "$WWW_USER" -c "nohup '$PHP_BIN' '$APP_DIR/ws_client.php' >> '$LOG_FILE' 2>&1 &" &
+    else
+        nohup "$PHP_BIN" "$APP_DIR/ws_client.php" >> "$LOG_FILE" 2>&1 &
+    fi
     local shell_pid=$!
 
     # 写入初始 PID（PHP 启动后会覆盖为自己的 PID）

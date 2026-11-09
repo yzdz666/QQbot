@@ -1,0 +1,8 @@
+# 市场目录基础防护
+Options -Indexes
+<Files "config.php">
+  Require all denied
+</Files>
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>

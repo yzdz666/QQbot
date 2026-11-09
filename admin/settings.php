@@ -145,8 +145,12 @@ pre#wsLogBox {
         <input type="text" id="adminUsername" class="form-control" value="<?= htmlspecialchars($admin['username'] ?? '') ?>" required>
       </div>
       <div class="form-group">
+        <label for="adminCurrentPassword">当前密码</label>
+        <input type="password" id="adminCurrentPassword" class="form-control" placeholder="请输入当前密码" required autocomplete="current-password">
+      </div>
+      <div class="form-group">
         <label for="adminPassword">新密码</label>
-        <input type="password" id="adminPassword" class="form-control" placeholder="输入新密码（至少6位）" required>
+        <input type="password" id="adminPassword" class="form-control" placeholder="输入新密码（至少8位，含字母和数字）" required autocomplete="new-password">
         <div class="form-hint">修改密码或用户名后将清除所有会话，需要重新登录</div>
       </div>
       <button type="submit" class="btn btn-primary" id="adminSaveBtn">保存</button>
@@ -175,6 +179,22 @@ pre#wsLogBox {
       </div>
       <button type="submit" class="btn btn-primary" id="aiSaveBtn">保存配置</button>
     </form>
+  </div>
+</div>
+
+<!-- ==================== Section 2.5: 接口域名说明 ==================== -->
+<!-- 官方 2026-08-10 起所有接口域名统一为 api.bot.qq.com，旧版域名已停用，切换功能已移除 -->
+<div class="card mb-3">
+  <div class="card-header">
+    <h3>接口域名</h3>
+    <span class="badge badge-success">官方统一域名 (api.bot.qq.com)</span>
+  </div>
+  <div class="card-body">
+    <p style="color:var(--text-secondary); margin:0; font-size:13px;">
+      所有 API 接口调用（消息发送、群信息、指令面板、菜单、WebSocket网关等）统一使用官方域名
+      <code style="font-size:12px;">https://api.bot.qq.com</code>（正式与沙箱相同，含 access_token 接口）。
+      官方已停用旧版 api.sgroup.qq.com 域名，框架已同步移除相关配置。
+    </p>
   </div>
 </div>
 
@@ -421,8 +441,17 @@ function saveAdmin(event) {
         alert('用户名不能为空');
         return false;
     }
-    if (newPassword.length < 6) {
-        alert('密码长度至少6位');
+    if (newPassword.length < 8) {
+        alert('密码长度至少8位');
+        return false;
+    }
+    if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+        alert('新密码需同时包含字母和数字');
+        return false;
+    }
+    var currentPassword = document.getElementById('adminCurrentPassword').value;
+    if (!currentPassword) {
+        alert('请输入当前密码');
         return false;
     }
     if (!confirm('确定要修改管理员账户吗？\n修改后将清除所有会话，需要重新登录。')) {
@@ -434,7 +463,7 @@ function saveAdmin(event) {
     var originalText = btn.textContent;
     btn.textContent = '保存中...';
 
-    apiCall('change_password', { username: username, new_password: newPassword }, function(res) {
+    apiCall('change_password', { username: username, new_password: newPassword, current_password: currentPassword }, function(res) {
         btn.disabled = false;
         btn.textContent = originalText;
         if (res.success) {

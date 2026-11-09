@@ -1,11 +1,26 @@
 # 数据库文件
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 
-# 数据目录（保留结构）
+# 机器人数据目录（保留结构与访问控制文件）
 data/*
 !data/.gitkeep
+!data/.htaccess
+!data/plugin_backups
+data/plugin_backups/*
+!data/plugin_backups/.gitkeep
+!data/plugin_backups/.htaccess
+
+# 插件市场运行数据（插件包、待审包不入库）
+market/data/*.db
+market/data/*.log
+market/storage/plugins/*
+!market/storage/plugins/.gitkeep
+market/storage/pending/*
+!market/storage/pending/.gitkeep
 
 # 日志文件
 *.log

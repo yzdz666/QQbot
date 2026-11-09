@@ -1,10 +1,53 @@
 <?php
 
 // ==================== 日志记录函数（数据库 + 文件双写，与原版兼容） ====================
+
+// 发送富媒体日志 → 结构化附件: 从日志类型+展示URL构造 attachments 数组 (聊天记录页回放媒体用)
+// 展示URL支持 http(s) 绝对链与站内相对路径(api/chat_api.php?action=media&f=...); 二进制占位符([上传图片]等)无URL不构造
+function 发送媒体附件结构($媒体类型, $displayUrl, $name = '') {
+    $displayUrl = trim((string)$displayUrl, "`\t\n\r ");
+    if ($displayUrl === '') return null;
+    if (!preg_match('/^https?:\/\//i', $displayUrl) && $displayUrl[0] !== '/' && strpos($displayUrl, 'api/') !== 0) return null;
+    $map = ['图片' => 'image', '语音' => 'voice', '视频' => 'video', '文件' => 'file'];
+    $type = $map[$媒体类型] ?? 'file';
+    return [
+        ['type' => $type, 'url' => $displayUrl, 'wav_url' => '', 'asr_text' => '',
+         'filename' => (string)$name, 'content_type' => $type,
+         'width' => null, 'height' => null, 'size' => null]
+    ];
+}
+
+// 发送日志 raw_data 增强: 把日志类型对应的展示URL注入 raw_data.d.attachments,
+// 使后台聊天页/消息日志页无需解析文本即可渲染媒体。发送响应原有字段(id/ext_info等)全部保留。
+function 发送日志富媒体原始数据($logType, $logContent, $rawData) {
+    $map = ['图片' => '图片', '引用图片' => '图片', '引用图文' => '图片',
+            '语音' => '语音', '引用语音' => '语音',
+            '视频' => '视频', '引用视频' => '视频',
+            '文件' => '文件', '引用文件' => '文件'];
+    if (!isset($map[$logType])) return $rawData;
+    $content = trim((string)$logContent);
+    if ($content === '') return $rawData;
+    // 展示URL = 首段(到第一个空白为止); 其余部分为配文(引用系以 "+ 配文" 拼接)
+    if (!preg_match('/^(https?:\/\/\S+|api\/[^\s]+|\/[^\s]+)(?:[ \t]+(.+))?$/s', $content, $m)) {
+        return $rawData;  // [上传图片]等占位符或纯文字: 无可回放URL
+    }
+    $url = rtrim($m[1], "`\t\n\r ");
+    $att = 发送媒体附件结构($map[$logType], $url);
+    if ($att === null) return $rawData;
+    $data = json_decode((string)$rawData, true);
+    if (!is_array($data)) $data = [];
+    if (!isset($data['d']) || !is_array($data['d'])) $data['d'] = [];
+    if (empty($data['d']['attachments'])) $data['d']['attachments'] = $att;
+    return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 function 记录发送($action, $target, $content, $type = "文字", $messageId = null, $rawData = null) {
     $sourceType = defined('消息来源') ? 消息来源 : 'unknown';
     $appidVal = defined('appid') ? appid : 'unknown';
     $userId = defined('用户') ? 用户 : null;
+
+    // 富媒体/引用富媒体日志: 注入结构化附件, 后台可回看图片/语音/视频/文件
+    $rawData = 发送日志富媒体原始数据($type, $content, $rawData);
 
     // 写入数据库
     logMessage($appidVal, '发送', $sourceType, $target, $type, $content, $messageId, $userId, $rawData);
@@ -22,7 +65,7 @@ function 记录发送($action, $target, $content, $type = "文字", $messageId =
     if (!empty($messageId)) {
         $logEntry["id"] = $messageId;
     }
-    wlog(json_encode($logEntry, JSON_UNESCAPED_UNICODE));
+    wlog(json_encode($logEntry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
 function BOT凭证(){
@@ -30,7 +73,7 @@ function BOT凭证(){
        if (time() < $time) {
          return 读("function/".appid,"Access","");
        } else {
-         $url="https://bots.qq.com/app/getAppAccessToken";
+         $url=getApiTokenUrl();
          $appid=appid;
          $secret=secret;
          $json=json_encode([
@@ -41,7 +84,7 @@ function BOT凭证(){
          $fw=curl($url,"POST",$header,$json);
          $fw=json_decode($fw,true);
          if (!isset($fw["access_token"])) {
-            wlog("获取Access Token失败: " . json_encode($fw, JSON_UNESCAPED_UNICODE), appid);
+            wlog("获取Access Token失败: " . json_encode($fw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), appid);
             return "";
          }
          $Access=$fw["access_token"];
@@ -59,16 +102,15 @@ if (!defined('事件ID')) define('事件ID', '');
 if (!defined('消息来源')) define('消息来源', '');
 if (!defined('来源')) define('来源', '');
 if (!defined('用户')) define('用户', '');
+// 引用ID: 本条消息的引用索引(REFIDX_xxx), 官方 message_reference.message_id 规范取值
+// 正常由 ws_event_handler.php / index.php 从 message_scene.ext 的 msg_idx 定义; 兜底回退消息ID
+if (!defined('引用ID')) define('引用ID', defined('消息ID') ? 消息ID : '');
 
 function BOTAPI($Address,$me,$json){
-    $urls=[
-    "正式"=>"https://api.sgroup.qq.com",
-    "沙箱"=>"https://sandbox.api.sgroup.qq.com"
-    ];
-    // 安全保护：确保type常量有效，防止URL拼接错误
+    // 统一使用官方API域名 api.bot.qq.com（旧版域名已停用移除）
     $env = defined('type') ? type : '正式';
-    if (!isset($urls[$env])) $env = '正式';
-    $url = $urls[$env].$Address;
+    if (!in_array($env, ['正式', '沙箱'], true)) $env = '正式';
+    $url = getApiBase($env).$Address;
     $header = ["Authorization: QQBot ".BOT凭证(), 'Content-Type: application/json'];
     // 统一清理空的msg_id/event_id字段（主动消息不需要锚点，空值会导致invalid request）
     if (!empty($json) && is_string($json)) {
@@ -205,10 +247,13 @@ function 富媒体($type,$image,$name = null) {
 }
 
 
-function 图片($image,$content=null) {
+function 图片($image,$content=null,$logMedia=null) {
    // 记录实际图片URL，而非占位符；二进制数据用占位符代替
-   $logContent = (is_string($image) && preg_match('/^http/', $image)) ? $image : "[上传图片]";
-   if ($content !== null) $logContent = $logContent . " " . $content;
+   // $logMedia: 展示URL覆盖(后台上传二进制时传入本地留存URL api/chat_api.php?action=media&f=...)
+   $mediaDisp = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+              : ((is_string($image) && preg_match('/^http/', $image)) ? $image : "[上传图片]");
+   $logContent = $mediaDisp;
+   if ($content !== null && trim((string)$content) !== '') $logContent = $logContent . " " . trim((string)$content);
    switch (消息来源) {
      case "群聊":
         $file_info =富媒体("图片",$image);
@@ -301,8 +346,10 @@ function silk($link){
 }
 
 // ==================== 本地语音功能 ====================
-function 本地语音($yy) {
-   $logContent = (is_string($yy) && preg_match('/^http/', $yy)) ? $yy : "[本地语音数据]";
+function 本地语音($yy, $logMedia = null) {
+   $mediaDisp = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+              : ((is_string($yy) && preg_match('/^http/', $yy)) ? $yy : "[本地语音数据]");
+   $logContent = $mediaDisp;
    switch (消息来源) {
      case "群聊":
         $file_info = 富媒体("语音",$yy);
@@ -370,8 +417,8 @@ function 本地语音($yy) {
    }
 }
 
-function 语音($yy) {
-   $logContent = $yy;
+function 语音($yy, $logMedia = null) {
+   $logContent = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia) : $yy;
    switch (消息来源) {
      case "群聊":
         $silk = silk($yy);
@@ -442,8 +489,11 @@ function 语音($yy) {
    }
 }
 
-function 文件($yy, $nm = null) {
-   $logContent = (is_string($yy) && preg_match('/^http/', $yy)) ? $yy : "[上传文件:" . ($nm ?? 'file') . "]";
+function 文件($yy, $nm = null, $logMedia = null) {
+   $mediaDisp = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+              : ((is_string($yy) && preg_match('/^http/', $yy)) ? $yy : "[上传文件:" . ($nm ?? 'file') . "]");
+   $logContent = $mediaDisp;
+   if ($nm !== null && trim((string)$nm) !== '' && strpos($mediaDisp, '[') !== 0) $logContent .= ' (' . $nm . ')';
     // 自动提取文件名（如果未提供）
     if ($nm === null) {
         $nm = 'file';
@@ -527,8 +577,10 @@ function 文件($yy, $nm = null) {
 }
 
 
-function 视频($video) {
-   $logContent = (is_string($video) && preg_match('/^http/', $video)) ? $video : "[上传视频]";
+function 视频($video, $logMedia = null) {
+   $mediaDisp = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+              : ((is_string($video) && preg_match('/^http/', $video)) ? $video : "[上传视频]");
+   $logContent = $mediaDisp;
    switch (消息来源) {
      case "群聊":
         $file_info =富媒体("视频",$video);
@@ -702,7 +754,7 @@ function 文卡(...$items) {
     ];
     // 存储完整Ark卡片数据（JSON），供聊天界面渲染
     $wenkaLogData = ['template_id' => 23, 'kv' => $json['ark']['kv']];
-    $wenkaLogJson = json_encode($wenkaLogData, JSON_UNESCAPED_UNICODE);
+    $wenkaLogJson = json_encode($wenkaLogData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     switch (消息来源) {
          case "群聊":
            $evId = defined("事件ID") ? 事件ID : "";
@@ -762,7 +814,7 @@ function 大图($title,$xtitle,$iurl){
     ];
     // 存储完整Ark卡片数据（JSON），供聊天界面渲染
     $datuLogData = ['template_id' => 37, 'kv' => $json['ark']['kv']];
-    $datuLogJson = json_encode($datuLogData, JSON_UNESCAPED_UNICODE);
+    $datuLogJson = json_encode($datuLogData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     switch (消息来源) {
          case "群聊":
            $evId = defined("事件ID") ? 事件ID : "";
@@ -825,7 +877,7 @@ function 跳转卡($title,$desc,$image,$tz){
     ];
     // 存储完整Ark卡片数据（JSON），供聊天界面渲染
     $tzLogData = ['template_id' => 24, 'kv' => $json['ark']['kv']];
-    $tzLogJson = json_encode($tzLogData, JSON_UNESCAPED_UNICODE);
+    $tzLogJson = json_encode($tzLogData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     switch (消息来源) {
          case "群聊":
            $evId = defined("事件ID") ? 事件ID : "";
@@ -870,6 +922,20 @@ function 跳转卡($title,$desc,$image,$tz){
 }
 
 function 流式(...$msgs){
+    if (!defined('来源') || 来源 === '') {
+        return json_encode(['code' => -1, 'message' => '当前上下文没有会话来源'], JSON_UNESCAPED_UNICODE);
+    }
+    $msgs = array_values($msgs);
+    $sourceType = defined('消息来源') ? 消息来源 : '';
+    $msgId = defined('消息ID') ? 消息ID : '';
+    $eventId = defined('事件ID') ? 事件ID : '';
+
+    // 私聊/互动私聊：使用官方新的 /stream_messages 流式接口（2025 新增）
+    if ($sourceType === '私聊' || $sourceType === '互动') {
+        return 流式发送单聊(来源, $msgs, $msgId, $eventId, 'append', 'markdown');
+    }
+
+    // 群聊：保持原有的消息分片方式（官方群聊暂未开放 stream_messages）
     $id = null;
     $index = 0;
     $total = count($msgs);
@@ -878,8 +944,8 @@ function 流式(...$msgs){
         $isLast = ($index === $total - 1);
         $json = [
             "content" => (string)$msg,
-            "msg_id" => 消息ID,
-            "msg_seq" => rand(1, 99999),
+            "msg_id" => $msgId,
+            "msg_seq" => random_int(1, 99999),
             "stream" => [
                 "state" => $isLast ? 10 : 1,
                 "id" => $id,
@@ -887,10 +953,10 @@ function 流式(...$msgs){
                 "reset" => false
             ]
         ];
-        $resp = BOTAPI("/v2/users/".来源."/messages", "POST", json_encode($json));
+        $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($json, JSON_UNESCAPED_UNICODE));
         $lastResp = $resp;
-        $json = json_decode($resp, true);
-        $id = $json["id"] ?? null;
+        $decoded = json_decode($resp, true);
+        $id = $decoded["id"] ?? null;
         $index++;
     }
     $content_preview = implode(" ", array_slice($msgs, 0, 2));
@@ -900,16 +966,28 @@ function 流式(...$msgs){
 
 function 撤回($id){
    // 不记录发送日志，撤回操作由 chat_api.php 更新原消息状态为[已撤回]
+   // 映射消息来源到API端点类型；未支持的来源返回错误JSON而不是抛出未定义索引
    $type = [
       "群聊"=>"groups",
       "私聊"=>"users",
       "加群"=>"groups",
       "退群"=>"groups",
       "群成员增加"=>"groups",   // 新增
-      "群成员移除"=>"groups"    // 新增
+      "群成员移除"=>"groups",    // 新增
+      "入群申请"=>"groups",      // 群生命周期事件
+      "群消息拒绝"=>"groups",
+      "群消息接收"=>"groups",
+      "好友增加"=>"users",       // C2C生命周期事件
+      "好友删除"=>"users"
    ];
-   $type = $type[消息来源];
-   return BOTAPI("/v2/{$type}/".来源."/messages/".$id,"DELETE","");
+   $sourceType = defined('消息来源') ? 消息来源 : '';
+   if (!isset($type[$sourceType]) || !defined('来源') || 来源 === '') {
+      return json_encode([
+         "code" => -1,
+         "message" => "当前消息来源[{$sourceType}]不支持撤回操作"
+      ], JSON_UNESCAPED_UNICODE);
+   }
+   return BOTAPI("/v2/{$type[$sourceType]}/".来源."/messages/".$id,"DELETE","");
 }
 
 function 互动私聊(){
@@ -924,72 +1002,217 @@ function 互动目标用户(){
    return raw["d"]["user_openid"] ?? 来源;
 }
 
-// ==================== 引用消息函数 ====================
-// 用法和撤回一样简单：引用($msgId, $content)
-// $msgId 可以是消息ID或REFIDX（从消息场景中提取）
+// ==================== 引用消息函数（官方规范版） ====================
+// 官方"发送群聊消息"接口规范 (bot.q.qq.com/wiki/develop/api-v2):
+//   message_reference.message_id = 被引用消息ID, 填 REFIDX_xxx 时消息以引用形式展示:
+//     - 引用"别人发的消息": 该消息事件 message_scene.ext 数组中的 msg_idx 字段 → 框架已定义为常量 引用ID
+//     - 引用"机器人自己发的消息": 发送响应 ext_info.ref_idx → 用 辅助函数 发送响应引用IDX($resp) 提取
+//   msg_id / event_id = 被动回复锚点 (5分钟内有效, 每条消息最多回复5次), 与 message_reference 互不冲突
+//   msg_seq 与 msg_id 联合去重, 相同组合重复发送会被官方拒绝
+//   msg_type: 0=纯文本(content)  2=Markdown(markdown对象)  7=富媒体(media)
+//   注意: msg_type=2 时 content 必须为空; msg_type=7 时 content 可选(作为媒体旁的图文说明)
+
+// 统一引用发送入口: 按 消息来源 补被动回复锚点并选择API地址, 发送并记录日志
+// 返回原始响应 JSON; 消息来源不支持时返回 null (由各引用函数自行降级)
+function 引用发送($payload, $logAction, $logType, $logContent) {
+    $anchorMsgId = defined("消息ID") ? 消息ID : "";
+    $anchorEvId  = defined("事件ID") ? 事件ID : "";
+    $seq = mt_rand(1, 99999);
+    switch (消息来源) {
+        case "群聊":
+            if ($anchorEvId !== '') { $payload["event_id"] = $anchorEvId; }
+            elseif ($anchorMsgId !== '') { $payload["msg_id"] = $anchorMsgId; $payload["msg_seq"] = $seq; }
+            $url = "/v2/groups/".来源."/messages";
+            break;
+        case "私聊":
+        case "好友增加":
+        case "好友删除":
+            if ($anchorEvId !== '') { $payload["event_id"] = $anchorEvId; }
+            elseif ($anchorMsgId !== '') { $payload["msg_id"] = $anchorMsgId; $payload["msg_seq"] = $seq; }
+            $url = "/v2/users/".来源."/messages";
+            break;
+        case "加群":
+        case "退群":
+        case "群成员增加":
+        case "群成员移除":
+        case "入群申请":
+        case "群消息拒绝":
+        case "群消息接收":
+        case "互动":
+            $payload["event_id"] = $anchorEvId;
+            if (isset($payload["event_id"]) && $payload["event_id"] === '') unset($payload["event_id"]);
+            $url = "/v2/groups/".来源."/messages";
+            break;
+        case "文字子频道":
+        case "频道":
+            if ($anchorMsgId !== '') $payload["msg_id"] = $anchorMsgId;
+            $url = "/channels/".来源."/messages";
+            break;
+        case "频道私信":
+            if ($anchorMsgId !== '') $payload["msg_id"] = $anchorMsgId;
+            $url = "/dms/".来源."/messages";
+            break;
+        default:
+            return null;
+    }
+    $resp = BOTAPI($url, "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
+    $data = json_decode($resp, true);
+    $returnedMsgId = is_array($data) ? ($data['id'] ?? '') : '';
+    记录发送($logAction, 来源, $logContent, $logType, $returnedMsgId, $resp);
+    return $resp;
+}
+
+// 引用发送文字 (兼容旧版用法: 引用($msgId, $content))
+// $msgId 推荐传 引用ID 常量(别人的消息) 或 发送响应引用IDX 提取值(自己的消息)
 function 引用($msgId, $content = '') {
     // 确保有内容，API要求content不能为空
     if (empty($content)) {
         $content = " ";
     }
-    
     $payload = [
-        "msg_type" => 0,  // 文本类型（API必填字段）
+        "msg_type" => 0,
         "content" => $content,
         "message_reference" => [
             "message_id" => $msgId,
             "ignore_get_message_error" => true
         ]
     ];
-    
-    // 根据消息来源设置不同的参数
-    switch (消息来源) {
-        case "群聊":
-            $payload["msg_id"] = 消息ID;
-            $payload["msg_seq"] = rand(1, 99999);
-            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
-            break;
-            
-        case "私聊":
-        case "好友增加":   // C2C生命周期事件
-        case "好友删除":
-            $payload["msg_id"] = 消息ID;
-            $payload["msg_seq"] = rand(1, 99999);
-            $resp = BOTAPI("/v2/users/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
-            break;
-            
-        case "加群":
-        case "退群":
-        case "群成员增加":
-        case "群成员移除":
-        case "入群申请":   // 群生命周期事件
-        case "群消息拒绝":
-        case "群消息接收":
-        case "互动":
-            $payload["event_id"] = 事件ID;
-            $payload["msg_seq"] = rand(1, 99999);
-            $resp = BOTAPI("/v2/groups/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
-            break;
-            
-        case "文字子频道":
-        case "频道":   // 频道消息
-            $payload["msg_id"] = 消息ID;
-            $resp = BOTAPI("/channels/".来源."/messages", "POST", json_encode($payload, JSON_UNESCAPED_UNICODE));
-            break;
-            
-        default:
-            // 不支持的来源，降级为文字发送
-            return 文字($content);
+    $resp = 引用发送($payload, "发送引用消息", "引用", $content);
+    if ($resp === null) {
+        // 不支持的来源，降级为文字发送
+        return 文字($content);
     }
-    
-    // 解析响应，获取返回的消息ID
-    $data = json_decode($resp, true);
-    $returnedMsgId = $data['id'] ?? '';
-    
-    // 记录日志，带上返回的消息ID
-    记录发送("发送引用消息", 来源, $content, "引用", $returnedMsgId, $resp);
-    
     return $resp;
+}
+
+// 引用发送图片: 引用图片($msgId, $image)
+// 引用发"图片+文字": 引用图片($msgId, $image, '配文') (官方 msg_type=7 + media + content)
+// $image 支持 URL 或二进制数据; $logMedia 展示URL覆盖(后台上传二进制时传本地留存URL); 失败时降级为纯文字提示(与 图片() 行为一致)
+function 引用图片($msgId, $image, $content = null, $logMedia = null) {
+    $hasText = ($content !== null && trim((string)$content) !== '');
+    $dispUrl = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+             : ((is_string($image) && preg_match('/^http/i', $image)) ? $image : "[上传图片]");
+    $logContent = $hasText ? ($dispUrl . " + " . trim((string)$content)) : $dispUrl;
+    $logType  = $hasText ? "引用图文" : "引用图片";
+    $logAction = $hasText ? "发送引用图文" : "发送引用图片";
+
+    // 频道消息不走 /files 富媒体接口, 用 file_image 直传 (与 图片() 同策略)
+    if (defined('消息来源') && in_array(消息来源, ["文字子频道", "频道"], true)) {
+        $payload = [
+            "msg_type" => 0,
+            "content" => (string)$content,
+            "file_image" => $image,
+            "message_reference" => ["message_id" => $msgId, "ignore_get_message_error" => true]
+        ];
+        $resp = 引用发送($payload, $logAction, $logType, $logContent);
+        if ($resp === null) return 图片($image, $content);
+        return $resp;
+    }
+
+    $up = 富媒体("图片", $image);
+    if (!is_array($up) || empty($up['file_info'])) {
+        // 上传失败: 把官方错误信息回复给用户
+        $errMsg = is_array($up) && isset($up['message']) ? $up['message'] : "图片上传失败";
+        return 文字($errMsg);
+    }
+    $payload = [
+        "msg_type" => 7,
+        "content" => $hasText ? "\n{$content}" : "",
+        "media" => ["file_info" => $up['file_info']],
+        "message_reference" => ["message_id" => $msgId, "ignore_get_message_error" => true]
+    ];
+    $resp = 引用发送($payload, $logAction, $logType, $logContent);
+    if ($resp === null) return 图片($image, $content);
+    return $resp;
+}
+
+// 引用发送 Markdown: 引用MD($msgId, $md, $keyboard = null, $style = null)
+// 官方 msg_type=2 + markdown 对象(content必填), 传 markdown 后 content 必须为空(本函数不传content)
+// $keyboard 支持键盘模板ID(短形式); $style 与 MD() 一致
+function 引用MD($msgId, $md, $keyboard = null, $style = null) {
+    $mdObj = ["content" => $md];
+    if ($style !== null && is_array($style)) $mdObj["style"] = $style;
+    $payload = [
+        "msg_type" => 2,
+        "markdown" => $mdObj,
+        "message_reference" => ["message_id" => $msgId, "ignore_get_message_error" => true]
+    ];
+    if ($keyboard !== null) $payload["keyboard"] = ["id" => $keyboard];
+    $resp = 引用发送($payload, "发送引用MD", "引用MD", $md);
+    if ($resp === null) return MD($md, $keyboard, $style);
+    return $resp;
+}
+
+// ==================== 引用发送富媒体（语音/视频/文件） ====================
+// 通用实现: 官方 msg_type=7 + media(file_info) + message_reference, 与 引用图片 同构
+// $媒体类型: 语音|视频|文件; $source 支持 URL 或二进制; $name 为文件名(文件类型用)
+// content 可选(媒体旁的说明文字); 频道消息不支持富媒体引用形态, 返回 null 由包装函数降级直发
+function 引用富媒体($msgId, $媒体类型, $source, $content = null, $name = null, $logMedia = null) {
+    if (defined('消息来源') && in_array(消息来源, ["文字子频道", "频道", "频道私信"], true)) {
+        return null;
+    }
+    $hasText = ($content !== null && trim((string)$content) !== '');
+    $dispUrl = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+             : ((is_string($source) && preg_match('/^http/i', $source)) ? $source : "[上传{$媒体类型}]");
+    $logContent = $hasText ? ($dispUrl . " + " . trim((string)$content)) : $dispUrl;
+    $logType  = "引用{$媒体类型}";
+    $logAction = "发送引用{$媒体类型}";
+
+    // 语音需先转 silk (与 语音() 同策略: URL 音频经外部转换服务)
+    // 展示URL保留原始http链(浏览器可直接播放), 不再覆盖为 [silk语音] 占位
+    if ($媒体类型 === '语音' && is_string($source) && preg_match('/^http/i', $source)) {
+        $silk = silk($source);
+        if ($silk === '') {
+            return 文字("语音转换失败，无法发送");
+        }
+        $source = $silk;
+    }
+
+    $up = 富媒体($媒体类型, $source, $name);
+    if (!is_array($up) || empty($up['file_info'])) {
+        // 上传失败: 把官方错误信息回复给用户 (与 图片() 行为一致)
+        $errMsg = is_array($up) && isset($up['message']) ? $up['message'] : "{$媒体类型}上传失败";
+        return 文字($errMsg);
+    }
+    $payload = [
+        "msg_type" => 7,
+        "content" => $hasText ? "\n{$content}" : "",
+        "media" => ["file_info" => $up['file_info']],
+        "message_reference" => ["message_id" => $msgId, "ignore_get_message_error" => true]
+    ];
+    return 引用发送($payload, $logAction, $logType, $logContent);
+}
+
+// 引用发送语音: 引用语音($msgId, $url) / 引用语音($msgId, $url, '配文')
+// URL 语音自动 silk 转换; 来源不支持引用时降级为无引用直发
+function 引用语音($msgId, $url, $content = null) {
+    $resp = 引用富媒体($msgId, "语音", $url, $content);
+    if ($resp === null) return 语音($url);
+    return $resp;
+}
+
+// 引用发送视频: 引用视频($msgId, $url) / 引用视频($msgId, $url, '配文')
+function 引用视频($msgId, $url, $content = null) {
+    $resp = 引用富媒体($msgId, "视频", $url, $content);
+    if ($resp === null) return 视频($url);
+    return $resp;
+}
+
+// 引用发送文件: 引用文件($msgId, $url, $name = null, $content = null)
+function 引用文件($msgId, $url, $name = null, $content = null) {
+    $resp = 引用富媒体($msgId, "文件", $url, $content, $name);
+    if ($resp === null) return 文件($url, $name);
+    return $resp;
+}
+
+// 从发送响应中提取机器人自己消息的引用IDX (官方响应 ext_info.ref_idx 字段)
+// 用法: $resp = 文字('你好'); 引用(发送响应引用IDX($resp), '引用机器人刚发的这条');
+function 发送响应引用IDX($resp) {
+    $data = is_array($resp) ? $resp : json_decode((string)$resp, true);
+    if (!is_array($data)) return '';
+    if (!empty($data['ext_info']['ref_idx'])) return (string)$data['ext_info']['ref_idx'];
+    if (!empty($data['ref_idx'])) return (string)$data['ref_idx'];
+    return '';
 }
 
 // ==================== MD函数（已升级，支持style参数） ====================
@@ -1472,26 +1695,184 @@ function 分享链接($groupOpenid) {
     return json_decode($resp, true);
 }
 
-// ==================== 查询群成员信息 ====================
-function 获取群成员($groupOpenid, $memberOpenid) {
+// ==================== 群成员管理 - 查询群成员信息 (GET /v2/groups/{group_openid}/members/{member_openid}) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_members_member_openid.get.html
+// 20260903 变更记录新增的群成员管理接口，该能力正在内邀接入中（未开通的机器人返回错误码 11253）。
+// 返回: member_openid(成员openid) / username(昵称) / member_role(member普通成员,owner群主,admin管理员)
+//       bot(是否机器人) / joined_at(入群时间RFC3339) / union_openid(平台统一标识,如有)
+function 获取群成员信息($groupOpenid, $memberOpenid) {
+    if (empty($groupOpenid) || empty($memberOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openid 为空']);
+    }
     $resp = BOTAPI("/v2/groups/{$groupOpenid}/members/{$memberOpenid}", "GET", "");
-    return json_decode($resp, true);
+    return $resp;
 }
 
-// ==================== 获取群成员列表 ====================
-function 获取群成员列表($groupOpenid, $limit = 20, $after = '') {
-    $url = "/v2/groups/{$groupOpenid}/members?limit={$limit}";
-    if (!empty($after)) {
-        $url .= "&after={$after}";
+// ==================== 群成员管理 - 获取群成员列表 (GET /v2/groups/{group_openid}/members) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_members.get.html
+// 20260903 变更记录新增的群成员管理接口（内邀中，错误码 11253 表示未开通）。
+// 每次最多返回 30 条，支持 cursor 分页；接口频率限制 60 QPM。
+// 参数:
+//   $groupOpenid - 群 OpenID
+//   $cursor      - 分页游标，首次请求传空串；后续传上一次响应的 next_cursor
+// 返回: {"members":[{member_openid,username,member_role,bot,joined_at,union_openid}], "next_cursor":""}
+//       next_cursor 为空串表示已到末页
+function 获取群成员列表($groupOpenid, $cursor = '') {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
     }
-    $resp = BOTAPI($url, "GET", "");
+    $query = empty($cursor) ? '' : '?cursor=' . urlencode($cursor);
+    $resp = BOTAPI("/v2/groups/{$groupOpenid}/members{$query}", "GET", "");
+    return $resp;
+}
+
+// ==================== 群成员管理 - 封装: 拉取全部群成员 ====================
+// 沿 next_cursor 自动分页拉取全部成员（每页最多30条）
+// 参数:
+//   $groupOpenid - 群 OpenID
+//   $maxPages    - 最大分页数保护（默认50页，防止死循环）
+// 返回: {"code":0,"members":[...],"pages":N} 或 {"code":-1,"message":"..."}
+function 获取全部群成员($groupOpenid, $maxPages = 50) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    $all = [];
+    $cursor = '';
+    $pages = 0;
+    while ($pages < $maxPages) {
+        $resp = 获取群成员列表($groupOpenid, $cursor);
+        $data = json_decode($resp, true);
+        if (!is_array($data)) {
+            return json_encode(['code' => -1, 'message' => '接口返回格式错误', 'raw' => $resp], JSON_UNESCAPED_UNICODE);
+        }
+        if (isset($data['code']) && $data['code'] != 0) {
+            return $resp;
+        }
+        if (isset($data['members']) && is_array($data['members'])) {
+            foreach ($data['members'] as $m) {
+                $all[] = $m;
+            }
+        }
+        $pages++;
+        $cursor = $data['next_cursor'] ?? '';
+        if ($cursor === '' || $cursor === null) {
+            break;
+        }
+    }
+    return json_encode(['code' => 0, 'members' => $all, 'pages' => $pages], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 群成员管理 - 群成员批量移除 (POST /v2/groups/{group_openid}/batch_remove_members) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_batch_remove_members.post.html
+// 20260903 变更记录新增的群成员管理接口（内邀中，错误码 11253 表示未开通）。
+// 单次最多移除 20 个成员，可选择同时加入群黑名单；接口频率限制 30 QPM。机器人需群管理员身份。
+// 参数:
+//   $groupOpenid        - 群 OpenID
+//   $memberOpenids      - 待移除成员的 member_openid 数组（最多20个，超过自动分批）
+//   $addToBlacklist     - 是否同时加入群黑名单（默认 false）
+// 返回: {"remove_members_result":"success","add_to_member_blacklist_fail_openids":[]}
+//       多批时返回 {"code":0,"message":"batch done","results":[...]}
+function 群成员批量移除($groupOpenid, $memberOpenids, $addToBlacklist = false) {
+    if (empty($groupOpenid) || empty($memberOpenids) || !is_array($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openids 为空']);
+    }
+    $memberOpenids = array_values(array_filter($memberOpenids, function ($v) {
+        return is_string($v) && trim($v) !== '';
+    }));
+    if (empty($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'member_openids 列表为空']);
+    }
+    $results = [];
+    // 每批最多20个（API限制）
+    foreach (array_chunk($memberOpenids, 20) as $batch) {
+        $data = ['member_openids' => array_values($batch)];
+        if ($addToBlacklist) {
+            $data['add_to_member_blacklist'] = true;
+        }
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+        $resp = BOTAPI("/v2/groups/{$groupOpenid}/batch_remove_members", "POST", $json);
+        wlog("[群成员批量移除] group={$groupOpenid} 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+        $results[] = $resp;
+    }
+    if (count($results) === 1) return $results[0];
+    return json_encode(['code' => 0, 'message' => 'batch done', 'results' => $results], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 群成员管理 - 群黑名单查询 (GET /v2/groups/{group_openid}/member_blacklist) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_member_blacklist.get.html
+// 20260903 变更记录新增的群成员管理接口（内邀中，错误码 11253 表示未开通）。
+// 参数:
+//   $groupOpenid - 群 OpenID
+//   $cursor      - 分页游标，首次请求传空串
+//   $limit       - 单页数量，默认 20，最大 100
+// 返回: {"users":[{union_openid,member_openid,username,banned_at,bot}], "next_cursor":""}
+//       next_cursor 为空串表示已到末页。接口频率限制 30 QPM。
+function 查询群黑名单($groupOpenid, $cursor = '', $limit = 20) {
+    if (empty($groupOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 为空']);
+    }
+    $limit = max(1, min(100, intval($limit)));
+    $query = 'limit=' . $limit;
+    if (!empty($cursor)) {
+        $query .= '&cursor=' . urlencode($cursor);
+    }
+    return BOTAPI("/v2/groups/{$groupOpenid}/member_blacklist?{$query}", "GET", "");
+}
+
+// ==================== 群成员管理 - 群黑名单操作 (POST /v2/groups/{group_openid}/member_blacklist) ====================
+// 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_member_blacklist.post.html
+// 20260903 变更记录新增的群成员管理接口（内邀中，错误码 11253 表示未开通）。
+// 注意: 只有目标用户不在群中时才能加入群黑名单（如需移除并拉黑，可用 群成员批量移除 的 add_to_member_blacklist 一次完成）。
+// 参数:
+//   $groupOpenid   - 群 OpenID
+//   $op            - 操作类型: add 加入黑名单 / del 移出黑名单
+//   $memberOpenids - 目标成员 openid 列表，单次最多 20 个（超过自动分批）
+// 返回: {"fail_openids":[]} 拉黑/移出失败的 openid 列表。接口频率限制 60 QPM。
+function 操作群黑名单($groupOpenid, $op, $memberOpenids) {
+    if (empty($groupOpenid) || empty($memberOpenids) || !is_array($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openids 为空']);
+    }
+    if (!in_array($op, ['add', 'del'], true)) {
+        return json_encode(['code' => -1, 'message' => 'op 仅支持 add(加入黑名单) / del(移出黑名单)']);
+    }
+    $memberOpenids = array_values(array_filter($memberOpenids, function ($v) {
+        return is_string($v) && trim($v) !== '';
+    }));
+    if (empty($memberOpenids)) {
+        return json_encode(['code' => -1, 'message' => 'member_openids 列表为空']);
+    }
+    $results = [];
+    // 每批最多20个（API限制）
+    foreach (array_chunk($memberOpenids, 20) as $batch) {
+        $json = json_encode(['op' => $op, 'member_openids' => array_values($batch)], JSON_UNESCAPED_UNICODE);
+        $resp = BOTAPI("/v2/groups/{$groupOpenid}/member_blacklist", "POST", $json);
+        wlog("[操作群黑名单] group={$groupOpenid} op={$op} 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
+        $results[] = $resp;
+    }
+    if (count($results) === 1) return $results[0];
+    return json_encode(['code' => 0, 'message' => 'batch done', 'results' => $results], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 群成员管理 - 封装: 加入群黑名单 ====================
+function 群黑名单拉黑($groupOpenid, $memberOpenids) {
+    return 操作群黑名单($groupOpenid, 'add', $memberOpenids);
+}
+
+// ==================== 群成员管理 - 封装: 移出群黑名单 ====================
+function 群黑名单移出($groupOpenid, $memberOpenids) {
+    return 操作群黑名单($groupOpenid, 'del', $memberOpenids);
+}
+
+// ==================== 查询群成员信息（旧版别名，保持兼容） ====================
+function 获取群成员($groupOpenid, $memberOpenid) {
+    $resp = 获取群成员信息($groupOpenid, $memberOpenid);
     return json_decode($resp, true);
 }
 
 // ==================== 确认互动回调 (PUT /interactions/{interaction_id}) ====================
 // 参照 ElainaBot_v2 框架 sender.ack_interaction: PUT /interactions/{iid}, body={"code":0}
 // 注意: QQ Bot API 的 interactions 端点没有 /v2/ 前缀 (与 groups/users 不同)
-// 官方文档: PUT https://api.sgroup.qq.com/interactions/{interaction_id}
+// 官方文档: PUT https://api.bot.qq.com/interactions/{interaction_id}（域名统一后）
 // ElainaBot_v2: await self.put(f'/interactions/{iid}', json={'code': code})
 function 确认互动($eventId, $body = '') {
     if (empty($eventId)) {
@@ -3087,14 +3468,10 @@ function 分片上传($channelId, $file, $content = '', $msgId = '', $filename =
         if (!empty($msgId)) $fields['msg_id'] = (string)$msgId;
         $fields['file_image'] = $curlFile;
 
-        // 构建完整 URL（与 BOTAPI 一致的环境选择）
-        $urls = [
-            "正式" => "https://api.sgroup.qq.com",
-            "沙箱" => "https://sandbox.api.sgroup.qq.com"
-        ];
+        // 构建完整 URL（与 BOTAPI 一致的环境选择 + 后台域名切换）
         $env = defined('type') ? type : '正式';
-        if (!isset($urls[$env])) $env = '正式';
-        $url = $urls[$env] . "/channels/{$channelId}/messages";
+        if (!in_array($env, ['正式', '沙箱'], true)) $env = '正式';
+        $url = getApiBase($env) . "/channels/{$channelId}/messages";
 
         $header = ["Authorization: QQBot " . BOT凭证()];
         $resp = curlMultipart($url, $header, $fields);
@@ -3112,4 +3489,155 @@ function 分片上传($channelId, $file, $content = '', $msgId = '', $filename =
             @unlink($tempFile);
         }
     }
+}
+// ============================================================================
+// 官方新增接口：流式发送单聊消息
+// POST /v2/users/{user_openid}/stream_messages
+// 文档: https://bot.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_stream_messages.post.html
+// 说明:
+//   - 每个分片共享 stream_msg_id（首片由服务端返回 id，后续分片带上）
+//   - input_mode: append(默认,增量拼接) / replace(全量覆盖,必须与已下发前缀一致)
+//   - input_state: 1=生成中, 10=生成结束
+//   - content_type: text / markdown
+// 参数:
+//   $userOpenid - 单聊用户 openid
+//   $chunks     - 文本数组（按顺序发送）
+//   $msgId      - 被动回复的消息 ID（与 event_id 二选一）
+//   $eventId    - 被动回复的事件 ID
+//   $mode       - append|replace
+//   $contentType- text|markdown
+// 返回: 最后一片的 API 响应（字符串）
+// ============================================================================
+function 流式发送单聊($userOpenid, $chunks, $msgId = '', $eventId = '', $mode = 'append', $contentType = 'markdown') {
+    if (empty($userOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'user_openid 为空'], JSON_UNESCAPED_UNICODE);
+    }
+    if (!is_array($chunks)) $chunks = [$chunks];
+    if (empty($chunks)) {
+        return json_encode(['code' => -1, 'message' => '消息内容为空'], JSON_UNESCAPED_UNICODE);
+    }
+    $chunks = array_values($chunks);
+    $total = count($chunks);
+    $streamId = '';
+    $lastResp = '';
+    $msgSeq = random_int(1, 999999);
+
+    foreach ($chunks as $i => $chunk) {
+        $isLast = ($i === $total - 1);
+        $payload = [
+            'input_mode'   => $mode === 'replace' ? 'replace' : 'append',
+            'input_state'  => $isLast ? 10 : 1,
+            'index'        => $i,
+            'content_type' => $contentType === 'text' ? 'text' : 'markdown',
+            'content_raw'  => (string)$chunk,
+            'msg_seq'      => $msgSeq,
+        ];
+        if ($msgId !== '')  $payload['msg_id'] = (string)$msgId;
+        if ($eventId !== '') $payload['event_id'] = (string)$eventId;
+        if ($streamId !== '') $payload['stream_msg_id'] = $streamId;
+
+        $resp = BOTAPI("/v2/users/{$userOpenid}/stream_messages", 'POST', json_encode($payload, JSON_UNESCAPED_UNICODE));
+        $lastResp = $resp;
+        $data = json_decode($resp, true);
+        // 首片响应 id 即 stream_msg_id；部分环境下字段名可能为 stream_msg_id
+        if ($streamId === '') {
+            $streamId = $data['stream_msg_id'] ?? ($data['id'] ?? '');
+        }
+        if (isset($data['code']) && $data['code'] != 0) {
+            // 出错立即停止，避免继续发送无效分片
+            break;
+        }
+    }
+
+    $preview = mb_substr((string)$chunks[0], 0, 60, 'UTF-8');
+    记录发送('流式单聊', $userOpenid, $preview, '流式', $streamId, $lastResp);
+    return $lastResp;
+}
+
+// ============================================================================
+// 官方新增接口：群/单聊富媒体分片上传（预上传）
+// POST /v2/groups/{group_openid}/upload_prepare
+// POST /v2/users/{user_openid}/upload_prepare
+// 文档: https://bot.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_id_upload_prepare.post.html
+// 返回: API 原始响应（含 upload_id / block_size / parts[].presigned_url）
+// 说明: 拿到 parts 后，将对应分片 PUT 到 presigned_url，再调用 分片上传完成()
+// ============================================================================
+function 分片上传预上传($targetId, $filePath, $fileType = 4, $isGroup = true, $fileName = '') {
+    if (empty($targetId) || empty($filePath) || !is_file($filePath)) {
+        return json_encode(['code' => -1, 'message' => '目标或文件无效'], JSON_UNESCAPED_UNICODE);
+    }
+    $size = filesize($filePath);
+    if ($size <= 0) {
+        return json_encode(['code' => -1, 'message' => '文件为空'], JSON_UNESCAPED_UNICODE);
+    }
+    $name = $fileName !== '' ? $fileName : basename($filePath);
+    $md5 = hash_file('md5', $filePath);
+    $sha1 = hash_file('sha1', $filePath);
+    // 前 10002432 字节（约 10MB）的 MD5
+    $fh = fopen($filePath, 'rb');
+    $head = $fh ? fread($fh, 10002432) : '';
+    if ($fh) fclose($fh);
+    $md5_10m = md5((string)$head);
+
+    $payload = [
+        'file_type' => (int)$fileType,
+        'file_size' => (string)$size,
+        'file_name' => $name,
+        'md5'       => $md5,
+        'sha1'      => $sha1,
+        'md5_10m'   => $md5_10m,
+    ];
+    $path = $isGroup ? 'groups' : 'users';
+    $resp = BOTAPI("/v2/{$path}/{$targetId}/upload_prepare", 'POST', json_encode($payload, JSON_UNESCAPED_UNICODE));
+    wlog("[分片预上传] {$path}={$targetId} file={$name} size={$size} resp=" . $resp, defined('appid') ? appid : null);
+    return $resp;
+}
+
+// ============================================================================
+// 官方新增接口：分片上传完成通知
+// POST /v2/groups/{group_openid}/upload_part_finish
+// POST /v2/users/{user_openid}/upload_part_finish
+// 参数:
+//   $uploadId  - 预上传返回的 upload_id
+//   $partIndex - 分片序号（从 0 开始）
+//   $blockSize - 该分片实际大小（字节）
+//   $partData  - 该分片二进制内容（用于计算 MD5）；也可用 $md5 直接传入
+// 返回: API 原始响应
+// ============================================================================
+function 分片上传完成($targetId, $uploadId, $partIndex, $blockSize, $partData = '', $md5 = '', $isGroup = true) {
+    if (empty($targetId) || empty($uploadId)) {
+        return json_encode(['code' => -1, 'message' => '目标或 upload_id 为空'], JSON_UNESCAPED_UNICODE);
+    }
+    if ($md5 === '' && $partData !== '') {
+        $md5 = md5($partData);
+    }
+    $payload = [
+        'upload_id'   => (string)$uploadId,
+        'part_index'  => (int)$partIndex,
+        'block_size'  => (string)(int)$blockSize,
+        'md5'         => (string)$md5,
+    ];
+    $path = $isGroup ? 'groups' : 'users';
+    return BOTAPI("/v2/{$path}/{$targetId}/upload_part_finish", 'POST', json_encode($payload, JSON_UNESCAPED_UNICODE));
+}
+
+// ============================================================================
+// 官方新增接口：PUT 上传单个分片到预签名 URL
+// 说明: 预签名 URL 通常指向对象存储，不能带 QQ Bot 的 Authorization 头
+// 返回: HTTP 状态码（200/201 视为成功）
+// ============================================================================
+function 上传分片到预签名URL($presignedUrl, $data, $timeout = 60) {
+    if (empty($presignedUrl)) return 0;
+    $ch = curl_init($presignedUrl);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Length: ' . strlen($data)]);
+    curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $status;
 }

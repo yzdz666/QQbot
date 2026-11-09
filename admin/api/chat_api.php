@@ -20,6 +20,9 @@ register_shutdown_function(function() {
 require_once(__DIR__ . '/../../function.php');
 require_once(__DIR__ . '/../../auth.php');
 
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
+
 // 认证检查
 if (!Auth::check()) {
     json_response(['code' => 401, 'msg' => '未登录或会话已过期'], 401);
@@ -42,8 +45,66 @@ function parseDuration($str) {
     return false;
 }
 
+// 从 msg_elements 提取本条消息自身的媒体附件 (QQ v2 真实事件格式: 媒体信息在元素.attachments 里,
+// 顶层 d.attachments 往往不存在)。仅限非引用消息(引用消息的元素属于被引用内容, 由 quote 块展示)。
+// 优先收集 msg_idx == 本条own_idx 的元素; own_idx 未命中时回退收集全部元素附件。
+function extractOwnAttachmentsFromElements($rawData, $ownIdx) {
+    $out = [];
+    $d = is_array($rawData['d'] ?? null) ? $rawData['d'] : null;
+    if (!$d || empty($d['msg_elements']) || !is_array($d['msg_elements'])) return $out;
+    $ownMatched = false;
+    $all = [];
+    foreach ($d['msg_elements'] as $el) {
+        if (!is_array($el) || empty($el['attachments']) || !is_array($el['attachments'])) continue;
+        $elIdx = (string)($el['msg_idx'] ?? '');
+        foreach ($el['attachments'] as $att) {
+            if (!is_array($att)) continue;
+            $all[] = $att;
+            if ($ownIdx !== '' && $elIdx === (string)$ownIdx) { $out[] = $att; $ownMatched = true; }
+        }
+    }
+    return $ownMatched ? $out : $all;
+}
+
+// 由 MIME/原始文件名推断本地上传媒体的存储扩展名
+function 上传媒体扩展名($mime, $filename = '') {
+    $mime = strtolower(trim((string)$mime));
+    $map = ['image/jpeg'=>'jpg','image/jpg'=>'jpg','image/pjpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp','image/bmp'=>'bmp',
+            'video/mp4'=>'mp4','video/quicktime'=>'mov','video/webm'=>'webm',
+            'audio/mpeg'=>'mp3','audio/mp3'=>'mp3','audio/wav'=>'wav','audio/x-wav'=>'wav','audio/wave'=>'wav','audio/silk'=>'silk','audio/amr'=>'amr','audio/aac'=>'aac','audio/mp4'=>'m4a','audio/ogg'=>'ogg',
+            'application/pdf'=>'pdf','application/zip'=>'zip','text/plain'=>'txt'];
+    if (isset($map[$mime])) return $map[$mime];
+    $ext = strtolower(pathinfo((string)$filename, PATHINFO_EXTENSION));
+    if (preg_match('/^[a-z0-9]{1,8}$/', $ext)) return $ext;
+    return 'bin';
+}
+
 try {
     switch ($action) {
+        // ==================== 本地上传媒体流式输出 (聊天记录页回放) ====================
+        // 鉴权已在文件顶部 Auth::check() 完成; 仅允许 data/uploads 白名单扩展名文件
+        case 'media':
+            $f = $_GET['f'] ?? '';
+            $path = 本地媒体路径($f);
+            if ($path === null || !is_file($path)) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo '媒体不存在或已过期';
+                exit;
+            }
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            $mimeMap = ['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png','gif'=>'image/gif','webp'=>'image/webp','bmp'=>'image/bmp',
+                        'mp4'=>'video/mp4','mov'=>'video/quicktime','webm'=>'video/webm',
+                        'mp3'=>'audio/mpeg','wav'=>'audio/wav','silk'=>'application/silk','amr'=>'audio/amr','aac'=>'audio/aac','m4a'=>'audio/mp4','ogg'=>'audio/ogg',
+                        'pdf'=>'application/pdf','zip'=>'application/zip','txt'=>'text/plain; charset=utf-8'];
+            $mime = $mimeMap[$ext] ?? 'application/octet-stream';
+            header('Content-Type: ' . $mime);
+            header('Content-Length: ' . filesize($path));
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, max-age=86400');
+            readfile($path);
+            exit;
+
         // ==================== 获取会话列表 ====================
         case 'get_sessions':
         case 'list':
@@ -145,6 +206,16 @@ try {
                         $session['last_msg'] = '[' . $lastMsg['source_type'] . ']';
                     } elseif (in_array($lastMsg['content_type'], $imageTypes)) {
                         $session['last_msg'] = '[图片]';
+                    } elseif (in_array($lastMsg['content_type'], ['引用图片', '引用图文'])) {
+                        // 引用图片/引用图文: 预览去URL后保留配文 (如 "[引用图文] 配文")
+                        $safeContent = mb_convert_encoding($previewContent, 'UTF-8', 'UTF-8');
+                        $stripped = trim(preg_replace('/^(https?:\/\/\S+|api\/\S+|\/\S+)(\s*\+\s*|\s+)/u', '', (string)$safeContent) ?? '');
+                        $session['last_msg'] = '[' . $lastMsg['content_type'] . ']' . ($stripped !== '' ? ' ' . mb_substr($stripped, 0, 30) : '');
+                    } elseif (in_array($lastMsg['content_type'], ['引用语音', '引用视频', '引用文件'])) {
+                        $session['last_msg'] = '[' . $lastMsg['content_type'] . ']';
+                    } elseif (in_array($lastMsg['content_type'], ['引用', '引用MD'])) {
+                        $safeContent = mb_convert_encoding($previewContent, 'UTF-8', 'UTF-8');
+                        $session['last_msg'] = '[' . $lastMsg['content_type'] . '] ' . mb_substr($safeContent, 0, 30);
                     } elseif (in_array($lastMsg['content_type'], $voiceTypes)) {
                         $session['last_msg'] = '[语音]';
                     } elseif (in_array($lastMsg['content_type'], $videoTypes)) {
@@ -279,7 +350,6 @@ try {
                 $memberRole = '';
                 $username = '';
                 $isBot = false;
-                $refIdx = '';
                 if (!empty($msg['raw_data'])) {
                     $rawData = json_decode($msg['raw_data'], true);
                     if (is_array($rawData)) {
@@ -295,15 +365,6 @@ try {
                         }
                         if (isset($rawData['d']['author']['bot'])) {
                             $isBot = (bool)$rawData['d']['author']['bot'];
-                        }
-                        // 提取 REFIDX（用于引用消息）
-                        if (isset($rawData['d']['message_scene']['ext']) && is_array($rawData['d']['message_scene']['ext'])) {
-                            foreach ($rawData['d']['message_scene']['ext'] as $extStr) {
-                                if (preg_match('/msg_idx=([^&]+)/', $extStr, $m)) {
-                                    $refIdx = $m[1];
-                                    break;
-                                }
-                            }
                         }
                         // 提取 mentions 数组（@提及的用户信息）
                         $mentionsList = [];
@@ -391,10 +452,14 @@ try {
                                 ];
 
                                 // 兼容旧逻辑：第一个附件设置 media_url 和 content_type
+                                // content_type 仅在缺省/默认值时推断, 保留数据库中的引用系类型(引用图片/引用图文等)不被覆盖
+                                $ctIsDefault = !isset($msg['content_type']) || in_array($msg['content_type'], ['', 'text', '文字'], true);
                                 if (!isset($msg['media_url']) || empty($msg['media_url'])) {
                                     // 语音优先使用WAV URL（浏览器兼容）
                                     $msg['media_url'] = ($attType === 'voice' && !empty($attWavUrl)) ? $attWavUrl : $attUrl;
-                                    $msg['content_type'] = $attType;
+                                    if ($ctIsDefault) {
+                                        $msg['content_type'] = $attType;
+                                    }
                                     if (!empty($attFileName) && $attType === 'file') {
                                         $msg['file_name'] = $attFileName;
                                     }
@@ -410,11 +475,86 @@ try {
                 $msg['member_role'] = $memberRole;
                 $msg['username'] = $username;
                 $msg['bot'] = $isBot;
-                $msg['ref_idx'] = $refIdx;
+                // ==================== 引用(回复)消息解析 (共用 function.php parseQuoteInfo) ====================
+                // ref_idx 语义 = 引用"这条消息"时应使用的索引: 本条自身的 msg_idx > ref_msg_idx (兼容旧行为) > ''
+                $quoteInfo = parseQuoteInfo($rawData);
+                $msg['ref_idx'] = $quoteInfo['own_idx'] !== '' ? $quoteInfo['own_idx'] : $quoteInfo['ref_idx'];
+                $msg['msg_idx'] = $quoteInfo['own_idx'];
                 // 提取 message_type 和 msg_elements（引用消息等）
                 $msg['message_type'] = $rawData['d']['message_type'] ?? 0;
                 if (isset($rawData['d']['msg_elements']) && is_array($rawData['d']['msg_elements'])) {
                     $msg['msg_elements'] = $rawData['d']['msg_elements'];
+                }
+                if ($quoteInfo['quote']) {
+                    $msg['quote'] = $quoteInfo['quote'];   // ['ref_idx','message_type','content','attachments']
+                }
+                // 非引用消息无顶层 attachments 时, 从 msg_elements 提取本条自身媒体
+                // (QQ v2 真实事件格式: 图片/视频/语音/文件的媒体信息在 msg_elements[].attachments,
+                //  引用消息的元素属于被引用内容, 已由 quote 块展示, 此处跳过防止重复)
+                if (empty($msg['quote']) && empty($msg['attachments'])) {
+                    $elAtts = extractOwnAttachmentsFromElements($rawData, $quoteInfo['own_idx']);
+                    if (!empty($elAtts)) {
+                        foreach ($elAtts as $attachment) {
+                            $attUrl = isset($attachment['url']) ? trim($attachment['url']) : '';
+                            $attUrl = trim($attUrl, "`\t\n\r ");
+                            if ($attUrl === '') continue;
+                            $attFileName = $attachment['filename'] ?? '';
+                            $attContentType = $attachment['content_type'] ?? '';
+                            $attWavUrl = isset($attachment['voice_wav_url']) ? trim($attachment['voice_wav_url']) : '';
+                            $attAsrText = isset($attachment['asr_refer_text']) ? trim($attachment['asr_refer_text']) : '';
+
+                            $attType = 'file';
+                            $ctLower = strtolower($attContentType);
+                            if ($ctLower === 'image' || strpos($ctLower, 'image/') === 0) {
+                                $attType = 'image';
+                            } elseif ($ctLower === 'video' || strpos($ctLower, 'video/') === 0) {
+                                $attType = 'video';
+                            } elseif ($ctLower === 'voice' || $ctLower === 'audio' || $ctLower === 'silk' || strpos($ctLower, 'audio/') === 0 || $ctLower === 'application/silk') {
+                                $attType = 'voice';
+                            } elseif (!empty($attWavUrl)) {
+                                $attType = 'voice';
+                            }
+
+                            $msg['attachments'][] = [
+                                'type' => $attType,
+                                'url' => $attUrl,
+                                'wav_url' => $attWavUrl,
+                                'asr_text' => $attAsrText,
+                                'filename' => $attFileName,
+                                'content_type' => $attContentType,
+                                'width' => $attachment['width'] ?? null,
+                                'height' => $attachment['height'] ?? null,
+                                'size' => $attachment['size'] ?? null
+                            ];
+                            if (!isset($msg['media_url']) || empty($msg['media_url'])) {
+                                $msg['media_url'] = ($attType === 'voice' && !empty($attWavUrl)) ? $attWavUrl : $attUrl;
+                                $ctIsDefault2 = !isset($msg['content_type']) || in_array($msg['content_type'], ['', 'text', '文字'], true);
+                                if ($ctIsDefault2) {
+                                    $msg['content_type'] = $attType;
+                                }
+                                if (!empty($attFileName) && $attType === 'file') {
+                                    $msg['file_name'] = $attFileName;
+                                }
+                            }
+                        }
+                        if (empty($msg['content']) && !empty($msg['attachments'])) {
+                            $msg['content'] = $msg['attachments'][0]['url'];
+                        }
+                    }
+                }
+                // 本条消息自身内容兜底: content 为空时用 parallel_message.msg_nodes 拼接
+                $dArr = is_array($rawData['d'] ?? null) ? $rawData['d'] : [];
+                if (trim((string)($msg['content'] ?? '')) === ''
+                    && isset($dArr['parallel_message']['msg_nodes']) && is_array($dArr['parallel_message']['msg_nodes'])) {
+                    $nodeTexts = [];
+                    foreach ($dArr['parallel_message']['msg_nodes'] as $node) {
+                        if (is_array($node) && isset($node['content']) && trim((string)$node['content']) !== '') {
+                            $nodeTexts[] = trim((string)$node['content']);
+                        }
+                    }
+                    if (!empty($nodeTexts)) {
+                        $msg['content'] = implode(' ', $nodeTexts);
+                    }
                 }
             }
             unset($msg);
@@ -539,22 +679,32 @@ try {
                     else $uploadType = 'file';
                 }
 
+                // 二进制留存: 官方 /files 上传不回URL, 本地保存一份供聊天记录页回放
+                // (留存失败不影响发送, 仅回退旧占位符显示)
+                $localMediaUrl = 保存本地媒体($fileData, 上传媒体扩展名($fileMime, $originalName));
+
                 switch ($uploadType) {
                     case 'image':
                         // 图片支持附带文字内容（图片+文字一起发送）
-                        $resp = 图片($fileData, $textContent ?: null);
+                        // 携带 ref_msg_id 时以引用形式发送: 无文字=引用图片, 有文字=引用图文
+                        $quoteRefId = trim($_POST['ref_msg_id'] ?? '');
+                        if ($quoteRefId !== '') {
+                            $resp = 引用图片($quoteRefId, $fileData, $textContent ?: null, $localMediaUrl ?: null);
+                        } else {
+                            $resp = 图片($fileData, $textContent ?: null, $localMediaUrl ?: null);
+                        }
                         break;
                     case 'voice':
                         // 上传的语音文件是二进制数据，使用本地语音函数直接发送
                         // 语音()函数期望URL并调用外部silk转换服务，不适用于二进制数据
-                        $resp = 本地语音($fileData);
+                        $resp = 本地语音($fileData, $localMediaUrl ?: null);
                         break;
                     case 'video':
-                        $resp = 视频($fileData);
+                        $resp = 视频($fileData, $localMediaUrl ?: null);
                         break;
                     case 'file':
                     default:
-                        $resp = 文件($fileData, $originalName);
+                        $resp = 文件($fileData, $originalName, $localMediaUrl ?: null);
                         break;
                 }
             } else {
@@ -565,21 +715,37 @@ try {
                         break;
                     case 'markdown':
                     case 'md':
-                        $resp = MD($content);
+                        // 携带 ref_msg_id 时以引用形式发送 (官方 message_reference)
+                        $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+                        if ($refMsgId !== '') {
+                            $resp = 引用MD($refMsgId, $content);
+                        } else {
+                            $resp = MD($content);
+                        }
                         break;
                     case 'image':
                         $imageContent = $_POST['image_content'] ?? null;
-                        $resp = 图片($content, $imageContent);
+                        // 携带 ref_msg_id 时: 无文字=引用发图片, 有文字=引用发图片+文字(图文)
+                        $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+                        if ($refMsgId !== '') {
+                            $resp = 引用图片($refMsgId, $content, $imageContent);
+                        } else {
+                            $resp = 图片($content, $imageContent);
+                        }
                         break;
                     case 'voice':
-                        $resp = 语音($content);
+                        // 携带 ref_msg_id 时以引用形式发送 (msg_type=7 + media + message_reference)
+                        $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+                        $resp = ($refMsgId !== '') ? 引用语音($refMsgId, $content) : 语音($content);
                         break;
                     case 'video':
-                        $resp = 视频($content);
+                        $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+                        $resp = ($refMsgId !== '') ? 引用视频($refMsgId, $content) : 视频($content);
                         break;
                     case 'file':
                         $fileName = $_POST['file_name'] ?? null;
-                        $resp = 文件($content, $fileName);
+                        $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+                        $resp = ($refMsgId !== '') ? 引用文件($refMsgId, $content, $fileName) : 文件($content, $fileName);
                         break;
                     case 'quote':
                         $refMsgId = trim($_POST['ref_msg_id'] ?? '');
@@ -644,11 +810,177 @@ try {
 
             $data = json_decode($resp, true);
             if (isset($data['id']) || (isset($data['code']) && $data['code'] == 0)) {
+                后台操作记录('发送消息', $targetId . ' 类型:' . $msgType, $appid);
                 json_response(['code' => 0, 'msg' => '发送成功', 'success' => true, 'data' => $data]);
             } else {
                 json_response(['code' => 500, 'msg' => '发送失败: ' . ($data['message'] ?? '未知错误'), 'success' => false, 'data' => $data]);
             }
             break;
+
+        // ==================== 分片上传: 追加分片 ====================
+        // 前端把 >1.5MB 的文件按 1MB/片逐片 POST 到此, 全部完成后调 upload_complete 合并发送。
+        // 分片存放 data/uploads/tmp/ (受 data/.htaccess 保护), 覆盖写保证同分片重传幂等。
+        case 'upload_chunk': {
+            $appidSafe = preg_replace('/[^A-Za-z0-9_\-]/', '', trim($_POST['appid'] ?? ''));
+            $uploadId = trim($_POST['upload_id'] ?? '');
+            $chunkIndex = intval($_POST['chunk_index'] ?? -1);
+            $chunkTotal = intval($_POST['chunk_total'] ?? 0);
+            if ($appidSafe === '' || !preg_match('/^[A-Za-z0-9]{16,64}$/', $uploadId)) {
+                json_response(['code' => 400, 'msg' => '参数不合法']);
+            }
+            if ($chunkTotal < 1 || $chunkTotal > 1024 || $chunkIndex < 0 || $chunkIndex >= $chunkTotal) {
+                json_response(['code' => 400, 'msg' => '分片序号不合法']);
+            }
+            if (!isset($_FILES['chunk']) || $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) {
+                json_response(['code' => 400, 'msg' => '分片数据缺失或超过服务器 upload_max_filesize 限制']);
+            }
+            $tmpDir = __DIR__ . '/../../data/uploads/tmp';
+            if (!is_dir($tmpDir) && !@mkdir($tmpDir, 0755, true)) {
+                json_response(['code' => 500, 'msg' => '无法创建分片临时目录']);
+            }
+            // 孤儿分片清理 (2% 概率触发): 清理 24 小时前的残留
+            if (mt_rand(1, 50) <= 1) {
+                foreach (array_merge(glob($tmpDir . '/*.part_*') ?: [], glob($tmpDir . '/*.merged') ?: []) as $old) {
+                    if (is_file($old) && filemtime($old) < time() - 86400) @unlink($old);
+                }
+            }
+            // 单文件总量防护 512MB
+            $prefix = $appidSafe . '_' . $uploadId . '.part_';
+            $existingTotal = 0;
+            foreach (glob($tmpDir . '/' . $prefix . '*') ?: [] as $pf) {
+                if (is_file($pf)) $existingTotal += filesize($pf);
+            }
+            $incomingSize = filesize($_FILES['chunk']['tmp_name']);
+            if ($existingTotal + $incomingSize > 512 * 1024 * 1024) {
+                json_response(['code' => 413, 'msg' => '文件超出 512MB 上限']);
+            }
+            $partFile = $tmpDir . '/' . $prefix . $chunkIndex;
+            if (!@move_uploaded_file($_FILES['chunk']['tmp_name'], $partFile)) {
+                json_response(['code' => 500, 'msg' => '分片写入失败']);
+            }
+            $received = count(glob($tmpDir . '/' . $prefix . '*') ?: []);
+            json_response(['code' => 0, 'msg' => 'ok', 'success' => true, 'received' => $received, 'chunk_total' => $chunkTotal]);
+            break;
+        }
+
+        // ==================== 分片上传: 合并发送 ====================
+        // 校验分片完整性 → 流式合并(不占内存) → 留存 data/uploads/ → 与整包上传相同的发送链路
+        case 'upload_complete': {
+            $appid = trim($_POST['appid'] ?? '');
+            $targetId = trim($_POST['target_id'] ?? '');
+            $sourceType = trim($_POST['source_type'] ?? '群聊');
+            $uploadId = trim($_POST['upload_id'] ?? '');
+            $chunkTotal = intval($_POST['chunk_total'] ?? 0);
+            $originalName = trim($_POST['file_name'] ?? 'file');
+            if (empty($appid) || empty($targetId) || !preg_match('/^[A-Za-z0-9]{16,64}$/', $uploadId)
+                || $chunkTotal < 1 || $chunkTotal > 1024) {
+                json_response(['code' => 400, 'msg' => '缺少必要参数或参数不合法']);
+            }
+            $bot = getBot($appid);
+            if (!$bot) json_response(['code' => 404, 'msg' => '机器人不存在']);
+
+            $tmpDir = __DIR__ . '/../../data/uploads/tmp';
+            $appidSafe = preg_replace('/[^A-Za-z0-9_\-]/', '', $appid);
+            $prefix = $appidSafe . '_' . $uploadId . '.part_';
+            // 校验分片齐全并统计大小
+            $totalSize = 0;
+            for ($i = 0; $i < $chunkTotal; $i++) {
+                $p = $tmpDir . '/' . $prefix . $i;
+                if (!is_file($p)) json_response(['code' => 400, 'msg' => "缺少分片 {$i}，请重新上传"]);
+                $totalSize += filesize($p);
+            }
+            if ($totalSize === 0) json_response(['code' => 400, 'msg' => '文件内容为空']);
+            if ($totalSize > 512 * 1024 * 1024) json_response(['code' => 413, 'msg' => '文件超出 512MB 上限']);
+
+            // 流式合并到 .merged (不占内存)
+            $mergedPath = $tmpDir . '/' . $appidSafe . '_' . $uploadId . '.merged';
+            $out = @fopen($mergedPath, 'wb');
+            if (!$out) json_response(['code' => 500, 'msg' => '合并临时文件创建失败']);
+            $okMerge = true;
+            for ($i = 0; $i < $chunkTotal; $i++) {
+                $in = @fopen($tmpDir . '/' . $prefix . $i, 'rb');
+                if (!$in) { $okMerge = false; break; }
+                stream_copy_to_stream($in, $out);
+                fclose($in);
+            }
+            fclose($out);
+            if (!$okMerge || filesize($mergedPath) !== $totalSize) {
+                @unlink($mergedPath);
+                json_response(['code' => 500, 'msg' => '分片合并失败，请重新上传']);
+            }
+
+            // 发送内存防护: base64+JSON 放大约2.7倍, 60MB 为 128M 内存上限内的安全阈值
+            if ($totalSize > 60 * 1024 * 1024) {
+                @unlink($mergedPath);
+                foreach (glob($tmpDir . '/' . $prefix . '*') ?: [] as $p) @unlink($p);
+                json_response(['code' => 413, 'msg' => sprintf('文件 %.1fMB 超过直接发送上限 60MB（QQ官方接口限制），已取消发送', $totalSize / 1048576)]);
+            }
+
+            $fileData = file_get_contents($mergedPath);
+            $fileMime = 'application/octet-stream';
+            if (function_exists('finfo_open')) {
+                $fi = finfo_open(FILEINFO_MIME_TYPE);
+                $detected = finfo_file($fi, $mergedPath);
+                finfo_close($fi);
+                if (is_string($detected) && $detected !== '') $fileMime = $detected;
+            }
+
+            // 清理分片与合并临时文件 (留存文件由 保存本地媒体 负责)
+            foreach (glob($tmpDir . '/' . $prefix . '*') ?: [] as $p) @unlink($p);
+            @unlink($mergedPath);
+
+            // 与 send 上传分支相同的上下文与发送链路
+            $content = trim($_POST['text_content'] ?? '');
+            $uploadType = trim($_POST['upload_type'] ?? '');
+            if ($uploadType === 'text' || empty($uploadType)) {
+                if (strpos($fileMime, 'image/') === 0) $uploadType = 'image';
+                elseif (strpos($fileMime, 'video/') === 0) $uploadType = 'video';
+                elseif (strpos($fileMime, 'audio/') === 0) $uploadType = 'voice';
+                else $uploadType = 'file';
+            }
+            $refMsgId = trim($_POST['ref_msg_id'] ?? '');
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+            if (!defined('消息来源')) define('消息来源', $sourceType);
+            if (!defined('来源')) define('来源', $targetId);
+            if (!defined('消息ID')) define('消息ID', '');
+            if (!defined('事件ID')) define('事件ID', '');
+            require_once(__DIR__ . '/../../bot.php');
+
+            $localMediaUrl = 保存本地媒体($fileData, 上传媒体扩展名($fileMime, $originalName));
+
+            switch ($uploadType) {
+                case 'image':
+                    // 携带 ref_msg_id 时以引用形式发送: 无文字=引用图片, 有文字=引用图文
+                    if ($refMsgId !== '') {
+                        $resp = 引用图片($refMsgId, $fileData, $content ?: null, $localMediaUrl ?: null);
+                    } else {
+                        $resp = 图片($fileData, $content ?: null, $localMediaUrl ?: null);
+                    }
+                    break;
+                case 'voice':
+                    $resp = 本地语音($fileData, $localMediaUrl ?: null);
+                    break;
+                case 'video':
+                    $resp = 视频($fileData, $localMediaUrl ?: null);
+                    break;
+                case 'file':
+                default:
+                    $resp = 文件($fileData, $originalName, $localMediaUrl ?: null);
+                    break;
+            }
+
+            $data = json_decode($resp, true);
+            if (isset($data['id']) || (isset($data['code']) && $data['code'] == 0)) {
+                后台操作记录('发送消息', $targetId . ' 类型:' . $msgType . ' (附件)', $appid);
+                json_response(['code' => 0, 'msg' => '发送成功', 'success' => true, 'data' => $data]);
+            } else {
+                json_response(['code' => 500, 'msg' => '发送失败: ' . ($data['message'] ?? '未知错误'), 'success' => false, 'data' => $data]);
+            }
+            break;
+        }
 
         // ==================== 撤回消息 ====================
         case 'retract':
@@ -658,8 +990,11 @@ try {
             $targetId = trim($_POST['target_id'] ?? '');
             // 兼容前端发送的 msg_id 和 message_id 参数
             $messageId = trim($_POST['msg_id'] ?? $_POST['message_id'] ?? '');
+            // 行主键(优先): 同一会话中 QQ 可能返回空/重复的 message_id,
+            // 按 message_id 更新会误标多条消息为"已撤回", 故优先按主键精确定位
+            $rowId = intval($_POST['row_id'] ?? 0);
 
-            if (empty($appid) || empty($messageId)) {
+            if (empty($appid) || ($rowId <= 0 && empty($messageId))) {
                 json_response(['code' => 400, 'msg' => '缺少 appid 或 message_id 参数']);
             }
 
@@ -685,11 +1020,24 @@ try {
 
             // 无论API是否返回错误，都更新数据库标记为已撤回（用户已明确操作）
             // 不覆盖原始消息内容，只标记 is_retracted = 1
-            db()->execute(
-                "UPDATE messages SET is_retracted = 1 WHERE appid = ? AND message_id = ?",
-                [$appid, $messageId]
-            );
+            // 优先按主键 id 精确标记；回退按 message_id 时排除空ID并只取最新一条，
+            // 防止历史发送日志 message_id 为空时一次误标全部消息
+            if ($rowId > 0) {
+                db()->execute(
+                    "UPDATE messages SET is_retracted = 1 WHERE id = ? AND appid = ?",
+                    [$rowId, $appid]
+                );
+            } else {
+                db()->execute(
+                    "UPDATE messages SET is_retracted = 1 WHERE id = (
+                        SELECT id FROM messages WHERE appid = ? AND message_id = ?
+                        ORDER BY created_at DESC, id DESC LIMIT 1
+                    )",
+                    [$appid, $messageId]
+                );
+            }
 
+            后台操作记录('撤回消息', $targetId . ' ID:' . ($messageId ?: ('行' . $rowId)), $appid);
             if ($hasError) {
                 json_response([
                     'code' => 0,
@@ -719,7 +1067,7 @@ try {
 
             // 查找该会话中最后一条发送的消息（排除已撤回的消息）
             $lastMsg = db()->fetch(
-                "SELECT message_id, target_id FROM messages 
+                "SELECT id, message_id, target_id FROM messages 
                  WHERE appid = ? AND target_id = ? AND direction = '发送' AND (is_retracted IS NULL OR is_retracted = 0)
                  ORDER BY created_at DESC LIMIT 1",
                 [$appid, $targetId]
@@ -746,12 +1094,13 @@ try {
             $resp = 撤回($lastMsg['message_id']);
             $data = json_decode($resp, true);
 
-            // 撤回成功后，更新数据库中的消息状态为已撤回（不覆盖原始内容）
+            // 撤回成功后，按行主键精确更新数据库中的消息状态（不覆盖原始内容）
             db()->execute(
-                "UPDATE messages SET is_retracted = 1 WHERE appid = ? AND message_id = ?",
-                [$appid, $lastMsg['message_id']]
+                "UPDATE messages SET is_retracted = 1 WHERE id = ?",
+                [$lastMsg['id']]
             );
 
+            后台操作记录('撤回最后消息', $targetId . ' ID:' . $lastMsg['message_id'], $appid);
             json_response([
                 'code' => 0,
                 'msg' => '撤回成功',
@@ -835,6 +1184,7 @@ try {
                 setUserRemark($appid, $targetId, $remark);
             }
 
+            后台操作记录('设置备注', $targetId . ' => ' . $remark, $appid);
             json_response([
                 'code'    => 0,
                 'msg'     => '备注设置成功',
@@ -854,6 +1204,7 @@ try {
             }
 
             setGroupAvatar($appid, $groupId, $avatarUrl);
+            后台操作记录('设置群头像', $groupId, $appid);
 
             json_response([
                 'code'    => 0,
@@ -942,6 +1293,7 @@ try {
             $resp = 群禁言成员($groupOpenid, $memberOpenid, $seconds);
             $data = json_decode($resp, true);
 
+            后台操作记录('群成员禁言', $groupOpenid . ' 成员:' . $memberOpenid . ' 时长:' . $seconds . 's', $appid);
             json_response([
                 'code'    => 0,
                 'msg'     => '禁言操作已执行',
@@ -973,6 +1325,7 @@ try {
             $resp = 群解禁成员($groupOpenid, $memberOpenid);
             $data = json_decode($resp, true);
 
+            后台操作记录('群成员解禁', $groupOpenid . ' 成员:' . $memberOpenid, $appid);
             json_response([
                 'code'    => 0,
                 'msg'     => '解禁操作已执行',
@@ -1024,6 +1377,7 @@ try {
             $resp = 群批量禁言($groupOpenid, $memberOpenids, $seconds);
             $data = json_decode($resp, true);
 
+            后台操作记录('群批量禁言', $groupOpenid . ' 成员数:' . count($memberOpenids) . ' 时长:' . $seconds . 's', $appid);
             json_response([
                 'code'    => 0,
                 'msg'     => '批量禁言操作已执行',

@@ -25,6 +25,9 @@ register_shutdown_function(function () {
 require_once dirname(__DIR__, 2) . '/function.php';
 require_once dirname(__DIR__, 2) . '/auth.php';
 
+
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
 if (!Auth::check()) {
     echo json_encode(['code' => 401, 'msg' => '未登录'], JSON_UNESCAPED_UNICODE);
     exit;

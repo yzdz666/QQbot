@@ -139,7 +139,7 @@ class WebSocketClient {
         $lastError = null;
         for ($i = 0; $i < TOKEN_MAX_RETRIES; $i++) {
             try {
-                $url = "https://bots.qq.com/app/getAppAccessToken";
+                $url = getApiTokenUrl();
                 $json = json_encode(["appId" => $this->appid, "clientSecret" => $this->secret]);
                 $resp = curl($url, "POST", ['Content-Type: application/json'], $json);
                 $data = json_decode($resp, true);
@@ -183,7 +183,9 @@ class WebSocketClient {
             return $this->customUrl;
         }
         $token = $this->getAccessToken();
-        $url = "https://api.sgroup.qq.com/gateway/bot";
+        // 使用后台设置的新版/旧版API域名（与BOTAPI保持一致）
+        $env = in_array($this->env, ['正式', '沙箱'], true) ? $this->env : '正式';
+        $url = getApiBase($env) . "/gateway/bot";
         $headers = ["Authorization: QQBot {$token}", "Content-Type: application/json"];
         $resp = curl($url, "GET", $headers, '');
         $data = json_decode($resp, true);
@@ -525,12 +527,9 @@ class WebSocketClient {
 
         try {
             $token = $this->getAccessToken();
-            $urls = [
-                '正式' => 'https://api.sgroup.qq.com',
-                '沙箱' => 'https://sandbox.api.sgroup.qq.com',
-            ];
-            $env = isset($urls[$this->env]) ? $this->env : '正式';
-            $url = $urls[$env] . '/interactions/' . $interactionId;
+            // 使用后台设置的新版/旧版API域名（与BOTAPI保持一致）
+            $env = in_array($this->env, ['正式', '沙箱'], true) ? $this->env : '正式';
+            $url = getApiBase($env) . '/interactions/' . $interactionId;
             $headers = [
                 'Authorization: QQBot ' . $token,
                 'Content-Type: application/json',
@@ -722,13 +721,18 @@ function ws_cleanup() {
 }
 $wsCleanedUp = false;
 
-// 写入 PID 文件
+// 写入 PID 文件（使用安全写入，避免 www/root 属主不一致导致 Permission denied）
 $wsPidFile = APP_ROOT . 'data/ws_master.pid';
 $wsDataDir = APP_ROOT . 'data';
 if (!is_dir($wsDataDir)) {
     @mkdir($wsDataDir, 0777, true);
+    @chmod($wsDataDir, 0777);
 }
-file_put_contents($wsPidFile, (string)ws_get_pid());
+$pidWriteResult = writeFileSafe($wsPidFile, (string)ws_get_pid());
+if (!$pidWriteResult['success']) {
+    // PID文件写入失败不阻断运行（后台启停功能会受影响），仅输出警告
+    fwrite(STDERR, "[" . date('Y-m-d H:i:s') . "] 警告: " . $pidWriteResult['message'] . "\n");
+}
 
 // 注册清理函数（正常退出和致命错误时触发）
 register_shutdown_function('ws_cleanup');

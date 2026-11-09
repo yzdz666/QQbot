@@ -31,15 +31,20 @@ if ($selectedAppid !== '') {
 }
 
 // 扫描插件目录（../plugin/*.php 相对于 admin/ 目录）
+// 插件名统一规范化为 UTF-8 (兼容 GBK 等历史文件名, 修复乱码/空白显示)
 $pluginDir = __DIR__ . '/../plugin/';
 $plugins = [];
 if (is_dir($pluginDir)) {
     foreach (glob($pluginDir . '*.php') as $file) {
+        $meta = 插件元信息($file);
         $plugins[] = [
-            'name'     => basename($file, '.php'),
-            'filename' => basename($file),
+            'name'     => 插件规范名(basename($file, '.php')),
+            'filename' => 插件规范名(basename($file)),
             'size'     => filesize($file),
             'mtime'    => filemtime($file),
+            'version'  => $meta['version'],
+            'author'   => $meta['author'],
+            'desc'     => $meta['description'],
         ];
     }
     // 按插件名排序
@@ -49,6 +54,7 @@ if (is_dir($pluginDir)) {
 }
 
 // 获取当前机器人各插件的启用状态：无记录视为默认启用(1)
+// 兼容历史数据: plugin_name 可能存有 GBK 字节, 统一规范化后比对
 $pluginStatus = [];
 if ($selectedAppid !== '') {
     $rows = db()->fetchAll(
@@ -56,7 +62,7 @@ if ($selectedAppid !== '') {
         [$selectedAppid]
     );
     foreach ($rows as $row) {
-        $pluginStatus[$row['plugin_name']] = intval($row['enabled']);
+        $pluginStatus[插件规范名($row['plugin_name'])] = intval($row['enabled']);
     }
 }
 
@@ -106,7 +112,7 @@ function formatFileSize($bytes)
 <div class="card">
   <div class="card-header">
     <h3>
-      插件列表（共 <?= count($plugins) ?> 个）
+      插件列表（共 <?= count($plugins) ?> 个<span id="pluginVisibleCount"></span>）
       <?php if ($selectedBot): ?>
         <span class="text-muted" style="font-size:13px; font-weight:400; margin-left:4px;">
           · 当前机器人：<?= htmlspecialchars($selectedBot['appid']) ?>
@@ -114,6 +120,11 @@ function formatFileSize($bytes)
         </span>
       <?php endif; ?>
     </h3>
+    <?php if (count($plugins) > 8): ?>
+    <div style="margin-left:auto;">
+      <input type="text" id="pluginSearch" class="form-control" placeholder="搜索插件名..." style="width:220px; display:inline-block; height:34px;" oninput="filterPluginRows(this.value)">
+    </div>
+    <?php endif; ?>
   </div>
   <div class="card-body no-padding">
     <?php if (empty($plugins)): ?>
@@ -140,12 +151,18 @@ function formatFileSize($bytes)
             $displayName = $plugin['name'];
             $enabled     = isset($pluginStatus[$plugin['name']]) ? intval($pluginStatus[$plugin['name']]) : 1;
             $isOn        = ($enabled === 1);
-            $nameJs      = json_encode($displayName, JSON_UNESCAPED_UNICODE);
+            // JSON 后过 htmlspecialchars(ENT_QUOTES): 防止单引号等特殊字符截断 HTML 属性
+            $nameJs      = htmlspecialchars(json_encode($displayName, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
           ?>
           <tr>
-            <td>
-              <span style="font-weight:500;"><?= htmlspecialchars($displayName) ?></span>
-              <div class="text-muted" style="font-size:12px;"><?= htmlspecialchars($plugin['filename']) ?></div>
+            <td style="min-width:140px; word-break:break-all;">
+              <span style="font-weight:500; color:var(--text, #1f2937);"><?= htmlspecialchars($displayName) ?></span>
+              <?php if (!empty($plugin['version'])): ?><span class="badge badge-secondary" style="margin-left:6px;font-size:10px;">v<?= htmlspecialchars($plugin['version']) ?></span><?php endif; ?>
+              <div class="text-muted" style="font-size:12px; word-break:break-all;">
+                <?= htmlspecialchars($plugin['filename']) ?>
+                <?php if (!empty($plugin['author'])): ?> · <?= htmlspecialchars($plugin['author']) ?><?php endif; ?>
+              </div>
+              <?php if (!empty($plugin['desc'])): ?><div class="text-muted" style="font-size:11px; margin-top:2px;"><?= htmlspecialchars($plugin['desc']) ?></div><?php endif; ?>
             </td>
             <td class="text-muted"><?= formatFileSize($plugin['size']) ?></td>
             <td class="text-muted" style="white-space:nowrap;"><?= date('Y-m-d H:i:s', $plugin['mtime']) ?></td>
@@ -162,12 +179,21 @@ function formatFileSize($bytes)
             <?php endif; ?>
             <td class="text-right" style="white-space:nowrap;">
               <button class="btn btn-outline btn-sm" onclick='openEditModal(<?= $nameJs ?>)'>编辑</button>
+              <button class="btn btn-outline btn-sm" onclick='renamePluginPrompt(<?= $nameJs ?>)' title="重命名插件文件">改名</button>
               <button class="btn btn-danger btn-sm" onclick='deletePluginConfirm(<?= $nameJs ?>)'>删除</button>
             </td>
           </tr>
           <?php endforeach; ?>
         </tbody>
       </table>
+      </div>
+      <div id="pluginPageNav" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-top:1px solid var(--border, #e7ebf0); flex-wrap:wrap;">
+        <span class="text-muted" id="pluginPageInfo" style="font-size:12px;"></span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button class="btn btn-outline btn-sm" id="pluginPrevBtn" onclick="pluginGoPage(-1)">上一页</button>
+          <span class="text-muted" id="pluginPageNums" style="font-size:12px;"></span>
+          <button class="btn btn-outline btn-sm" id="pluginNextBtn" onclick="pluginGoPage(1)">下一页</button>
+        </div>
       </div>
     <?php endif; ?>
   </div>
@@ -229,6 +255,96 @@ function formatFileSize($bytes)
 <script>
 // 当前选中的机器人 AppID（供切换状态使用）
 var selectedAppid = <?= json_encode($selectedAppid, JSON_UNESCAPED_UNICODE) ?>;
+
+// ==================== 插件搜索过滤（插件过多时快速定位） ====================
+var PLUGIN_PAGE_SIZE = 50; // 插件过多时分页渲染，避免长表格卡顿/显示异常
+var pluginCurPage = 1;
+
+function filterPluginRows(kw) {
+    kw = kw.trim().toLowerCase();
+    var rows = document.querySelectorAll('.table tbody tr');
+    var visible = [];
+    rows.forEach(function (r) {
+        var text = r.textContent.toLowerCase();
+        var show = (kw === '' || text.indexOf(kw) !== -1);
+        r.setAttribute('data-match', show ? '1' : '0');
+        if (show) visible.push(r);
+    });
+    var counter = document.getElementById('pluginVisibleCount');
+    if (counter) counter.textContent = kw === '' ? '' : ('，匹配 ' + visible.length + ' 个');
+    // 搜索时展示全部匹配（跨页），清空后恢复分页
+    if (kw !== '') {
+        rows.forEach(function (r) { r.style.display = r.getAttribute('data-match') === '1' ? '' : 'none'; });
+        var nav = document.getElementById('pluginPageNav');
+        if (nav) nav.style.display = 'none';
+        pluginCurPage = 1;
+    } else {
+        renderPluginPage();
+    }
+}
+
+function renderPluginPage() {
+    var rows = document.querySelectorAll('.table tbody tr');
+    var matched = [];
+    rows.forEach(function (r) { if (r.getAttribute('data-match') !== '0') matched.push(r); });
+    var totalPages = Math.max(1, Math.ceil(matched.length / PLUGIN_PAGE_SIZE));
+    if (pluginCurPage > totalPages) pluginCurPage = totalPages;
+    var start = (pluginCurPage - 1) * PLUGIN_PAGE_SIZE;
+    var end = Math.min(start + PLUGIN_PAGE_SIZE, matched.length);
+    rows.forEach(function (r) { r.style.display = 'none'; });
+    for (var i = start; i < end; i++) matched[i].style.display = '';
+    var info = document.getElementById('pluginPageInfo');
+    var nums = document.getElementById('pluginPageNums');
+    var prev = document.getElementById('pluginPrevBtn');
+    var next = document.getElementById('pluginNextBtn');
+    var nav = document.getElementById('pluginPageNav');
+    if (!info || !nav) return;
+    if (matched.length <= PLUGIN_PAGE_SIZE) {
+        nav.style.display = 'none';
+        return;
+    }
+    nav.style.display = 'flex';
+    info.textContent = '共 ' + matched.length + ' 个插件，第 ' + pluginCurPage + ' / ' + totalPages + ' 页（每页 ' + PLUGIN_PAGE_SIZE + ' 个）';
+    nums.textContent = '';
+    if (prev) prev.disabled = (pluginCurPage <= 1);
+    if (next) next.disabled = (pluginCurPage >= totalPages);
+}
+
+function pluginGoPage(dir) {
+    pluginCurPage += dir;
+    if (pluginCurPage < 1) pluginCurPage = 1;
+    renderPluginPage();
+}
+
+// 页面加载后按分页渲染（插件过多时避免一次全部展开）
+(function initPluginPage() {
+    var rows = document.querySelectorAll('.table tbody tr');
+    if (rows.length > 0) {
+        rows.forEach(function (r) { r.setAttribute('data-match', '1'); });
+        renderPluginPage();
+    }
+})();
+
+// ==================== 插件重命名 ====================
+function renamePluginPrompt(oldName) {
+    var newName = prompt('将插件「' + oldName + '」重命名为：\n（只允许字母、数字、下划线、横杠和中文，不需加 .php 后缀）\n\n注意：所有机器人的启用/禁用状态会同步保留。', oldName);
+    if (newName === null) return;
+    newName = newName.trim();
+    if (newName === '') { alert('新名称不能为空'); return; }
+    if (newName === oldName) { alert('新名称与原名称相同'); return; }
+    if (!/^[\w\-\u4e00-\u9fff\u3400-\u4dbf]+$/.test(newName)) {
+        alert('新名称只允许字母、数字、下划线、横杠和中文');
+        return;
+    }
+    apiCall('plugin_rename', { old_name: oldName, new_name: newName }, function (res) {
+        if (res.success) {
+            alert('重命名成功：' + oldName + ' → ' + newName);
+            location.reload();
+        } else {
+            alert(res.message || '重命名失败');
+        }
+    });
+}
 
 // ==================== 通用 AJAX 调用 ====================
 // isForm 为 true 时，data 为 FormData 对象，使用 multipart/form-data 方式发送

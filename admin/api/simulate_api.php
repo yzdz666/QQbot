@@ -9,6 +9,9 @@ header('Content-Type: application/json; charset=utf-8');
 require_once(__DIR__ . '/../../function.php');
 require_once(__DIR__ . '/../../auth.php');
 
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
+
 // 认证检查
 if (!Auth::check()) {
     json_response(['code' => 401, 'msg' => '未登录或会话已过期'], 401);

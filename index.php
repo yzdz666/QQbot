@@ -27,8 +27,10 @@ if (!is_array($raw)) {
 }
 
 // ==================== 兼容代发入口 ====================
+// 统一走 relay.php 网关: 支持 WS/WH 双模式部署 + HMAC-SHA256 签名鉴权(防篡改/防重放)
 if (($raw['type'] ?? '') === '代发') {
-    handleRelay($raw);
+    require_once __DIR__ . '/relay.php';
+    relay_handle_http($raw, $rawText);
     exit;
 }
 
@@ -83,8 +85,8 @@ if ($op == 0) {
     }
     markEventProcessed($event_id, appid);
 
-    // 记录原始事件
-    wlog(json_encode($raw, JSON_UNESCAPED_UNICODE), appid);
+    // 记录原始事件（JSON_UNESCAPED_SLASHES: URL 中的 / 保持原样，不再被转义为 \/）
+    wlog(json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), appid);
 
     // 定义 raw 常量（与原版一致：在 Main 调用前定义，互动私聊等函数需要）
     if (!defined('raw')) define("raw", $raw);
@@ -128,73 +130,7 @@ function initAppContext($bot) {
     if (!defined('plugin')) define("plugin", $pluginConfig);
 }
 
-// ==================== 代发处理 ====================
-function handleRelay(array $raw) {
-    $relayOp = $raw['op'] ?? '';
-    $data = $raw['data'] ?? [];
-
-    switch ($relayOp) {
-        case 'get':
-            $group = $data['group'] ?? '';
-            if ($group === '') {
-                echo json_encode(['code' => -2], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            // 查找绑定关系
-            $boundGroup = 读($group . "2bind.json", $group, '');
-            if ($boundGroup === '') {
-                echo json_encode(['code' => -2], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            $eventMap = 读("官机事件ID.json", $boundGroup, null);
-            if (!$eventMap || !isset($eventMap['time'], $eventMap['msgid'])) {
-                echo json_encode(['code' => -1], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            if (time() - (int)$eventMap['time'] > 290) {
-                echo json_encode(['code' => -1], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            echo json_encode([
-                'code' => 1,
-                'msgid' => $eventMap['msgid'],
-                'bind' => $boundGroup
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-
-        case 'send':
-            $targetAppid = (string)($data['appid'] ?? '');
-            if ($targetAppid === '') {
-                $targetAppid = appid;
-            }
-            if ($targetAppid === '' || !defined('appid')) {
-                echo json_encode(['code' => -3, 'msg' => 'appid not found'], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            require_once __DIR__ . "/bot.php";
-
-            $address = $data['address'] ?? '';
-            $method = $data['method'] ?? 'POST';
-            $body = $data['body'] ?? [];
-
-            if ($address === '') {
-                echo json_encode(['code' => -4, 'msg' => 'address empty'], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            echo BOTAPI($address, $method, json_encode($body, JSON_UNESCAPED_UNICODE));
-            return;
-
-        default:
-            echo json_encode(['code' => -9, 'msg' => 'unknown relay op'], JSON_UNESCAPED_UNICODE);
-            return;
-    }
-}
+// (代发处理已迁移至 relay.php 统一网关: relay_dispatch(), 含签名鉴权与安全加固)
 
 // ==================== 主处理函数（与ws_event_handler.php对齐，参照ElainaBot_v2） ====================
 function Main($raw) {
@@ -666,6 +602,12 @@ function Main($raw) {
 
     // raw 已在 Main 调用前定义（与原版一致），无需重复定义
 
+    // 引用ID: 本条消息的引用索引(REFIDX_xxx), 官方 message_reference.message_id 规范取值
+    // 取自 message_scene.ext 的 msg_idx (parseQuoteInfo 精确匹配, 不会被 ref_msg_idx= 子串干扰); 无 ext 时回退 d.id
+    // 必须在 load_plugin() 之前定义, 供插件 引用(引用ID, ...) 使用
+    $qInfo = parseQuoteInfo($raw);
+    define("引用ID", $qInfo['own_idx'] !== '' ? $qInfo['own_idx'] : (string)($raw["d"]["id"] ?? ''));
+
     // 记录到数据库（增强功能）
     recordIncomingMessage($event, $raw);
 
@@ -837,13 +779,13 @@ function recordIncomingMessage($eventType, $raw) {
                 // 更新已有发送记录的 raw_data 和 content（补充附件信息）
                 db()->execute(
                     "UPDATE messages SET raw_data = ?, content = ?, content_type = ? WHERE id = ?",
-                    [json_encode($raw, JSON_UNESCAPED_UNICODE), $logContent, $logContentType, $existing['id']]
+                    [json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $logContent, $logContentType, $existing['id']]
                 );
                 return;
             }
         }
         
-        logMessage(appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE));
+        logMessage(appid, '接收', $sourceType, $targetId, $logContentType, $logContent, $msgId, $userId, json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
         // 群聊消息: 自动获取群名称（参照官方文档 GET /v2/groups/{group_openid}/info）
         if ($sourceType === '群聊' && !empty($targetId)) {

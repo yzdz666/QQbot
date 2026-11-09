@@ -6,6 +6,20 @@ header('Content-Type: application/json; charset=utf-8');
 error_reporting(E_ERROR);
 ini_set('display_errors', 0);
 
+// ==================== 安全加固：必须登录后才能访问 ====================
+// 修复历史漏洞：本接口可读取聊天记录并以机器人身份发送/撤回消息，
+// 此前无认证校验，任何人可直接调用（严重越权风险）
+require_once dirname(__DIR__, 2) . '/function.php';
+require_once dirname(__DIR__, 2) . '/auth.php';
+
+// 同源校验：拦截跨站 POST（与 SameSite Cookie 双重防护）
+Auth::requireWriteProtection();
+if (!Auth::check()) {
+    http_response_code(401);
+    echo json_encode(["code" => 401, "msg" => "未登录或会话已过期"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $type = $_REQUEST["type"] ?? "";
 $appid = $_REQUEST["appid"] ?? "";
 $name = $_REQUEST["name"] ?? date("Y-m-d") . ".log";
@@ -21,7 +35,7 @@ function extractMsgIdx($extStr) {
 }
 
 function getAccessToken($appid, $secret) {
-    $url = "https://bots.qq.com/app/getAppAccessToken";
+    $url = getApiTokenUrl();
     $data = json_encode(["appId" => (string)$appid, "clientSecret" => $secret]);
     $opts = [
         'http' => [
@@ -678,7 +692,8 @@ switch ($type) {
                             $result = 回复($quoteId, $content ?: "");
                         } else {
                             $accessToken = getAccessToken($appid, $botConfig['secret']);
-                            $baseUrl = ($botConfig['env'] == '沙箱') ? 'https://sandbox.api.sgroup.qq.com' : 'https://api.sgroup.qq.com';
+                            // 使用后台设置的新版/旧版域名（与BOTAPI保持一致）
+                            $baseUrl = getApiBase(($botConfig['env'] ?? '正式') == '沙箱' ? '沙箱' : '正式');
                             if ($chatType == 'group') {
                                 $sendUrl = $baseUrl . "/v2/groups/{$chatId}/messages";
                             } else {
@@ -746,7 +761,8 @@ switch ($type) {
             exit;
         }
 
-        $baseUrl = ($botConfig['env'] == '沙箱') ? 'https://sandbox.api.sgroup.qq.com' : 'https://api.sgroup.qq.com';
+        // 使用后台设置的新版/旧版域名（与BOTAPI保持一致）
+        $baseUrl = getApiBase(($botConfig['env'] ?? '正式') == '沙箱' ? '沙箱' : '正式');
         if ($chatType == 'group') {
             $recallUrl = $baseUrl . "/v2/groups/{$chatId}/messages/{$messageId}";
         } else {

@@ -93,14 +93,27 @@ $pageBaseUrl = 'messages.php' . ($baseQuery !== '' ? '?' . $baseQuery . '&' : '?
 
 // ==================== 从raw_data解析附件信息 ====================
 // 返回 ['content'=>URL, 'content_type'=>类型, 'file_name'=>文件名] 或 null
+// 优先读顶层 d.attachments (发送日志注入/旧版事件); 为空时兑底读 d.msg_elements[].attachments
+// (QQ v2 真实事件格式: 媒体信息在元素attachments里)
 function parseAttachmentFromRawData($rawDataJson) {
     if (empty($rawDataJson)) return null;
     $rawData = json_decode($rawDataJson, true);
-    if (!is_array($rawData) || !isset($rawData['d']['attachments'])) return null;
-    if (!is_array($rawData['d']['attachments']) || count($rawData['d']['attachments']) === 0) return null;
+    if (!is_array($rawData)) return null;
 
-    // 取第一个附件
-    $att = $rawData['d']['attachments'][0];
+    $att = null;
+    if (isset($rawData['d']['attachments']) && is_array($rawData['d']['attachments']) && count($rawData['d']['attachments']) > 0) {
+        $att = $rawData['d']['attachments'][0];
+    } elseif (isset($rawData['d']['msg_elements']) && is_array($rawData['d']['msg_elements'])) {
+        foreach ($rawData['d']['msg_elements'] as $el) {
+            if (is_array($el) && !empty($el['attachments']) && is_array($el['attachments'])) {
+                foreach ($el['attachments'] as $a) {
+                    if (is_array($a) && !empty(trim((string)($a['url'] ?? '')))) { $att = $a; break 2; }
+                }
+            }
+        }
+    }
+    if (!is_array($att)) return null;
+
     $url = isset($att['url']) ? trim($att['url']) : '';
     // 去除反引号
     $url = trim($url, "`\t\n\r ");
@@ -109,12 +122,12 @@ function parseAttachmentFromRawData($rawDataJson) {
     $fileName = $att['filename'] ?? '';
     $contentType = $att['content_type'] ?? '';
 
-    // 判断类型
-    if (strpos($contentType, 'image/') === 0) {
+    // 判断类型 (兼容 MIME 形式 image/jpeg 与裸词形式 image/video/voice, 发送日志注入的附件为裸词)
+    if ($contentType === 'image' || strpos($contentType, 'image/') === 0) {
         $type = 'image';
-    } elseif (strpos($contentType, 'video/') === 0) {
+    } elseif ($contentType === 'video' || strpos($contentType, 'video/') === 0) {
         $type = 'video';
-    } elseif (strpos($contentType, 'audio/') === 0 || $contentType === 'voice') {
+    } elseif ($contentType === 'voice' || $contentType === 'audio' || strpos($contentType, 'audio/') === 0) {
         $type = 'voice';
     } elseif ($contentType === 'file' || !empty($fileName)) {
         $type = 'file';
@@ -226,6 +239,28 @@ function detectFileUrlFromContent($url) {
     content-visibility: auto;
     contain-intrinsic-size: 50px;
 }
+/* 表头不换行：防止“目标ID”“内容类型”等列头被挤压成一字一行竖排 */
+.messages-table th { white-space: nowrap; }
+/* 目标ID列：限定合理宽度，超长 openid 用省略号截断（悬停看全文，点击复制）。
+   原先 word-break:break-all 在表格自动布局下会让 32 位 ID 被挤成一行一个字符的竖排 */
+.msg-target-cell { min-width: 150px; max-width: 240px; }
+.msg-target-name {
+    font-weight: 600;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.msg-target-id {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.msg-target-id:hover { color: #2c6b9e; text-decoration: underline; }
+.msg-target-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 /* 文件URL预览样式 */
 .msg-file-preview {
     display: inline-flex;
@@ -412,6 +447,60 @@ function detectFileUrlFromContent($url) {
 .msg-content-type.type-json { background: #f3e5f5; color: #7b1fa2; }
 .msg-content-type.type-unknown { background: #eceff1; color: #546e7a; }
 
+/* 引用消息块 (消息日志页) */
+.msg-quote-block {
+    margin: 2px 0 4px 0;
+    padding: 4px 8px;
+    border-left: 3px solid #d0d7de;
+    background: #f6f8fa;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+    max-width: 480px;
+}
+.msg-quote-label {
+    font-weight: 600;
+    color: #f57c00;
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+.msg-quote-text {
+    color: #57606a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 460px;
+}
+.msg-quote-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    align-items: center;
+}
+.msg-quote-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #d0d7de;
+    cursor: zoom-in;
+    display: block;
+}
+.msg-quote-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 8px;
+    background: #eceff1;
+    border-radius: 10px;
+    color: #546e7a;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* 文件预览模态框 */
 .file-preview-modal {
     display: none;
@@ -580,7 +669,7 @@ function detectFileUrlFromContent($url) {
       </div>
     <?php else: ?>
       <div class="table-responsive">
-      <table class="table">
+      <table class="table messages-table">
         <thead>
           <tr>
             <th>时间</th>
@@ -596,6 +685,7 @@ function detectFileUrlFromContent($url) {
         <tbody>
           <?php
           // 预加载本页所有群名称映射，避免每条消息单独查询
+          // （目标ID列渲染依赖此映射：群聊且命中时显示群名+ID，否则仅显示ID）
           $pageGroupNames = [];
           $pageGroupAppids = [];
           foreach ($messages as $msg) {
@@ -627,18 +717,22 @@ function detectFileUrlFromContent($url) {
             $contentType = $msg['content_type'] ?? '';
             if ($contentType === '') $contentType = 'text';
 
-            // 如果content为空或content_type为默认的"文字"，尝试从raw_data解析附件
+            // 如果content为空/为占位符/content_type为默认"文字"或引用系媒体类型，尝试从raw_data解析附件
             $rawDataJson = $msg['raw_data'] ?? '';
-            if ($content === '' || $contentType === '文字' || $contentType === 'text') {
+            $refTypePrefix = (strpos($contentType, '引用图片') === 0 || strpos($contentType, '引用图文') === 0
+                           || strpos($contentType, '引用语音') === 0 || strpos($contentType, '引用视频') === 0
+                           || strpos($contentType, '引用文件') === 0);
+            if ($content === '' || $content === '[上传图片]' || $content === '[上传视频]' || $content === '[本地语音数据]'
+                || $contentType === '文字' || $contentType === 'text' || $refTypePrefix) {
                 $attInfo = parseAttachmentFromRawData($rawDataJson);
                 if ($attInfo) {
                     // 用附件URL填充content
-                    if ($content === '') {
+                    if ($content === '' || $content === '[上传图片]' || $content === '[上传视频]' || $content === '[本地语音数据]') {
                         $content = $attInfo['content'];
                     }
-                    // 更新content_type
+                    // 更新content_type (引用系媒体映射为对应英文类型, 便于缩略图渲染)
                     $typeMap = ['image'=>'image','video'=>'video','voice'=>'voice','audio'=>'voice','file'=>'file'];
-                    if (isset($typeMap[$attInfo['content_type']])) {
+                    if (isset($typeMap[$attInfo['content_type']]) && ($refTypePrefix || $contentType === '文字' || $contentType === 'text' || $content === $attInfo['content'])) {
                         $contentType = $typeMap[$attInfo['content_type']];
                     }
                 }
@@ -674,8 +768,15 @@ function detectFileUrlFromContent($url) {
                 $previewContent = '(无内容)';
             } elseif ($isFileUrl) {
                 $previewContent = $fileUrlInfo['fileName'];
-            } elseif (mb_strlen($content, 'UTF-8') > 50) {
-                $previewContent = mb_substr($content, 0, 50, 'UTF-8') . '...';
+            } else {
+                // 媒体+配文格式("URL + 配文"/"URL 配文"): 预览剔除URL只留配文, 避免长URL刷屏
+                $stripped = trim(preg_replace('/^(https?:\/\/\S+|api\/\S+|\/\S+)(\s*\+\s*|\s+)/u', '', $content) ?? '');
+                if ($stripped !== '' && $stripped !== $content) {
+                    $previewContent = $stripped;
+                }
+                if (mb_strlen($previewContent, 'UTF-8') > 50) {
+                    $previewContent = mb_substr($previewContent, 0, 50, 'UTF-8') . '...';
+                }
             }
 
             $sourceType  = $msg['source_type'] ?? '';
@@ -684,10 +785,11 @@ function detectFileUrlFromContent($url) {
             if ($targetId === '') $targetId = '-';
             $rawData     = $msg['raw_data'] ?? '';
             $decoded = json_decode($rawData, true);
+            // JSON_UNESCAPED_SLASHES: 原始数据展示不再把 / 显示为 \/ 
             if ($decoded !== null) {
-                $rawDataJson = json_encode($decoded, JSON_UNESCAPED_UNICODE);
+                $rawDataJson = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             } else {
-                $rawDataJson = json_encode($rawData, JSON_UNESCAPED_UNICODE);
+                $rawDataJson = json_encode($rawData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
             $rawDataB64 = base64_encode($rawDataJson);
 
@@ -762,6 +864,16 @@ function detectFileUrlFromContent($url) {
             ];
             $contentTypeLabel = $contentTypeLabels[$contentType] ?? $contentType;
             $contentTypeCls = 'type-' . $contentType;
+
+            // 引用(回复)消息解析 (共用 function.php parseQuoteInfo, 与聊天记录页同一套逻辑)
+            $quoteInfo = parseQuoteInfo($decoded !== null ? $decoded : $rawData);
+            $quoteData = $quoteInfo['quote'];
+            if ($quoteData) {
+                // 类型徽章改显示“引用”
+                $contentType = 'quote';
+                $contentTypeLabel = '引用';
+                $contentTypeCls = 'type-quote';
+            }
           ?>
           <tr>
             <td class="text-muted" style="white-space:nowrap;"><?= htmlspecialchars($msg['created_at']) ?></td>
@@ -840,31 +952,64 @@ function detectFileUrlFromContent($url) {
                 <?= htmlspecialchars($sourceType) ?>
               <?php endif; ?>
             </td>
-            <td>
+            <td class="msg-target-cell">
               <?php
               $groupKey = $msgAppid . '|' . $targetId;
+              // 目标ID：省略号截断 + title 悬停看全文 + 点击复制（不再用 word-break:break-all 竖排堆叠）
+              $idSpan = '';
+              if ($targetId !== '' && $targetId !== '-') {
+                  $idSpan = '<div class="msg-target-id" data-id="' . htmlspecialchars($targetId, ENT_QUOTES, 'UTF-8') . '"'
+                          . ' title="' . htmlspecialchars($targetId, ENT_QUOTES, 'UTF-8') . "（点击复制）\""
+                          . ' onclick="copyTargetId(this)">' . htmlspecialchars($targetId, ENT_QUOTES, 'UTF-8') . '</div>';
+              } else {
+                  $idSpan = '<div class="msg-target-meta">-</div>';
+              }
               if ($sourceType === '群聊' && isset($pageGroupNames[$groupKey])) {
                   $gn = $pageGroupNames[$groupKey];
                   $gname = $gn['group_name'] ?? '';
                   if ($gname) {
-                      echo '<div style="font-weight:600;">' . htmlspecialchars($gname) . '</div>';
-                      echo '<div class="text-muted" style="font-size:11px;word-break:break-all;">' . htmlspecialchars($targetId) . '</div>';
+                      echo '<div class="msg-target-name" title="' . htmlspecialchars($gname, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($gname, ENT_QUOTES, 'UTF-8') . '</div>';
+                      echo $idSpan;
+                      $metaParts = [];
                       if (!empty($gn['group_member_num'])) {
-                          echo '<span class="text-muted" style="font-size:11px;">成员:' . intval($gn['group_member_num']) . '</span> ';
+                          $metaParts[] = '成员:' . intval($gn['group_member_num']);
                       }
                       if (!empty($gn['group_class_text'])) {
-                          echo '<span class="text-muted" style="font-size:11px;">分类:' . htmlspecialchars($gn['group_class_text']) . '</span>';
+                          $metaParts[] = '分类:' . htmlspecialchars($gn['group_class_text'], ENT_QUOTES, 'UTF-8');
+                      }
+                      if ($metaParts) {
+                          echo '<div class="msg-target-meta">' . implode(' ', $metaParts) . '</div>';
                       }
                   } else {
-                      echo '<span style="word-break:break-all;">' . htmlspecialchars($targetId) . '</span>';
+                      echo $idSpan;
                   }
               } else {
-                  echo '<span style="word-break:break-all;">' . htmlspecialchars($targetId) . '</span>';
+                  echo $idSpan;
               }
               ?>
             </td>
-            <td><span class="msg-content-type <?= htmlspecialchars($contentTypeCls) ?>"><?= htmlspecialchars($contentTypeLabel) ?></span></td>
+            <td style="white-space:nowrap;"><span class="msg-content-type <?= htmlspecialchars($contentTypeCls) ?>"><?= htmlspecialchars($contentTypeLabel) ?></span></td>
             <td>
+              <?php if ($quoteData): ?>
+                <div class="msg-quote-block">
+                  <div class="msg-quote-label">引用消息</div>
+                  <?php if (!empty($quoteData['content'])): ?>
+                  <div class="msg-quote-text" title="<?= htmlspecialchars($quoteData['content'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($quoteData['content'], ENT_QUOTES, 'UTF-8') ?></div>
+                  <?php endif; ?>
+                  <?php if (!empty($quoteData['attachments'])): ?>
+                  <div class="msg-quote-thumbs">
+                    <?php foreach ($quoteData['attachments'] as $qa):
+                        if ($qa['type'] === 'image'): ?>
+                      <img class="msg-quote-thumb" src="<?= htmlspecialchars($qa['url'], ENT_QUOTES, 'UTF-8') ?>" onclick="previewFileUrl('引用图片', 'image', <?= htmlspecialchars(json_encode($qa['url'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>)" onerror="this.style.display='none'" referrerpolicy="no-referrer">
+                    <?php else:
+                        $qaIcon = $qa['type'] === 'video' ? '&#127909;' : ($qa['type'] === 'voice' ? '&#127925;' : '&#128206;');
+                        $qaName = $qa['filename'] ?: ($qa['type'] === 'video' ? '视频' : ($qa['type'] === 'voice' ? '语音' : '文件')); ?>
+                      <span class="msg-quote-file"><?= $qaIcon ?> <?= htmlspecialchars($qaName, ENT_QUOTES, 'UTF-8') ?></span>
+                    <?php endif; endforeach; ?>
+                  </div>
+                  <?php endif; ?>
+                </div>
+              <?php endif; ?>
               <?php if ($isFileUrl): ?>
                 <span class="msg-file-preview" onclick="previewFileUrl(<?= htmlspecialchars(json_encode($previewContent, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($fileUrlInfo['type'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($originalContent, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>)">
                   <?php
@@ -979,6 +1124,32 @@ function apiCall(action, data, callback) {
         }
     }
     xhr.send(params.join('&'));
+}
+
+// ==================== 复制目标ID ====================
+function copyTargetId(el) {
+    var id = el.getAttribute('data-id') || el.textContent || '';
+    if (!id) return;
+    var oldTitle = el.getAttribute('title');
+    function done() {
+        el.setAttribute('title', '已复制 ✓');
+        setTimeout(function() { el.setAttribute('title', oldTitle || id + '（点击复制）'); }, 1200);
+    }
+    function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = id;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(id).then(done).catch(fallback);
+    } else {
+        fallback();
+    }
 }
 
 // ==================== 清空消息 ====================
