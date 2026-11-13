@@ -130,11 +130,14 @@ switch ($eventType) {
 
     case 'GROUP_DEL_ROBOT':
         // 参照 Python GroupDelRobotParser: op_member_openid
+        // 官方新增 dismiss 字段: true 表示该群聊已解散（机器人被动移除），false 为被群主/管理员移出
+        $群已解散 = !empty($d['dismiss']);
         define('消息来源', '退群');
         define('事件ID', $raw['id'] ?? '');
-        define('消息', '[退群]');
+        define('消息', $群已解散 ? '[群解散]' : '[退群]');
         define('来源', $d['group_openid'] ?? '');
         define('用户', $d['op_member_openid'] ?? '');
+        if (!defined('群已解散')) define('群已解散', $群已解散);
         break;
 
     case 'GROUP_MEMBER_ADD':
@@ -553,10 +556,20 @@ $sourceType = 消息来源;
 $qInfo = parseQuoteInfo($raw);
 define('引用ID', $qInfo['own_idx'] !== '' ? $qInfo['own_idx'] : (string)($d['id'] ?? ''));
 // 参照 index.php: 优先使用 author.username 作为昵称
-$nickname = $d['author']['username'] ?? ($d['username'] ?? '');
-if ($userId) recordUser($appid, $userId, $nickname);
+// 官方 v2 已为私聊补齐 username，并为私聊/群聊下发 avatar、群聊下发 member_nickname
+$authorProfile = extractAuthorProfile($raw);
+$nickname = $authorProfile['name'] !== '' ? $authorProfile['name'] : ($d['username'] ?? '');
+if ($userId) recordUser($appid, $userId, $nickname, $authorProfile['avatar']);
 if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请', '群消息拒绝', '群消息接收', '互动'])) {
     recordGroup($appid, $targetId);
+}
+// 群解散标记：dismiss=true 时记录群状态，重新加群时复位
+if ($sourceType === '退群' && $targetId) {
+    if (!empty($d['dismiss'])) {
+        try { markGroupDismissed($appid, $targetId, true); } catch (Throwable $e) {}
+    }
+} elseif ($sourceType === '加群' && $targetId) {
+    try { markGroupDismissed($appid, $targetId, false); } catch (Throwable $e) {}
 }
 
 // ==================== 记录消息到数据库 ====================

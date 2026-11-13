@@ -1115,12 +1115,15 @@ switch ($action) {
 
                 try {
                     if (!empty($sourceType) || !empty($content_text)) {
+                        // 导入时同步提取昵称/头像/群昵称快照，历史记录页可直接显示
+                        $importProfile = extractAuthorProfile($json);
                         db()->execute(
-                            "INSERT OR IGNORE INTO messages (appid, direction, source_type, target_id, user_id, content_type, content, message_id, raw_data, created_at)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR IGNORE INTO messages (appid, direction, source_type, target_id, user_id, content_type, content, message_id, raw_data, created_at, user_name, user_avatar, group_nickname)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             [$appid, isset($data['direction']) ? $data['direction'] : '接收', $sourceType, $targetId, $userId, 
                              isset($data['content_type']) ? $data['content_type'] : '文字', 
-                             $content_text, $msgId, $json, $time]
+                             $content_text, $msgId, $json, $time,
+                             $importProfile['name'], $importProfile['avatar'], $importProfile['group_nickname']]
                         );
                         $imported++;
                     }

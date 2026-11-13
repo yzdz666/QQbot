@@ -794,17 +794,26 @@ function detectFileUrlFromContent($url) {
             }
             $rawDataB64 = base64_encode($rawDataJson);
 
-            // 用户信息
+            // 用户信息：优先使用落库时的资料快照，旧数据回退到 users 表与 raw_data
             $msgAppid = $msg['appid'] ?? '';
             $msgUserId = $msg['user_id'] ?? '';
-            $userNickname = $msg['user_nickname'] ?? '';
-            // 从 raw_data 解析 username 和 bot 标记
+            $userNickname = $msg['user_name'] ?? '';
+            if ($userNickname === '') $userNickname = $msg['user_nickname'] ?? '';
+            $userAvatar = $msg['user_avatar'] ?? '';
+            $groupNickname = $msg['group_nickname'] ?? '';
+            // 从 raw_data 解析 username、头像、群昵称和 bot 标记
             $isAuthorBot = false;
             if (!empty($rawData)) {
                 $rawDecoded = json_decode($rawData, true);
                 if (is_array($rawDecoded)) {
                     if (!$userNickname && isset($rawDecoded['d']['author']['username'])) {
-                        $userNickname = $rawDecoded['d']['author']['username'];
+                        $userNickname = 清理昵称($rawDecoded['d']['author']['username']);
+                    }
+                    if (!$userAvatar && !empty($rawDecoded['d']['author']['avatar'])) {
+                        $userAvatar = $rawDecoded['d']['author']['avatar'];
+                    }
+                    if (!$groupNickname && !empty($rawDecoded['d']['author']['member_nickname'])) {
+                        $groupNickname = 清理昵称($rawDecoded['d']['author']['member_nickname']);
                     }
                     if (isset($rawDecoded['d']['author']['bot'])) {
                         $isAuthorBot = (bool)$rawDecoded['d']['author']['bot'];
@@ -844,10 +853,15 @@ function detectFileUrlFromContent($url) {
                 }
             } else {
                 // 用户接收的消息：显示用户头像和昵称
-                if ($msgAppid && $msgUserId) {
+                // 官方 v2 直接下发 avatar，优先使用；旧数据回退到 QQ 头像接口拼接
+                if ($userAvatar !== '') {
+                    $avatarUrl = $userAvatar;
+                } elseif ($msgAppid && $msgUserId) {
                     $avatarUrl = 'https://q.qlogo.cn/qqapp/' . $msgAppid . '/' . $msgUserId . '/640';
                 }
-                $displayName = $userNickname ?: ($msgUserId ?: ($isRecv ? '用户' : '机器人'));
+                // 群聊优先显示群昵称（与 QQ 客户端一致），私聊使用用户昵称
+                $displayName = $groupNickname !== '' ? $groupNickname : $userNickname;
+                if ($displayName === '') $displayName = $msgUserId ?: ($isRecv ? '用户' : '机器人');
             }
             // 兜底：如果机器人发送但没找到机器人信息，使用 appid 作为显示名
             if ($displayName === '') {

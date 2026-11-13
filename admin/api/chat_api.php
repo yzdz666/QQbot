@@ -203,7 +203,12 @@ try {
                     $arkTypes = ['Ark', 'ark'];
 
                     if (in_array($lastMsg['source_type'], $sysTypes)) {
-                        $session['last_msg'] = '[' . $lastMsg['source_type'] . ']';
+                        // 退群事件区分「群解散」与「被移出」，会话列表直接显示真实原因
+                        $eventLabel = $lastMsg['source_type'];
+                        if ($eventLabel === '退群' && strpos((string)($lastMsg['content'] ?? ''), '[群解散]') !== false) {
+                            $eventLabel = '群解散';
+                        }
+                        $session['last_msg'] = '[' . $eventLabel . ']';
                     } elseif (in_array($lastMsg['content_type'], $imageTypes)) {
                         $session['last_msg'] = '[图片]';
                     } elseif (in_array($lastMsg['content_type'], ['引用图片', '引用图文'])) {
@@ -301,7 +306,8 @@ try {
 
             $messages = db()->fetchAll(
                 "SELECT id, appid, direction, source_type, target_id, user_id, 
-                        content_type, content, message_id as msg_id, raw_data, created_at, is_retracted
+                        content_type, content, message_id as msg_id, raw_data, created_at, is_retracted,
+                        user_name, user_avatar, group_nickname
                  FROM messages $where
                  ORDER BY created_at DESC 
                  LIMIT ? OFFSET ?",
@@ -350,6 +356,8 @@ try {
                 $memberRole = '';
                 $username = '';
                 $isBot = false;
+                $rawAvatar = '';
+                $rawGroupNickname = '';
                 $rawData = [];
                 if (!empty($msg['raw_data'])) {
                     $decodedRaw = json_decode($msg['raw_data'], true);
@@ -367,6 +375,14 @@ try {
                         }
                         if (isset($rawData['d']['author']['bot'])) {
                             $isBot = (bool)$rawData['d']['author']['bot'];
+                        }
+                        // 官方 v2：私聊/群聊均下发头像，群聊额外下发群昵称
+                        if (!empty($rawData['d']['author']['avatar']) && preg_match('#^https?://#i', $rawData['d']['author']['avatar'])) {
+                            $rawAvatar = $rawData['d']['author']['avatar'];
+                        }
+                        if (!empty($rawData['d']['author']['member_nickname'])) {
+                            $rawGroupNickname = preg_replace('/[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}\x{FFA0}]/u', '', $rawData['d']['author']['member_nickname']);
+                            $rawGroupNickname = trim((string)$rawGroupNickname);
                         }
                         // 提取 mentions 数组（@提及的用户信息）
                         $mentionsList = [];
@@ -475,7 +491,14 @@ try {
                     }
                 }
                 $msg['member_role'] = $memberRole;
-                $msg['username'] = $username;
+                // 快照字段优先（落库时记录），旧数据回退到 raw_data 解析结果
+                if (empty($msg['user_name'])) $msg['user_name'] = $username;
+                if (empty($msg['user_avatar'])) $msg['user_avatar'] = $rawAvatar;
+                if (empty($msg['group_nickname'])) $msg['group_nickname'] = $rawGroupNickname;
+                $msg['username'] = $username !== '' ? $username : (string)$msg['user_name'];
+                // 群聊优先展示群昵称，前端可直接使用 display_name
+                $msg['display_name'] = $msg['group_nickname'] !== '' ? $msg['group_nickname'] : $msg['username'];
+                $msg['avatar'] = (string)$msg['user_avatar'];
                 $msg['bot'] = $isBot;
                 // ==================== 引用(回复)消息解析 (共用 function.php parseQuoteInfo) ====================
                 // ref_idx 语义 = 引用"这条消息"时应使用的索引: 本条自身的 msg_idx > ref_msg_idx (兼容旧行为) > ''

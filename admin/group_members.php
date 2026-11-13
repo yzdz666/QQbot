@@ -659,7 +659,11 @@ function onBotChange() {
         for (var i = 0; i < groupsCache.length; i++) {
             var g = groupsCache[i];
             var label = g.name || g.group_openid;
-            if (g.member_num > 0) label += ' (' + g.member_num + '人)';
+            if (g.dismissed) {
+                label = '【已解散】' + label;
+            } else if (g.member_num > 0) {
+                label += ' (' + g.member_num + '人)';
+            }
             html += '<option value="' + escapeHtml(g.group_openid) + '">' + escapeHtml(label) + '</option>';
         }
         if (groupsCache.length === 0) {

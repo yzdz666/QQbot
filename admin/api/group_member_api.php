@@ -66,20 +66,24 @@ try {
                 json_response(['code' => 400, 'msg' => '缺少 appid 参数']);
             }
             $groups = db()->fetchAll(
-                "SELECT group_id, group_name, remark, group_member_num, last_active
+                "SELECT group_id, group_name, remark, group_member_num, last_active, status, dismissed_at
                  FROM groups WHERE appid = ?
                  ORDER BY last_active DESC",
                 [$appid]
             );
             $list = [];
             foreach ($groups as $g) {
+                $isDismissed = (($g['status'] ?? '') === 'dismissed');
                 $list[] = [
                     'group_openid' => $g['group_id'],
                     'name'         => !empty($g['remark']) ? $g['remark'] : ($g['group_name'] ?: $g['group_id']),
                     'group_name'   => $g['group_name'],
                     'remark'       => $g['remark'],
                     'member_num'   => intval($g['group_member_num'] ?? 0),
-                    'last_active'  => $g['last_active']
+                    'last_active'  => $g['last_active'],
+                    'status'       => $isDismissed ? 'dismissed' : 'active',
+                    'dismissed'    => $isDismissed,
+                    'dismissed_at' => $g['dismissed_at'] ?? ''
                 ];
             }
             json_response(['code' => 0, 'msg' => 'success', 'success' => true, 'data' => ['groups' => $list]]);

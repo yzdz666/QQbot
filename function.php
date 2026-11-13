@@ -106,6 +106,58 @@ function wlog($content, $appid_param = null) {
 }
 
 /**
+ * 清理昵称中的不可见字符（零宽空格、方向控制符、BOM 等）
+ * 官方下发的 username 偶尔会带这些字符（例如「‏⁧⁧」），直接显示会错位
+ */
+function 清理昵称($name) {
+    if (!is_string($name) || $name === '') return '';
+    $clean = preg_replace('/[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}\x{FFA0}]/u', '', $name);
+    if ($clean === null) return trim($name);
+    return trim($clean);
+}
+
+/**
+ * 从事件原始数据中提取发送者资料
+ *
+ * 官方 v2 事件在 d.author 下新增/补齐了以下字段：
+ *   - username        用户昵称（私聊 C2C 现已下发，此前为空）
+ *   - avatar          头像链接（私聊与群聊均下发）
+ *   - member_nickname 群昵称（仅群聊场景）
+ *
+ * @param string|array|null $rawData 事件原始 JSON 或数组
+ * @return array{name:string,avatar:string,group_nickname:string,member_role:string,is_bot:bool}
+ */
+function extractAuthorProfile($rawData) {
+    $result = [
+        'name' => '',
+        'avatar' => '',
+        'group_nickname' => '',
+        'member_role' => '',
+        'is_bot' => false,
+    ];
+    if (empty($rawData)) return $result;
+
+    $event = is_array($rawData) ? $rawData : json_decode((string)$rawData, true);
+    if (!is_array($event)) return $result;
+
+    $d = (isset($event['d']) && is_array($event['d'])) ? $event['d'] : $event;
+    $author = (isset($d['author']) && is_array($d['author'])) ? $d['author'] : [];
+    if (empty($author)) return $result;
+
+    $result['name'] = 清理昵称($author['username'] ?? '');
+    $result['group_nickname'] = 清理昵称($author['member_nickname'] ?? '');
+    $result['member_role'] = (string)($author['member_role'] ?? '');
+    $result['is_bot'] = !empty($author['bot']);
+
+    $avatar = (string)($author['avatar'] ?? '');
+    // 只接受 http(s) 链接，避免把异常数据写进 img src
+    if ($avatar !== '' && preg_match('#^https?://#i', $avatar)) {
+        $result['avatar'] = $avatar;
+    }
+    return $result;
+}
+
+/**
  * 记录消息到数据库
  */
 function logMessage($appid, $direction, $sourceType, $targetId, $contentType, $content, $messageId = null, $userId = null, $rawData = null) {
@@ -147,10 +199,14 @@ function logMessage($appid, $direction, $sourceType, $targetId, $contentType, $c
             }
         }
 
+        // 从事件中提取昵称/头像/群昵称快照（发送方向的 raw_data 是接口响应，提取结果为空）
+        $authorProfile = extractAuthorProfile($rawData);
+
         db()->execute(
-            "INSERT INTO messages (appid, direction, source_type, target_id, user_id, content_type, content, message_id, raw_data)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [$appid, $direction, $sourceType, $targetId, $userId, $contentType, $content, $messageId, $rawData]
+            "INSERT INTO messages (appid, direction, source_type, target_id, user_id, content_type, content, message_id, raw_data, user_name, user_avatar, group_nickname)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [$appid, $direction, $sourceType, $targetId, $userId, $contentType, $content, $messageId, $rawData,
+             $authorProfile['name'], $authorProfile['avatar'], $authorProfile['group_nickname']]
         );
     } catch (Exception $e) {
         wlog("记录消息失败: " . $e->getMessage(), $appid);
@@ -1622,29 +1678,49 @@ function getStatistics($appid = null, $days = 30) {
     ];
 }
 
-function recordUser($appid, $userId, $nickname = '') {
-    if (!empty($nickname)) {
+function recordUser($appid, $userId, $nickname = '', $avatar = '') {
+    if ($userId === null || $userId === '') return;
+    $nickname = 清理昵称($nickname);
+    $avatar = is_string($avatar) ? trim($avatar) : '';
+    if ($avatar !== '' && !preg_match('#^https?://#i', $avatar)) $avatar = '';
+
+    if ($nickname !== '') {
         db()->execute(
-            "INSERT OR IGNORE INTO users (appid, user_id, nickname) VALUES (?, ?, ?)",
-            [$appid, $userId, $nickname]
+            "INSERT OR IGNORE INTO users (appid, user_id, nickname, avatar) VALUES (?, ?, ?, ?)",
+            [$appid, $userId, $nickname, $avatar]
         );
-        db()->execute(
-            "UPDATE users SET nickname = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
-            [$nickname, $appid, $userId]
-        );
+        if ($avatar !== '') {
+            db()->execute(
+                "UPDATE users SET nickname = ?, avatar = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                [$nickname, $avatar, $appid, $userId]
+            );
+        } else {
+            db()->execute(
+                "UPDATE users SET nickname = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                [$nickname, $appid, $userId]
+            );
+        }
     } else {
         db()->execute(
-            "INSERT OR IGNORE INTO users (appid, user_id, nickname) VALUES (?, ?, '')",
-            [$appid, $userId]
+            "INSERT OR IGNORE INTO users (appid, user_id, nickname, avatar) VALUES (?, ?, '', ?)",
+            [$appid, $userId, $avatar]
         );
-        db()->execute(
-            "UPDATE users SET last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
-            [$appid, $userId]
-        );
+        if ($avatar !== '') {
+            db()->execute(
+                "UPDATE users SET avatar = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                [$avatar, $appid, $userId]
+            );
+        } else {
+            db()->execute(
+                "UPDATE users SET last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                [$appid, $userId]
+            );
+        }
     }
 }
 
 function recordGroup($appid, $groupId, $groupName = '') {
+    if ($groupId === null || $groupId === '') return;
     if (!empty($groupName)) {
         db()->execute(
             "INSERT OR IGNORE INTO groups (appid, group_id, group_name) VALUES (?, ?, ?)",
@@ -1661,6 +1737,31 @@ function recordGroup($appid, $groupId, $groupName = '') {
         );
         db()->execute(
             "UPDATE groups SET last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+            [$appid, $groupId]
+        );
+    }
+}
+
+/**
+ * 标记群聊状态
+ *
+ * GROUP_DEL_ROBOT 事件新增 dismiss 字段：
+ *   dismiss=true  → 群聊已解散，机器人被动移除
+ *   dismiss=false → 机器人被群主/管理员移出（群仍然存在）
+ *
+ * @param bool $dismissed true=已解散；false=恢复为正常（重新加群时复位）
+ */
+function markGroupDismissed($appid, $groupId, $dismissed = true) {
+    if (empty($appid) || empty($groupId)) return;
+    recordGroup($appid, $groupId);
+    if ($dismissed) {
+        db()->execute(
+            "UPDATE groups SET status = 'dismissed', dismissed_at = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
+            [$appid, $groupId]
+        );
+    } else {
+        db()->execute(
+            "UPDATE groups SET status = 'active', dismissed_at = '' WHERE appid = ? AND group_id = ?",
             [$appid, $groupId]
         );
     }

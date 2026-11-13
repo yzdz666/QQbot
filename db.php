@@ -117,6 +117,9 @@ class Database {
                 content TEXT,
                 message_id TEXT,
                 raw_data TEXT,
+                user_name TEXT DEFAULT '',
+                user_avatar TEXT DEFAULT '',
+                group_nickname TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now','localtime'))
             )",
             "CREATE INDEX IF NOT EXISTS idx_messages_appid ON messages(appid)",
@@ -181,6 +184,7 @@ class Database {
                 appid TEXT NOT NULL,
                 user_id TEXT NOT NULL,
                 nickname TEXT DEFAULT '',
+                avatar TEXT DEFAULT '',
                 remark TEXT DEFAULT '',
                 first_seen TEXT DEFAULT (datetime('now','localtime')),
                 last_active TEXT DEFAULT (datetime('now','localtime')),
@@ -195,6 +199,8 @@ class Database {
                 group_name TEXT DEFAULT '',
                 remark TEXT DEFAULT '',
                 custom_avatar TEXT DEFAULT '',
+                status TEXT DEFAULT 'active',
+                dismissed_at TEXT DEFAULT '',
                 first_seen TEXT DEFAULT (datetime('now','localtime')),
                 last_active TEXT DEFAULT (datetime('now','localtime')),
                 UNIQUE(appid, group_id)
@@ -259,10 +265,13 @@ class Database {
         $migrations = [
             'users' => [
                 'remark' => "ALTER TABLE users ADD COLUMN remark TEXT DEFAULT ''",
+                'avatar' => "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
             ],
             'groups' => [
                 'remark'         => "ALTER TABLE groups ADD COLUMN remark TEXT DEFAULT ''",
                 'custom_avatar'  => "ALTER TABLE groups ADD COLUMN custom_avatar TEXT DEFAULT ''",
+                'status'         => "ALTER TABLE groups ADD COLUMN status TEXT DEFAULT 'active'",
+                'dismissed_at'   => "ALTER TABLE groups ADD COLUMN dismissed_at TEXT DEFAULT ''",
                 'group_finger_memo'  => "ALTER TABLE groups ADD COLUMN group_finger_memo TEXT DEFAULT ''",
                 'group_class_text'   => "ALTER TABLE groups ADD COLUMN group_class_text TEXT DEFAULT ''",
                 'group_tags'         => "ALTER TABLE groups ADD COLUMN group_tags TEXT DEFAULT ''",
@@ -277,6 +286,9 @@ class Database {
             ],
             'messages' => [
                 'is_retracted' => "ALTER TABLE messages ADD COLUMN is_retracted INTEGER DEFAULT 0",
+                'user_name' => "ALTER TABLE messages ADD COLUMN user_name TEXT DEFAULT ''",
+                'user_avatar' => "ALTER TABLE messages ADD COLUMN user_avatar TEXT DEFAULT ''",
+                'group_nickname' => "ALTER TABLE messages ADD COLUMN group_nickname TEXT DEFAULT ''",
             ],
         ];
 

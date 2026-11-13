@@ -1989,8 +1989,8 @@ function loadMentionUsers(callback) {
                 if (m.user_id && !userMap[m.user_id]) {
                     userMap[m.user_id] = {
                         id: m.user_id,
-                        name: nicknameCache[m.user_id] || m.user_id,
-                        avatar: 'https://q.qlogo.cn/qqapp/' + botId + '/' + m.user_id + '/640'
+                        name: m.group_nickname || m.user_name || nicknameCache[m.user_id] || m.user_id,
+                        avatar: m.avatar || ('https://q.qlogo.cn/qqapp/' + botId + '/' + m.user_id + '/640')
                     };
                 }
             });
@@ -2623,13 +2623,17 @@ function buildMsgHtml(m, botId) {
         var eventIcon = '';
         var eventText = '';
         var eventUser = m.user_id || '';
-        var eventUserName = nicknameCache[eventUser] || (eventUser ? eventUser.substring(0, 12) + '...' : '未知用户');
-        if (nicknameCache[eventUser]) {
-            eventUserName = nicknameCache[eventUser];
-        }
+        var eventUserName = m.group_nickname || m.username || nicknameCache[eventUser] || (eventUser ? eventUser.substring(0, 12) + '...' : '未知用户');
         if (sourceType === '退群') {
-            eventIcon = '👋';
-            eventText = eventUserName + ' 退出了群聊';
+            // 官方新增 dismiss：群聊解散导致的移除，与「被踢出」区分展示
+            var isDismiss = (m.content || '').indexOf('[群解散]') > -1;
+            if (isDismiss) {
+                eventIcon = '🗑';
+                eventText = '群聊已解散，机器人被移除';
+            } else {
+                eventIcon = '👋';
+                eventText = eventUserName + ' 退出了群聊';
+            }
         } else if (sourceType === '群成员移除') {
             eventIcon = '🚫';
             eventText = eventUserName + ' 被移出群聊';
@@ -2731,10 +2735,11 @@ function buildMsgHtml(m, botId) {
             senderName = '机器人';
         }
     } else {
-        // 优先使用原始数据中的 username
-        if (m.username) {
+        // 群聊优先显示群昵称，其次用户昵称（官方 v2 私聊已下发 username）
+        var preferredName = m.group_nickname || m.user_name || m.username || '';
+        if (preferredName) {
             // 清理不可见字符
-            var cleanedUsername = m.username.replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\uFFA0]/g, '').trim();
+            var cleanedUsername = preferredName.replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\uFFA0]/g, '').trim();
             if (cleanedUsername) {
                 senderName = cleanedUsername;
                 // 只有当缓存中没有有效值时才更新
@@ -2797,6 +2802,10 @@ function buildMsgHtml(m, botId) {
             } else {
                 avatarHtml = '&#129302;';
             }
+        } else if (m.avatar || m.user_avatar) {
+            // 官方 v2 直接下发头像链接，优先使用（对 openid 拼接头像不生效的场景尤其重要）
+            avatarUrl = m.avatar || m.user_avatar;
+            avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';
         } else if (m.user_id) {
             avatarUrl = 'https://q.qlogo.cn/qqapp/' + botId + '/' + m.user_id + '/640';
             avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';

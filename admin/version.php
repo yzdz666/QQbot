@@ -1,12 +1,21 @@
 <?php
 // 系统版本信息
 return [
-    'version' => '1.6.0',
+    'version' => '1.6.1',
     'name' => '月下独酌管机',
-    'release_date' => '2026-11-09',
+    'release_date' => '2026-11-13',
     'author' => '月下独酌',
     'description' => '机器人管理后台系统',
     'changelog' => [
+        '1.6.1' => [
+            '群聊机器人移除事件支持官方新增的 dismiss 字段：dismiss=true 表示群聊已解散，聊天记录显示为「群聊已解散，机器人被移除」，群列表标注「已解散」并记录解散时间，重新加群自动恢复',
+            '接收消息新增昵称与头像快照：落库时保存 user_name / user_avatar / group_nickname，历史消息不受用户后续改名影响',
+            '私聊与群聊消息统一解析官方下发的 author.avatar，聊天记录页与聊天窗口优先使用该链接，不再依赖 openid 拼接头像',
+            '群聊消息优先显示群昵称（member_nickname），与 QQ 客户端展示一致；私聊使用官方新下发的 username',
+            '消息记录页、聊天记录页、会话列表与 @ 提及列表同步使用昵称/头像快照，旧数据自动回退解析 raw_data',
+            '昵称清洗补充零宽字符与方向控制符处理，修复部分昵称显示错位',
+            '数据库自动迁移：messages 新增 user_name / user_avatar / group_nickname，users 新增 avatar，groups 新增 status / dismissed_at',
+        ],
         '1.6.0' => [
             '新增「素材管理」页面：图片上传到 QQ 平台换取 qqbot-media:// 引用，支持拖拽/多选、大图自动分片、预览、复制 Markdown、删除释放配额',
             '聊天页新增素材选择器，可直接把素材以 Markdown 图片插入消息；素材按机器人 AppID 隔离',

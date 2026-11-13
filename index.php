@@ -172,11 +172,13 @@ function Main($raw) {
 
         case "GROUP_DEL_ROBOT":
             // 参照 Python GroupDelRobotParser: op_member_openid
+            // 官方新增 dismiss: true 表示该群聊已解散（机器人被动移除），false 为被群主/管理员移出
             define("消息来源", "退群");
             define("事件ID", $raw["id"] ?? '');
-            define("消息", "[退群]");
+            define("消息", !empty($raw["d"]["dismiss"]) ? "[群解散]" : "[退群]");
             define("来源", $raw["d"]["group_openid"] ?? '');
             define("用户", $raw["d"]["op_member_openid"] ?? '');
+            if (!defined("群已解散")) define("群已解散", !empty($raw["d"]["dismiss"]));
             break;
 
         case "INTERACTION_CREATE":
@@ -682,6 +684,7 @@ function recordIncomingMessage($eventType, $raw) {
         case 'GROUP_DEL_ROBOT':
             $sourceType = '退群';
             $targetId = $d['group_openid'] ?? '';
+            if (!defined('群已解散')) define('群已解散', !empty($d['dismiss']));
             break;
         case 'GROUP_MEMBER_ADD':
             $sourceType = '群成员增加';
@@ -753,10 +756,20 @@ function recordIncomingMessage($eventType, $raw) {
     // 记录用户和群组（含昵称）
     if ($userId && defined('appid')) {
         // 参照 ws_event_handler.php: 优先使用 author.username, 其次 d.username (入群申请等事件)
-        $nickname = $d['author']['username'] ?? ($d['username'] ?? '');
-        recordUser(appid, $userId, $nickname);
+        // 官方 v2 已为私聊补齐 username，并为私聊/群聊下发 avatar、群聊下发 member_nickname
+        $authorProfile = extractAuthorProfile($raw);
+        $nickname = $authorProfile['name'] !== '' ? $authorProfile['name'] : ($d['username'] ?? '');
+        recordUser(appid, $userId, $nickname, $authorProfile['avatar']);
     }
     if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请', '群消息拒绝', '群消息接收', '互动']) && defined('appid')) recordGroup(appid, $targetId);
+    // 群解散标记：dismiss=true 时记录群状态，重新加群时复位
+    if (defined('appid') && $targetId) {
+        if ($sourceType === '退群' && !empty($d['dismiss'])) {
+            try { markGroupDismissed(appid, $targetId, true); } catch (Throwable $e) {}
+        } elseif ($sourceType === '加群') {
+            try { markGroupDismissed(appid, $targetId, false); } catch (Throwable $e) {}
+        }
+    }
 
     // 解析附件，正确识别图片/视频/语音/文件类型和URL
     $parsedMsg = parseMessageAttachment($raw);
