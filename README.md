@@ -1,5 +1,14 @@
 # 官鸡机器人管理后台
 
+<p align="center">
+  <img src="assets/logo.png" width="140" alt="官鸡机器人 Logo">
+</p>
+
+<p align="center">
+  <a href="https://github.com/yzdz666/QQbot/releases"><img src="https://img.shields.io/github/v/release/yzdz666/QQbot?label=release" alt="Release"></a>
+  <a href="https://github.com/yzdz666/QQbot/releases"><img src="https://img.shields.io/github/downloads/yzdz666/QQbot/total" alt="Downloads"></a>
+</p>
+
 > 基于 PHP + SQLite 的 QQ 官方机器人框架，支持 WebHook 与 WebSocket 双模式，自带可视化后台与**插件市场**。不用装数据库、不用写接入代码，**填完 AppID / AppSecret 就能收消息，往 `plugin/` 丢一个 PHP 文件就是一条指令**。
 
 QQ群：973942141（进群请备注「开源」）
