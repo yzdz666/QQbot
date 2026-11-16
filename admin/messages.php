@@ -853,8 +853,7 @@ function detectFileUrlFromContent($url) {
                 }
             } else {
                 // 用户接收的消息：显示用户头像和昵称
-                // 官方 v2 直接下发 avatar；没有时由 avtHtml() 生成首字色块
-                // 不再用 qlogo + openid 拼接：该接口只认真实 QQ 号，对 openid 只会返回默认剪影
+                // 官方 v2 直接下发 avatar；没有时用 qlogo 640 兜底，最后渲染首字色块
                 if ($userAvatar !== '') {
                     $avatarUrl = $userAvatar;
                 }
@@ -898,7 +897,7 @@ function detectFileUrlFromContent($url) {
             </td>
             <td>
               <div class="msg-user-cell">
-                <div class="msg-user-avatar" style="background:transparent;"><?= avtHtml($avatarUrl, $displayName, $msgUserId ?: $msgAppid, 32, true) ?></div>
+                <div class="msg-user-avatar" style="background:transparent;"><?= avtHtml($avatarUrl, $displayName, $msgUserId ?: $msgAppid, 32, true, ($isRecv && $msgUserId !== '') ? $msgAppid : '') ?></div>
                 <div class="msg-user-info">
                   <div class="msg-user-nickname">
                     <?= htmlspecialchars($displayName) ?>

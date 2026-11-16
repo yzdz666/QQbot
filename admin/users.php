@@ -159,13 +159,13 @@ $tabGroupsUrl = 'users.php?tab=groups' . $tabQuery;
             $firstSeen  = $row['first_seen'] ?? '';
             $lastActive = $row['last_active'] ?? '';
             $rowAppid   = $row['appid'] ?? '';
-            // 头像：优先官方下发的 avatar；没有则用首字色块
+            // 头像：官方下发的 avatar 优先，其次 qlogo 640 兜底，最后首字色块
             $avatarUrl = trim($row['avatar'] ?? '');
             // 显示名称：优先备注，其次昵称
             $displayName = $remark !== '' ? $remark : $nickname;
           ?>
           <tr>
-            <td><?= avtHtml($avatarUrl, $displayName !== '' ? $displayName : $userId, $userId, 36, true) ?></td>
+            <td><?= avtHtml($avatarUrl, $displayName !== '' ? $displayName : $userId, $userId, 36, true, $rowAppid) ?></td>
             <td><?= htmlspecialchars($userId) ?></td>
             <td>
               <?php if ($displayName !== ''): ?>

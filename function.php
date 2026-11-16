@@ -2202,15 +2202,37 @@ function avtLetter($name, $id = '') {
 }
 
 /**
+ * 拼官方 qlogo 头像地址（保留作兜底）：真实 QQ 号可直接取到头像，
+ * openid 则返回 40×40 默认剪影，由前端按 naturalWidth 判定后继续回落到首字块
+ *
+ * @param string $appid 机器人 AppID
+ * @param string $id    用户 openid / QQ 号
+ */
+function avtQlogo($appid, $id) {
+    $appid = trim((string)$appid);
+    $id    = trim((string)$id);
+    if ($appid === '' || $id === '') {
+        return '';
+    }
+    if (!preg_match('/^[A-Za-z0-9_\-]{5,64}$/', $appid) || !preg_match('/^[A-Za-z0-9_\-]{5,128}$/', $id)) {
+        return '';
+    }
+    return 'https://q.qlogo.cn/qqapp/' . rawurlencode($appid) . '/' . rawurlencode($id) . '/640';
+}
+
+/**
  * 生成头像 HTML
  *
- * @param string $src   头像地址（官方下发 / 自定义），为空则直接用首字块
+ * 取值顺序：官方下发头像 → qlogo 640（appid + openid 兜底）→ 首字色块
+ *
+ * @param string $src   头像地址（官方下发 / 自定义），可为空
  * @param string $name  昵称/群名，用于取首字
- * @param string $id    openid，用于稳定配色
+ * @param string $id    openid，用于稳定配色与 qlogo 拼接
  * @param int    $size  像素尺寸
  * @param bool   $round 是否圆形
+ * @param string $appid 机器人 AppID，传入后才启用 qlogo 兜底
  */
-function avtHtml($src = '', $name = '', $id = '', $size = 36, $round = false) {
+function avtHtml($src = '', $name = '', $id = '', $size = 36, $round = false, $appid = '') {
     $src  = trim((string)$src);
     $size = max(16, intval($size));
     if ($src !== '' && !preg_match('#^(https?://|/|data:image/)#i', $src)) {
@@ -2223,8 +2245,27 @@ function avtHtml($src = '', $name = '', $id = '', $size = 36, $round = false) {
             . '--avt-bg:linear-gradient(135deg,' . $tone[0] . ',' . $tone[1] . ');';
     $html = '<span class="avt' . ($round ? ' is-round' : ' is-square') . '" style="' . $style . '">';
     $html .= '<span class="avt-txt">' . htmlspecialchars(avtLetter($name, $id), ENT_QUOTES, 'UTF-8') . '</span>';
+
+    // 候选链：u=普通地址，q=qlogo（需按尺寸识别默认剪影）
+    $cands = [];
     if ($src !== '') {
-        $html .= '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">';
+        $cands[] = ['u', $src];
+    }
+    $qlogo = avtQlogo($appid, $id);
+    if ($qlogo !== '' && $qlogo !== $src) {
+        $cands[] = ['q', $qlogo];
+    }
+    if ($cands) {
+        $first = array_shift($cands);
+        $next  = [];
+        foreach ($cands as $c) {
+            $next[] = $c[0] . '|' . $c[1];
+        }
+        $html .= '<img src="' . htmlspecialchars($first[1], ENT_QUOTES, 'UTF-8') . '"'
+               . ' data-kind="' . $first[0] . '"'
+               . ($next ? ' data-next="' . htmlspecialchars(implode('||', $next), ENT_QUOTES, 'UTF-8') . '"' : '')
+               . ' alt="" loading="lazy" referrerpolicy="no-referrer"'
+               . ' onload="avtLoaded(this)" onerror="avtNext(this)">';
     }
     $html .= '</span>';
     return $html;

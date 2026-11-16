@@ -2419,9 +2419,10 @@ function renderSessions(list) {
         var isActive = currentSession && currentSession.target_id === s.target_id && currentSession.source_type === s.source_type;
         // 显示昵称，没有则显示ID
         var displayName = s.name || s.remark || s.target_id;
-        // 头像：官方头像 / 群自定义头像，没有则首字色块
+        // 头像：官方头像 / 群自定义头像；单聊再挂 qlogo 640 兜底，没有则首字色块
         var avatarSrc = s.avatar || s.custom_avatar || groupAvatarCache[s.target_id] || '';
-        var avatarHtml = avtHtml(avatarSrc, displayName, s.target_id, 36, false);
+        var sessionQlogoAppid = (s.source_type === '群聊') ? '' : (s.appid || botId);
+        var avatarHtml = avtHtml(avatarSrc, displayName, s.target_id, 36, false, sessionQlogoAppid);
 
         html += '<div class="chat-session-item' + (isActive ? ' active' : '') + '" onclick="selectSession(\'' + escapeAttr(s.target_id) + '\',\'' + escapeAttr(s.source_type || '') + '\', this)">';
         html += '<div class="chat-session-avatar" style="background:transparent;">' + avatarHtml + '</div>';
@@ -2573,11 +2574,12 @@ function loadMessages(targetId, sourceType) {
             // 群聊时以紧凑群资料条展示（点击「详情」展开完整资料）
             renderGroupProfile((sourceType === '群聊') ? (gi || null) : null);
 
-            // 显示聊天头部头像（官方头像 / 群自定义头像，没有则首字色块）
+            // 显示聊天头部头像（官方头像 / 群自定义头像；单聊再挂 qlogo 兜底）
             var headerAvatar = document.getElementById('chatHeaderAvatar');
             var headerAvatarSrc = info.avatar || info.custom_avatar || '';
             headerAvatar.style.display = 'flex';
-            headerAvatar.innerHTML = avtHtml(headerAvatarSrc, displayName, targetId, 32, false);
+            headerAvatar.innerHTML = avtHtml(headerAvatarSrc, displayName, targetId, 32, false,
+                sourceType === '群聊' ? '' : (info.appid || botId));
 
             // 缓存已加载的消息和ID
             currentLoadedMsgs = msgs;
@@ -2872,9 +2874,10 @@ function buildMsgHtml(m, botId) {
             var sysBotSrc = sysBotAvatar || (sysBotRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(sysBotRobotQq) + '&s=640' : '');
             sysAvatarHtml = avtHtml(sysBotSrc, '机', botId, 24, true);
         } else if (eventUser && botId) {
-            // 群成员事件：系统事件不带头像，用昵称首字色块
+            // 群成员事件：系统事件不带头像，私聊事件可挂 qlogo 兜底，最后用昵称首字色块
             var sysUserName = m.group_nickname || m.user_name || nicknameCache[eventUser] || eventUser;
-            sysAvatarHtml = avtHtml('', sysUserName, eventUser, 24, true);
+            var sysIsGroup = !!(currentSession && currentSession.source_type === '群聊');
+            sysAvatarHtml = avtHtml('', sysUserName, eventUser, 24, true, sysIsGroup ? '' : botId);
         } else {
             sysAvatarHtml = avtHtml('', '系统', 'system', 24, true);
         }
@@ -2951,7 +2954,7 @@ function buildMsgHtml(m, botId) {
         roleBadge = '<span class="chat-role-badge role-bot">机器人</span>' + roleBadge;
     }
 
-    // 生成头像（官方头像优先；没有头像时用首字色块，不再用 openid 拼 qlogo）
+    // 生成头像（官方头像 → qlogo 640 兜底 → 首字色块）
     var avatarHtml = '';
     if (botId) {
         if (isSent) {
@@ -2970,8 +2973,10 @@ function buildMsgHtml(m, botId) {
             var botAvatarSrc = botAvatar || (botRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(botRobotQq) + '&s=640' : '');
             avatarHtml = avtHtml(botAvatarSrc, '机', botId, 40, false);
         } else {
-            // 官方 v2 直接下发头像链接，优先使用；没有则按昵称生成首字块
-            avatarHtml = avtHtml(m.avatar || m.user_avatar || '', senderName, m.user_id || '', 40, false);
+            // 官方 v2 直接下发头像链接，优先使用；单聊再挂 qlogo 640 兜底，最后按昵称生成首字块
+            var isGroupChat = !!(currentSession && currentSession.source_type === '群聊');
+            avatarHtml = avtHtml(m.avatar || m.user_avatar || '', senderName, m.user_id || '', 40, false,
+                isGroupChat ? '' : (m.appid || botId));
         }
     } else {
         avatarHtml = isSent ? '&#8593;' : '&#8595;';
@@ -4404,15 +4409,25 @@ function avtLetter(name, id) {
     var chars = Array.from ? Array.from(n) : n.split('');
     return String(chars[0] || '?').toUpperCase();
 }
+// qlogo 兜底地址：真实 QQ 号有效；openid 返回 40×40 剪影，由 avtLoaded() 判定后继续降级
+function avtQlogo(id, appid) {
+    var a = String(appid === null || appid === undefined ? '' : appid).trim();
+    var i = String(id === null || id === undefined ? '' : id).trim();
+    if (!a || !i) return '';
+    if (!/^[A-Za-z0-9_\-]{5,64}$/.test(a) || !/^[A-Za-z0-9_\-]{5,128}$/.test(i)) return '';
+    return 'https://q.qlogo.cn/qqapp/' + encodeURIComponent(a) + '/' + encodeURIComponent(i) + '/640';
+}
 /**
  * 生成头像 HTML
+ * 取值顺序：官方下发头像 → qlogo 640 → 首字色块
  * @param {string} src   图片地址，可为空
  * @param {string} name  昵称/群名，用于取首字
- * @param {string} id    openid，用于稳定配色
+ * @param {string} id    openid，用于稳定配色与 qlogo 拼接
  * @param {number} size  像素尺寸
  * @param {boolean} round 是否圆形
+ * @param {string} appid 机器人 AppID，传入后才启用 qlogo 兜底
  */
-function avtHtml(src, name, id, size, round) {
+function avtHtml(src, name, id, size, round, appid) {
     size = parseInt(size, 10) || 36;
     src = String(src === null || src === undefined ? '' : src).trim();
     if (src && !/^(https?:\/\/|\/|data:image\/)/i.test(src)) src = '';
@@ -4421,8 +4436,17 @@ function avtHtml(src, name, id, size, round) {
     var fontSize = Math.max(11, Math.round(size * 0.42));
     var html = '<span class="avt' + (round ? ' is-round' : ' is-square') + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:' + radius + ';font-size:' + fontSize + 'px;--avt-bg:linear-gradient(135deg,' + tone[0] + ',' + tone[1] + ');">';
     html += '<span class="avt-txt">' + escapeHtml(avtLetter(name, id)) + '</span>';
-    if (src) {
-        html += '<img src="' + escapeAttr(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">';
+    var cands = [];
+    if (src) cands.push(['u', src]);
+    var q = avtQlogo(id, appid);
+    if (q && q !== src) cands.push(['q', q]);
+    if (cands.length) {
+        var first = cands.shift();
+        var next = [];
+        for (var ci = 0; ci < cands.length; ci++) next.push(cands[ci][0] + '|' + cands[ci][1]);
+        html += '<img src="' + escapeAttr(first[1]) + '" data-kind="' + first[0] + '"'
+              + (next.length ? ' data-next="' + escapeAttr(next.join('||')) + '"' : '')
+              + ' alt="" loading="lazy" referrerpolicy="no-referrer" onload="avtLoaded(this)" onerror="avtNext(this)">';
     }
     html += '</span>';
     return html;
