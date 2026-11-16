@@ -850,6 +850,26 @@ function showMemberDetail(memberOpenid) {
             + '<tr><td>入群时间</td><td title="' + escapeHtml(m.joined_at || '') + '">' + escapeHtml(fmtTime(m.joined_at)) + '</td></tr>'
             + '</table>';
         body.innerHTML = html;
+        // 追加官方用户资料（官方 20261116 GET /v2/users/{user_openid}/info）
+        // 接口不可用（如非好友）时静默跳过，不打扰原有成员信息展示
+        apiCall('api/chat_api.php?action=get_user_info', {
+            appid: currentBotId(),
+            user_openid: memberOpenid,
+            group_openid: gid
+        }, function (u) {
+            if (!u || !u.success) return;
+            var d = u.data || {};
+            if (!d.api_ok) return;
+            var extra = '';
+            if (d.avatar) {
+                extra += '<tr><td>头像</td><td><img src="' + escapeHtml(d.avatar) + '" style="width:40px;height:40px;border-radius:6px;object-fit:cover;" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'"></td></tr>';
+            }
+            if (d.allow_proactive_msg !== null && typeof d.allow_proactive_msg !== 'undefined') {
+                extra += '<tr><td>主动推送</td><td>' + (d.allow_proactive_msg ? '允许接收' : '未开启（仅可被动回复）') + '</td></tr>';
+            }
+            var tbl = body.querySelector('table');
+            if (tbl && extra) tbl.insertAdjacentHTML('beforeend', extra);
+        });
     });
 }
 
