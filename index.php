@@ -761,7 +761,7 @@ function recordIncomingMessage($eventType, $raw) {
         $nickname = $authorProfile['name'] !== '' ? $authorProfile['name'] : ($d['username'] ?? '');
         recordUser(appid, $userId, $nickname, $authorProfile['avatar']);
     }
-    if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请', '群消息拒绝', '群消息接收', '互动']) && defined('appid')) recordGroup(appid, $targetId);
+    if ($targetId && in_array($sourceType, ['群聊', '加群', '退群', '群成员增加', '群成员移除', '入群申请', '群消息拒绝', '群消息接收', '互动']) && defined('appid')) recordGroup(appid, $targetId, '', $d['union_group_openid'] ?? '');
     // 群解散标记：dismiss=true 时记录群状态，重新加群时复位
     if (defined('appid') && $targetId) {
         if ($sourceType === '退群' && !empty($d['dismiss'])) {

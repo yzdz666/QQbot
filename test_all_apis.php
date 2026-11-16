@@ -49,6 +49,9 @@ function BOTAPI($address, $method, $json) {
     $GLOBALS['__mock']['botapi_calls'][] = $call;
     // 根据路径返回不同响应
     if (strpos($address, '/users/@me') !== false) return $GLOBALS['__mock']['bot_info_resp'];
+    if (strpos($address, '/v2/users/') !== false && strpos($address, '/info') !== false && $method === 'GET') {
+        return '{"username":"测试用户","avatar":"https://example.com/a.png","union_openid":"union_1","allow_proactive_msg":true}';
+    }
     if (strpos($address, '/v2/groups/') !== false && strpos($address, '/members/') !== false && $method === 'GET') {
         return '{"user":{"id":"m1","nick":"成员1"}}';
     }
@@ -67,6 +70,10 @@ function BOTAPI($address, $method, $json) {
 }
 
 function BOT凭证() { return 'TEST_TOKEN'; }
+
+// mock 接口域名: function.php 中的实现未随 bot.php 一起镜像, 这里补齐
+function getApiBase($env = '正式') { return 'https://api.bot.qq.com'; }
+function getApiTokenUrl() { return 'https://api.bot.qq.com/app/getAppAccessToken'; }
 
 // mock silk: 真实实现会调用外部 oiapi.net, 测试中直接返回固定值
 function silk($link) {
@@ -819,10 +826,11 @@ if ($call && $call['method'] === 'GET' && strpos($call['address'], '/v2/groups/g
 }
 
 resetMock();
-$resp = 获取群成员列表('group_openid_1', 50, 'after_id');
+// 现行实现对齐官方 20260903：GET /v2/groups/{group_openid}/members?cursor=xxx
+$resp = 获取群成员列表('group_openid_1', 'cursor_abc');
 $call = $GLOBALS['__mock']['last_botapi'];
 if ($call && strpos($call['address'], '/v2/groups/group_openid_1/members') !== false
-    && strpos($call['address'], 'limit=50') !== false && strpos($call['address'], 'after=after_id') !== false) {
+    && strpos($call['address'], 'cursor=cursor_abc') !== false) {
     pass('获取群成员列表(带分页)');
 } else {
     fail('获取群成员列表', json_encode($call));
@@ -1101,6 +1109,20 @@ if ($exc === null) {
 } else {
     fail('记录发送', $exc);
 }
+
+// ==================== 测试获取用户基本信息 (官方 20261116) ====================
+echo "\n========== 测试获取用户基本信息 API ==========\n";
+
+resetMock();
+$resp = 获取用户基本信息('u_test_openid');
+assertApiCall('获取用户基本信息', 'GET', '/v2/users/u_test_openid/info', $GLOBALS['__mock']['last_botapi']);
+$data = json_decode($resp, true);
+if (is_array($data) && ($data['username'] ?? '') === '测试用户' && ($data['union_openid'] ?? '') === 'union_1' && ($data['allow_proactive_msg'] ?? null) === true) {
+    pass('获取用户基本信息(返回字段)');
+} else {
+    fail('获取用户基本信息(返回字段)', $resp);
+}
+assertEmptyParam('获取用户基本信息(空参数)', 获取用户基本信息(''));
 
 // ==================== 测试分片上传 (multipart/form-data) API ====================
 echo "\n========== 测试分片上传 (multipart/form-data) API ==========\n";

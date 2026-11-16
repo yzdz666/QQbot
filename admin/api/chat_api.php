@@ -1216,6 +1216,102 @@ try {
             ]);
             break;
 
+        // ==================== 获取用户基本信息（官方 20261116 新增） ====================
+        // 对应接口: GET /v2/users/{user_openid}/info（10 QPS）
+        // 返回: username / avatar / union_openid / allow_proactive_msg
+        // 说明: 群聊成员用 member_openid 查询；40184001 表示用户与机器人无好友关系，
+        //      此时降级返回本地已留存的昵称/头像/群昵称，保证资料卡可用
+        case 'get_user_info':
+            $appid      = trim($_POST['appid'] ?? $_GET['appid'] ?? '');
+            $userOpenid = trim($_POST['user_openid'] ?? $_POST['user_id'] ?? $_GET['user_openid'] ?? $_GET['user_id'] ?? '');
+            $groupId    = trim($_POST['group_openid'] ?? $_POST['target_id'] ?? $_GET['group_openid'] ?? '');
+
+            if (empty($appid) || empty($userOpenid)) {
+                json_response(['code' => 400, 'msg' => '缺少 appid 或 user_openid 参数']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            // 本地资料（接口不可用时兜底）
+            $local = db()->fetch(
+                "SELECT nickname, avatar, remark, first_seen, last_active FROM users WHERE appid = ? AND user_id = ?",
+                [$appid, $userOpenid]
+            );
+
+            // 群聊场景：取该成员最近一条消息里的群昵称
+            $groupNickname = '';
+            if ($groupId !== '') {
+                $msgRow = db()->fetch(
+                    "SELECT group_nickname FROM messages WHERE appid = ? AND target_id = ? AND user_id = ? AND group_nickname <> '' ORDER BY id DESC LIMIT 1",
+                    [$appid, $groupId, $userOpenid]
+                );
+                if ($msgRow) $groupNickname = trim((string)$msgRow['group_nickname']);
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+            require_once(__DIR__ . '/../../bot.php');
+
+            $rawResp = 获取用户基本信息($userOpenid);
+            $apiData = json_decode($rawResp, true);
+            $apiOk = is_array($apiData) && !isset($apiData['code']);
+
+            $username = $apiOk ? trim((string)($apiData['username'] ?? '')) : '';
+            $avatar = $apiOk ? trim((string)($apiData['avatar'] ?? '')) : '';
+            $unionOpenid = $apiOk ? trim((string)($apiData['union_openid'] ?? '')) : '';
+            $allowProactive = $apiOk ? (bool)($apiData['allow_proactive_msg'] ?? false) : null;
+            $apiMessage = $apiOk ? '' : (string)($apiData['message'] ?? '接口不可用');
+
+            // 接口成功时回写本地用户资料，后续会话列表/消息渲染可直接复用
+            if ($apiOk && ($username !== '' || $avatar !== '')) {
+                db()->execute(
+                    "INSERT OR IGNORE INTO users (appid, user_id, nickname, avatar) VALUES (?, ?, '', '')",
+                    [$appid, $userOpenid]
+                );
+                if ($username !== '') {
+                    db()->execute(
+                        "UPDATE users SET nickname = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                        [$username, $appid, $userOpenid]
+                    );
+                }
+                if ($avatar !== '') {
+                    db()->execute(
+                        "UPDATE users SET avatar = ?, last_active = datetime('now','localtime') WHERE appid = ? AND user_id = ?",
+                        [$avatar, $appid, $userOpenid]
+                    );
+                }
+            }
+
+            $remark = trim((string)($local['remark'] ?? ''));
+            $localNickname = trim((string)($local['nickname'] ?? ''));
+            $displayName = $groupNickname !== '' ? $groupNickname : ($remark !== '' ? $remark : ($username !== '' ? $username : $localNickname));
+
+            json_response([
+                'code' => 0,
+                'msg' => 'success',
+                'success' => true,
+                'data' => [
+                    'user_openid'         => $userOpenid,
+                    'username'            => $username,
+                    'avatar'              => $avatar,
+                    'union_openid'        => $unionOpenid,
+                    'allow_proactive_msg' => $allowProactive,
+                    'group_nickname'      => $groupNickname,
+                    'remark'              => $remark,
+                    'display_name'        => $displayName,
+                    'first_seen'          => $local['first_seen'] ?? '',
+                    'last_active'         => $local['last_active'] ?? '',
+                    'api_ok'              => $apiOk,
+                    'api_code'            => $apiOk ? 0 : intval($apiData['code'] ?? -1),
+                    'api_message'         => $apiMessage,
+                ]
+            ]);
+            break;
+
         // ==================== 设置用户/群备注 ====================
         case 'set_remark':
             $appid      = trim($_POST['appid'] ?? '');

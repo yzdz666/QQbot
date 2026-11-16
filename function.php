@@ -1719,8 +1719,11 @@ function recordUser($appid, $userId, $nickname = '', $avatar = '') {
     }
 }
 
-function recordGroup($appid, $groupId, $groupName = '') {
+function recordGroup($appid, $groupId, $groupName = '', $unionGroupOpenid = '') {
     if ($groupId === null || $groupId === '') return;
+    // 官方 20261116 新增：群统一标识 union_group_openid（绑定 3 方应用后可用于跨应用关联群）
+    // 事件里带过来时同步落库，便于后台按统一标识排查/关联
+    $unionGroupOpenid = is_string($unionGroupOpenid) ? trim($unionGroupOpenid) : '';
     if (!empty($groupName)) {
         db()->execute(
             "INSERT OR IGNORE INTO groups (appid, group_id, group_name) VALUES (?, ?, ?)",
@@ -1738,6 +1741,12 @@ function recordGroup($appid, $groupId, $groupName = '') {
         db()->execute(
             "UPDATE groups SET last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
             [$appid, $groupId]
+        );
+    }
+    if ($unionGroupOpenid !== '') {
+        db()->execute(
+            "UPDATE groups SET union_group_openid = ? WHERE appid = ? AND group_id = ?",
+            [$unionGroupOpenid, $appid, $groupId]
         );
     }
 }
@@ -1983,6 +1992,8 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         $tagsStr = cleanApiText($tags);
     }
     $memberNum = intval($infoData['group_member_num'] ?? 0);
+    // 官方 20261116 新增：群统一标识（绑定 3 方应用时下发）
+    $unionGroupOpenid = trim((string)($infoData['union_group_openid'] ?? ''));
 
     // 第三步：存入数据库（同时记录 info_updated_at 用于TTL判断，保证标签状态及时更新）
     db()->execute(
@@ -1993,6 +2004,12 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
         "UPDATE groups SET group_name = ?, group_finger_memo = ?, group_class_text = ?, group_tags = ?, group_member_num = ?, info_updated_at = datetime('now','localtime'), last_active = datetime('now','localtime') WHERE appid = ? AND group_id = ?",
         [$groupName, $fingerMemo, $classText, $tagsStr, $memberNum, $appid, $groupOpenid]
     );
+    if ($unionGroupOpenid !== '') {
+        db()->execute(
+            "UPDATE groups SET union_group_openid = ? WHERE appid = ? AND group_id = ?",
+            [$unionGroupOpenid, $appid, $groupOpenid]
+        );
+    }
 
     return [
         'success' => true,
@@ -2004,6 +2021,7 @@ function fetchAndUpdateGroupInfo($appid, $groupOpenid, $force = false) {
             'group_class_text'   => $classText,
             'group_tags'         => $tagsStr,
             'group_member_num'   => $memberNum,
+            'union_group_openid' => $unionGroupOpenid,
         ]
     ];
 }

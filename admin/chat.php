@@ -1211,9 +1211,76 @@ if (!empty($bots)) {
   .cmp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 46vh; }
   .chat-quick-btn { padding: 4px 7px; }
 }
+
+/* ==================== 聊天页放大 ==================== */
+/* 顶栏已显示「聊天记录」，页面内重复标题隐藏，把高度让给消息区 */
+.page-header.chat-page-header { display: none; }
+/* 聊天卡片贴合视口：去掉多余留白，整体更宽更高 */
+.chat-layout { height: calc(100vh - 106px); height: calc(100dvh - 106px); }
+.chat-messages { padding: 18px 22px; }
+.chat-msg { gap: 12px; margin-bottom: 18px; }
+.chat-msg-avatar { width: 40px; height: 40px; border-radius: 8px; font-size: 16px; }
+.chat-msg-body { max-width: 78%; }
+.chat-msg-sender { font-size: 13px; margin-bottom: 5px; }
+.chat-msg-bubble { font-size: 15px; line-height: 1.62; padding: 11px 15px; border-radius: 10px; }
+.chat-msg-time { font-size: 12px; margin-top: 5px; }
+.chat-msg-action-btn { font-size: 12px; padding: 3px 8px; }
+.chat-msg-type { font-size: 12px; }
+.chat-msg-image { max-width: 260px; max-height: 260px; }
+.chat-msg-video { max-width: 300px; max-height: 240px; }
+.chat-msg-quote-content { font-size: 13px; }
+.chat-msg-quote-sender { font-size: 12px; }
+.chat-system-event { font-size: 12.5px; }
+.chat-main-header { padding: 14px 22px; }
+.chat-main-header h3 { font-size: 16px; }
+.chat-input-area { padding: 12px 16px; }
+.chat-input-area textarea { font-size: 14px; }
+
+@media (max-width: 768px) {
+  .chat-layout { height: calc(100vh - 84px); height: calc(100dvh - 84px); border-radius: 12px; }
+  .chat-messages { padding: 12px 11px; }
+  .chat-msg { gap: 9px; margin-bottom: 15px; }
+  .chat-msg-avatar { width: 38px; height: 38px; }
+  .chat-msg-body { max-width: 84%; }
+  .chat-msg-bubble { font-size: 15px; padding: 10px 13px; }
+  .chat-msg-image { max-width: 220px; max-height: 220px; }
+  .chat-main-header { padding: 10px 12px; }
+  .chat-input-area { padding: 9px 10px; }
+}
+
+/* ==================== 用户资料卡 ==================== */
+.uic-head { display: flex; align-items: center; gap: 12px; }
+.uic-avatar { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+.uic-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.uic-name { font-size: 16px; font-weight: 600; color: var(--ink, #1f2420); word-break: break-all; line-height: 1.35; }
+.uic-sub { margin-top: 3px; font-size: 12px; color: var(--text-muted); }
+.uic-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.uic-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+.uic-rows { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+.uic-row { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.5; }
+.uic-row .k { width: 88px; flex-shrink: 0; color: var(--text-muted); }
+.uic-row .v { flex: 1; min-width: 0; word-break: break-all; color: var(--ink-2, #333); }
+.uic-warn { margin-top: 12px; padding: 8px 10px; border-radius: 6px; background: #fff8e6; border: 1px solid #f0dca8; color: #8a6d1f; font-size: 12px; line-height: 1.5; }
+.uic-remark { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.uic-remark label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px; }
+.uic-remark-row { display: flex; gap: 8px; }
+.uic-remark-row .form-control { flex: 1; min-width: 0; }
+.uic-copy { cursor: pointer; color: var(--primary); }
+#chatToast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%) translateY(8px); background: rgba(30,34,30,.92); color: #fff; font-size: 13px; padding: 8px 14px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 4000; }
+#chatToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media (max-width: 768px) {
+  /* 发送类型/快捷按钮单行横滑，给消息区多留出高度 */
+  .chat-send-options { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 3px; }
+  .chat-send-options::-webkit-scrollbar { height: 0; }
+  .chat-send-type, .chat-quick-btn, .chat-send-hint { flex-shrink: 0; }
+  .chat-send-type { padding: 3px 8px; font-size: 11.5px; }
+  .chat-quick-btn { padding: 3px 8px; }
+  .chat-send-hint { display: none; }
+}
+.chat-send-hint { margin-left: auto; font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
 </style>
 
-<div class="page-header">
+<div class="page-header chat-page-header">
   <h2>聊天记录</h2>
 </div>
 
@@ -1296,7 +1363,7 @@ if (!empty($bots)) {
         </div>
       </div>
       <div class="chat-input-area" id="chatInputArea" style="display:none; flex-wrap:wrap;">
-        <div class="chat-send-options" style="width:100%; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
+        <div class="chat-send-options" style="width:100%; margin-bottom:6px; gap:4px;">
           <span class="chat-send-type active" data-type="text" onclick="selectSendType('text')">文字</span>
           <span class="chat-send-type" data-type="md" onclick="selectSendType('md')">MD</span>
           <span class="chat-send-type" data-type="image" onclick="selectSendType('image')">图片</span>
@@ -1309,7 +1376,7 @@ if (!empty($bots)) {
           <label class="chat-force-verify" id="chatForceVerifyWrap" title="官方参数 force_verify_image_resource：Markdown 中的图片转存失败时中止发送">
             <input type="checkbox" id="chatForceVerify"> 图片失败即中止
           </label>
-          <span style="font-size:11px; color:var(--text-muted); margin-left:auto;">输入@可提及用户</span>
+          <span class="chat-send-hint">输入@可提及用户</span>
         </div>
         <div class="chat-quote-preview" id="chatQuotePreview" style="width:100%;">
           <div style="font-weight:600; margin-bottom:2px;">引用消息</div>
@@ -1339,6 +1406,20 @@ if (!empty($bots)) {
         </button>
         <button class="btn btn-primary" onclick="sendChatMessage(event)">发送</button>
       </div>
+  </div>
+</div>
+
+<!-- ==================== 用户资料卡（官方 20261116 用户信息接口） ==================== -->
+<div class="modal-overlay" id="userInfoModal" style="display:none;" onclick="if (event.target === this) closeUserInfo()">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">用户信息</div>
+    <div class="modal-body" id="userInfoBody">
+      <div class="chat-empty">加载中...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeUserInfo()">关闭</button>
+      <button class="btn btn-primary" id="userInfoRemarkBtn" onclick="saveUserInfoRemark()" style="display:none;">保存备注</button>
+    </div>
   </div>
 </div>
 
@@ -1638,6 +1719,9 @@ function renderGroupProfile(gi) {
             }
         }
         if (memo) full += '<div><b>群简介:</b> ' + escapeHtml(memo) + '</div>';
+        if (groupProfileData && groupProfileData.union_group_openid) {
+            full += '<div><b>统一标识:</b> ' + escapeHtml(groupProfileData.union_group_openid) + '</div>';
+        }
         full += '</div>';
         html += full;
     }
@@ -2320,7 +2404,8 @@ function refreshGroupInfo() {
                 group_member_num: memberNum,
                 group_class_text: classText,
                 group_tags: tags,
-                group_finger_memo: memo
+                group_finger_memo: memo,
+                union_group_openid: cleanGroupText(d.union_group_openid || '')
             });
 
             // 刷新会话列表
@@ -2836,9 +2921,13 @@ function buildMsgHtml(m, botId) {
     }));
 
     var html = '<div class="chat-msg ' + cls + '" data-msg-id="' + (m.id || '') + '" data-appid="' + escapeAttr(m.appid || '') + '" data-msg-data="' + msgDataAttr + '">';
-    html += '<div class="chat-msg-avatar">' + avatarHtml + '</div>';
+    // 点击头像/昵称查看用户信息（官方 20261116 GET /v2/users/{openid}/info）
+    var infoUid = (!isSent && m.user_id) ? String(m.user_id).replace(/[^A-Za-z0-9_-]/g, '') : '';
+    var infoGid = (currentSession && currentSession.source_type === '群聊' && currentSession.target_id) ? String(currentSession.target_id).replace(/[^A-Za-z0-9_-]/g, '') : '';
+    var userClickAttr = infoUid ? ' onclick="openUserInfo(\'' + infoUid + '\',\'' + infoGid + '\')" title="查看用户信息"' : '';
+    html += '<div class="chat-msg-avatar"' + userClickAttr + (infoUid ? ' style="cursor:pointer;"' : '') + '>' + avatarHtml + '</div>';
     html += '<div class="chat-msg-body">';
-    html += '<div class="chat-msg-sender">' + escapeHtml(senderName) + roleBadge + '</div>';
+    html += '<div class="chat-msg-sender"' + userClickAttr + (infoUid ? ' style="cursor:pointer;"' : '') + '>' + escapeHtml(senderName) + roleBadge + '</div>';
 
     var contentType = (m.content_type || 'text');
     // 归一化: bot.php 日志用大写 MD, 渲染分支用小写
@@ -4634,6 +4723,164 @@ document.getElementById('remarkModal').addEventListener('click', function(e) {
 });
 document.getElementById('muteModal').addEventListener('click', function(e) {
     if (e.target === this) closeMuteModal();
+});
+
+// ==================== 用户资料卡（官方 20261116 用户信息接口） ====================
+var userInfoState = { userId: '', groupId: '', data: null };
+
+function openUserInfo(userId, groupId) {
+    if (!userId) return;
+    userInfoState = { userId: userId, groupId: groupId || '', data: null };
+    var modal = document.getElementById('userInfoModal');
+    var body = document.getElementById('userInfoBody');
+    var remarkBtn = document.getElementById('userInfoRemarkBtn');
+    if (!modal || !body) return;
+    body.innerHTML = '<div class="chat-empty">正在读取用户信息...</div>';
+    remarkBtn.style.display = 'none';
+    modal.style.display = 'flex';
+
+    var botId = getCurrentBotId();
+    apiCall('api/chat_api.php?action=get_user_info', {
+        appid: botId,
+        user_openid: userId,
+        group_openid: groupId || ''
+    }, function(res) {
+        if (!res || (!res.success && res.code !== 0)) {
+            body.innerHTML = '<div class="chat-empty">' + escapeHtml((res && (res.msg || res.message)) || '读取失败') + '</div>';
+            return;
+        }
+        userInfoState.data = res.data || {};
+        renderUserInfo(res.data || {});
+    });
+}
+
+function renderUserInfo(d) {
+    var body = document.getElementById('userInfoBody');
+    var remarkBtn = document.getElementById('userInfoRemarkBtn');
+    var name = d.display_name || d.username || d.group_nickname || d.remark || '用户';
+    var avatarPlaceholder = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 20c.6-3.4 3.6-5.4 7.2-5.4s6.6 2 7.2 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    var avatarHtml = d.avatar
+        ? '<img src="' + escapeAttr(d.avatar) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentElement.innerHTML=avatarPlaceholder;">'
+        : avatarPlaceholder;
+
+    var tags = '';
+    if (d.group_nickname) tags += '<span class="uic-tag">群昵称：' + escapeHtml(d.group_nickname) + '</span>';
+    if (d.remark) tags += '<span class="uic-tag">备注：' + escapeHtml(d.remark) + '</span>';
+    if (d.api_ok) tags += '<span class="uic-tag">官方接口已同步</span>';
+
+    var rows = '';
+    rows += '<div class="uic-row"><span class="k">用户 openid</span><span class="v">' + escapeHtml(d.user_openid || '-') + ' <span class="uic-copy" onclick="copyUserInfoText(\'' + escapeAttr(d.user_openid || '') + '\')">复制</span></span></div>';
+    if (d.union_openid) {
+        rows += '<div class="uic-row"><span class="k">union_openid</span><span class="v">' + escapeHtml(d.union_openid) + ' <span class="uic-copy" onclick="copyUserInfoText(\'' + escapeAttr(d.union_openid) + '\')">复制</span></span></div>';
+    }
+    if (d.allow_proactive_msg !== null && typeof d.allow_proactive_msg !== 'undefined') {
+        rows += '<div class="uic-row"><span class="k">主动推送</span><span class="v">' + (d.allow_proactive_msg ? '允许接收' : '未开启（仅可被动回复）') + '</span></div>';
+    }
+    if (d.first_seen) {
+        rows += '<div class="uic-row"><span class="k">首次记录</span><span class="v">' + escapeHtml(d.first_seen) + '</span></div>';
+    }
+    if (d.last_active) {
+        rows += '<div class="uic-row"><span class="k">最近活跃</span><span class="v">' + escapeHtml(d.last_active) + '</span></div>';
+    }
+
+    var warn = '';
+    if (!d.api_ok && d.api_message) {
+        warn = '<div class="uic-warn">官方接口未返回资料：' + escapeHtml(d.api_message) + '（常见于用户与机器人无好友关系，以下为本地留存信息）</div>';
+    }
+
+    body.innerHTML =
+        '<div class="uic-head">' +
+            '<div class="uic-avatar">' + avatarHtml + '</div>' +
+            '<div style="min-width:0;">' +
+                '<div class="uic-name">' + escapeHtml(name) + '</div>' +
+                '<div class="uic-sub">' + (d.username ? '昵称：' + escapeHtml(d.username) : '暂无官方昵称') + '</div>' +
+                '<div class="uic-tags">' + tags + '</div>' +
+            '</div>' +
+        '</div>' +
+        warn +
+        '<div class="uic-rows">' + rows + '</div>' +
+        '<div class="uic-remark">' +
+            '<label for="userInfoRemarkInput">备注名称（优先显示在会话列表）</label>' +
+            '<div class="uic-remark-row">' +
+                '<input type="text" id="userInfoRemarkInput" class="form-control" maxlength="40" placeholder="输入备注，留空清除" value="' + escapeAttr(d.remark || '') + '">' +
+            '</div>' +
+        '</div>';
+
+    remarkBtn.style.display = '';
+}
+
+function closeUserInfo() {
+    document.getElementById('userInfoModal').style.display = 'none';
+}
+
+function copyUserInfoText(text) {
+    if (!text) return;
+    var done = function() { chatToast('已复制'); };
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done).catch(function() { fallbackCopy(text, done); });
+    } else {
+        fallbackCopy(text, done);
+    }
+}
+
+function chatToast(msg) {
+    var el = document.getElementById('chatToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'chatToast';
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = 'show';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(function() { el.className = ''; }, 1500);
+}
+
+function fallbackCopy(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { alert('复制失败，请手动选择'); }
+    document.body.removeChild(ta);
+}
+
+function saveUserInfoRemark() {
+    if (!userInfoState.userId) return;
+    var input = document.getElementById('userInfoRemarkInput');
+    if (!input) return;
+    var remark = input.value.trim();
+    var btn = document.getElementById('userInfoRemarkBtn');
+    var oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+    apiCall('api/chat_api.php?action=set_remark', {
+        appid: getCurrentBotId(),
+        target_id: userInfoState.userId,
+        source_type: '私聊',
+        remark: remark
+    }, function(res) {
+        btn.disabled = false;
+        btn.textContent = oldText;
+        if (!res || !res.success) {
+            alert((res && (res.msg || res.message)) || '保存失败');
+            return;
+        }
+        remarkCache[userInfoState.userId] = remark;
+        nicknameCache[userInfoState.userId] = remark;
+        if (userInfoState.data) {
+            userInfoState.data.remark = remark;
+            renderUserInfo(userInfoState.data);
+        }
+        loadSessions();
+        if (currentSession) loadMessages(currentSession.target_id, currentSession.source_type);
+    });
+}
+
+document.getElementById('userInfoModal').addEventListener('click', function(e) {
+    if (e.target === this) closeUserInfo();
 });
 
 function saveRemark() {

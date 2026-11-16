@@ -197,6 +197,7 @@ class Database {
                 appid TEXT NOT NULL,
                 group_id TEXT NOT NULL,
                 group_name TEXT DEFAULT '',
+                union_group_openid TEXT DEFAULT '',
                 remark TEXT DEFAULT '',
                 custom_avatar TEXT DEFAULT '',
                 status TEXT DEFAULT 'active',
@@ -272,6 +273,8 @@ class Database {
                 'custom_avatar'  => "ALTER TABLE groups ADD COLUMN custom_avatar TEXT DEFAULT ''",
                 'status'         => "ALTER TABLE groups ADD COLUMN status TEXT DEFAULT 'active'",
                 'dismissed_at'   => "ALTER TABLE groups ADD COLUMN dismissed_at TEXT DEFAULT ''",
+                // 官方 20261116 新增：群统一标识（绑定 3 方应用后可用于跨应用关联群 openid）
+                'union_group_openid' => "ALTER TABLE groups ADD COLUMN union_group_openid TEXT DEFAULT ''",
                 'group_finger_memo'  => "ALTER TABLE groups ADD COLUMN group_finger_memo TEXT DEFAULT ''",
                 'group_class_text'   => "ALTER TABLE groups ADD COLUMN group_class_text TEXT DEFAULT ''",
                 'group_tags'         => "ALTER TABLE groups ADD COLUMN group_tags TEXT DEFAULT ''",

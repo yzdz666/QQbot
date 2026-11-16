@@ -3308,6 +3308,29 @@ function 获取子频道消息列表($channelId, $query = []) {
 }
 
 // ============================================================================
+// 用户信息扩展 (User Info)
+// 参照官方 20261116 变更记录: GET /v2/users/{user_openid}/info
+// ============================================================================
+
+// ==================== 获取用户基本信息 (GET /v2/users/{user_openid}/info) ====================
+// 官方 20261116 新增接口，频率限制 10 QPS。
+// 返回字段:
+//   username            string  用户名
+//   avatar              string  用户头像原图
+//   union_openid        string  跨应用关联用户 openid（绑定 3 方应用时有效）
+//   allow_proactive_msg bool    是否接收主动推送
+// 错误码: 40184001 用户与机器人无好友关系，无法查询/发送消息
+// 参数:
+//   $userOpenid - 用户 openid（私聊 openid 或群成员 member_openid）
+// 返回: 官方原始 JSON 字符串
+function 获取用户基本信息($userOpenid) {
+    if (empty($userOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'user_openid 为空']);
+    }
+    return BOTAPI("/v2/users/{$userOpenid}/info", "GET", "");
+}
+
+// ============================================================================
 // 群管理扩展 (Group Info / Bot State / Join Request List)
 // 参照 autogen: v2_groups_group_openid_info / bot_state / join_request_list
 // ============================================================================
