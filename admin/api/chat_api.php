@@ -168,6 +168,7 @@ try {
                     $session['name'] = $group ? (!empty($group['remark']) ? $group['remark'] : $group['group_name']) : '';
                     $session['remark'] = $group ? ($group['remark'] ?? '') : '';
                     $session['custom_avatar'] = $group ? ($group['custom_avatar'] ?? '') : '';
+                    $session['avatar'] = $group ? ($group['custom_avatar'] ?? '') : '';
                     // 群详细信息
                     $session['group_name'] = $group ? ($group['group_name'] ?? '') : '';
                     $session['group_finger_memo'] = $group ? ($group['group_finger_memo'] ?? '') : '';
@@ -176,12 +177,13 @@ try {
                     $session['group_member_num'] = $group ? intval($group['group_member_num'] ?? 0) : 0;
                 } else {
                     $user = db()->fetch(
-                        "SELECT nickname, remark FROM users WHERE appid = ? AND user_id = ?",
+                        "SELECT nickname, remark, avatar FROM users WHERE appid = ? AND user_id = ?",
                         [$appid, $session['target_id']]
                     );
                     $session['name'] = $user ? (!empty($user['remark']) ? $user['remark'] : $user['nickname']) : '';
                     $session['remark'] = $user ? ($user['remark'] ?? '') : '';
                     $session['custom_avatar'] = '';
+                    $session['avatar'] = $user ? ($user['avatar'] ?? '') : '';
                 }
                 // 获取最后一条消息预览
                 $lastMsg = db()->fetch(
@@ -609,11 +611,12 @@ try {
                     }
                 } else {
                     $user = db()->fetch(
-                        "SELECT nickname, remark FROM users WHERE appid = ? AND user_id = ?",
+                        "SELECT nickname, remark, avatar FROM users WHERE appid = ? AND user_id = ?",
                         [$appid, $targetId]
                     );
                     $targetName = $user ? $user['nickname'] : '';
                     $targetRemark = $user ? ($user['remark'] ?? '') : '';
+                    $targetAvatar = $user ? ($user['avatar'] ?? '') : '';
                 }
             }
 
@@ -626,6 +629,7 @@ try {
                         'name' => $targetName,
                         'remark' => $targetRemark,
                         'custom_avatar' => $targetAvatar,
+                        'avatar' => $targetAvatar,
                         'source_type' => $sourceType,
                         'target_id' => $targetId,
                         'total' => $total,

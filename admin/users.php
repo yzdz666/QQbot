@@ -4,7 +4,21 @@
  */
 $pageTitle = '用户与群组';
 require_once('header.php');
+?>
 
+<style>
+/* 手机端：AppID / 首次出现 两列让位给用户ID与昵称，避免表格横向挤压 */
+@media (max-width: 768px) {
+  .users-table th:nth-child(4), .users-table td:nth-child(4),
+  .users-table th:nth-child(5), .users-table td:nth-child(5) { display: none; }
+  .users-table th, .users-table td { padding: 8px 9px; }
+  .users-table th { font-size: 11px; }
+  .users-table td { font-size: 12px; }
+  .users-table th:nth-child(1), .users-table td:nth-child(1) { width: 48px; }
+}
+</style>
+
+<?php
 // ==================== 获取参数 ====================
 $tab   = isset($_GET['tab']) ? trim($_GET['tab']) : 'users';
 if (!in_array($tab, ['users', 'groups'], true)) {
@@ -126,10 +140,10 @@ $tabGroupsUrl = 'users.php?tab=groups' . $tabQuery;
       </div>
     <?php elseif ($tab === 'users'): ?>
       <div class="table-responsive">
-      <table class="table">
+      <table class="table users-table">
         <thead>
           <tr>
-            <th style="width:50px;">头像</th>
+            <th style="width:56px;">头像</th>
             <th>用户ID</th>
             <th>昵称/备注</th>
             <th>机器人AppID</th>
@@ -145,22 +159,13 @@ $tabGroupsUrl = 'users.php?tab=groups' . $tabQuery;
             $firstSeen  = $row['first_seen'] ?? '';
             $lastActive = $row['last_active'] ?? '';
             $rowAppid   = $row['appid'] ?? '';
-            // 生成用户头像URL
-            $avatarUrl = '';
-            if ($userId && $rowAppid) {
-                $avatarUrl = 'https://q.qlogo.cn/qqapp/' . htmlspecialchars($rowAppid) . '/' . htmlspecialchars($userId) . '/640';
-            }
+            // 头像：优先官方下发的 avatar；没有则用首字色块
+            $avatarUrl = trim($row['avatar'] ?? '');
             // 显示名称：优先备注，其次昵称
             $displayName = $remark !== '' ? $remark : $nickname;
           ?>
           <tr>
-            <td>
-              <?php if ($avatarUrl): ?>
-                <img src="<?= $avatarUrl ?>" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div style=&quot;width:32px;height:32px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);&quot;>&#128100;</div>');">
-              <?php else: ?>
-                <div style="width:32px;height:32px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);">&#128100;</div>
-              <?php endif; ?>
-            </td>
+            <td><?= avtHtml($avatarUrl, $displayName !== '' ? $displayName : $userId, $userId, 36, true) ?></td>
             <td><?= htmlspecialchars($userId) ?></td>
             <td>
               <?php if ($displayName !== ''): ?>
@@ -182,10 +187,10 @@ $tabGroupsUrl = 'users.php?tab=groups' . $tabQuery;
       </div>
     <?php else: ?>
       <div class="table-responsive">
-      <table class="table">
+      <table class="table users-table">
         <thead>
           <tr>
-            <th style="width:50px;">头像</th>
+            <th style="width:56px;">头像</th>
             <th>群组ID</th>
             <th>群名称/备注</th>
             <th>机器人AppID</th>
@@ -202,19 +207,13 @@ $tabGroupsUrl = 'users.php?tab=groups' . $tabQuery;
             $firstSeen  = $row['first_seen'] ?? '';
             $lastActive = $row['last_active'] ?? '';
             $rowAppid   = $row['appid'] ?? '';
-            // 群头像：优先自定义头像
+            // 群头像：优先自定义头像，没有则用群名首字色块
             $groupAvatar = $customAvatar;
             // 显示名称：优先备注，其次群名称
             $displayName = $remark !== '' ? $remark : $groupName;
           ?>
           <tr>
-            <td>
-              <?php if ($groupAvatar): ?>
-                <img src="<?= htmlspecialchars($groupAvatar) ?>" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div style=&quot;width:32px;height:32px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);&quot;>&#128101;</div>');">
-              <?php else: ?>
-                <div style="width:32px;height:32px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);">&#128101;</div>
-              <?php endif; ?>
-            </td>
+            <td><?= avtHtml($groupAvatar, $displayName !== '' ? $displayName : $groupId, $groupId, 36, true) ?></td>
             <td><?= htmlspecialchars($groupId) ?></td>
             <td>
               <?php if ($displayName !== ''): ?>

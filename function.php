@@ -2153,3 +2153,79 @@ function getRemarks($appid, $userIds = [], $groupIds = []) {
 
     return $result;
 }
+
+// ==================== 头像渲染（后台 UI） ====================
+
+/**
+ * 按种子稳定取一组渐变色，同一个 openid 每次颜色一致
+ */
+function avtTone($seed) {
+    $tones = [
+        ['#3f6f8f', '#2b5470'],
+        ['#4a7a63', '#2f5a46'],
+        ['#8a6a3c', '#684d2a'],
+        ['#6a5a8f', '#4a3d6b'],
+        ['#8f5a5a', '#6b3d3d'],
+        ['#4a6b8a', '#2f4a63'],
+        ['#7a6a4a', '#5a4a2f'],
+        ['#5a7a8a', '#3d5a68'],
+    ];
+    $seed = (string)$seed;
+    $h = 0;
+    $len = strlen($seed);
+    for ($i = 0; $i < $len; $i++) {
+        $h = ($h * 31 + ord($seed[$i])) % 1000003;
+    }
+    return $tones[$h % count($tones)];
+}
+
+/**
+ * 头像首字：中文取第一个字，英文/数字取首字符大写
+ */
+function avtLetter($name, $id = '') {
+    $name = trim((string)$name);
+    if ($name === '') {
+        $name = trim((string)$id);
+    }
+    if ($name === '') {
+        return '?';
+    }
+    if (function_exists('mb_substr')) {
+        $ch = mb_substr($name, 0, 1, 'UTF-8');
+    } else {
+        $ch = substr($name, 0, 1);
+        if (ord($ch) > 127 && strlen($name) >= 3) {
+            $ch = substr($name, 0, 3);
+        }
+    }
+    return function_exists('mb_strtoupper') ? mb_strtoupper($ch, 'UTF-8') : strtoupper($ch);
+}
+
+/**
+ * 生成头像 HTML
+ *
+ * @param string $src   头像地址（官方下发 / 自定义），为空则直接用首字块
+ * @param string $name  昵称/群名，用于取首字
+ * @param string $id    openid，用于稳定配色
+ * @param int    $size  像素尺寸
+ * @param bool   $round 是否圆形
+ */
+function avtHtml($src = '', $name = '', $id = '', $size = 36, $round = false) {
+    $src  = trim((string)$src);
+    $size = max(16, intval($size));
+    if ($src !== '' && !preg_match('#^(https?://|/|data:image/)#i', $src)) {
+        $src = '';
+    }
+    $tone   = avtTone($id !== '' ? $id : $name);
+    $radius = $round ? '50%' : '10px';
+    $style  = 'width:' . $size . 'px;height:' . $size . 'px;border-radius:' . $radius
+            . ';font-size:' . max(11, (int)round($size * 0.42)) . 'px;'
+            . '--avt-bg:linear-gradient(135deg,' . $tone[0] . ',' . $tone[1] . ');';
+    $html = '<span class="avt' . ($round ? ' is-round' : ' is-square') . '" style="' . $style . '">';
+    $html .= '<span class="avt-txt">' . htmlspecialchars(avtLetter($name, $id), ENT_QUOTES, 'UTF-8') . '</span>';
+    if ($src !== '') {
+        $html .= '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">';
+    }
+    $html .= '</span>';
+    return $html;
+}

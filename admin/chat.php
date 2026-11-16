@@ -208,34 +208,133 @@ if (!empty($bots)) {
     background: var(--card-bg);
 }
 .chat-main-header {
-    padding: 12px 20px;
+    padding: 7px 14px;
+    min-height: 48px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 10px;
     background: var(--card-bg);
+    position: relative;
+    flex-shrink: 0;
+    z-index: 30;
+}
+/* 左侧：菜单 + 头像 + 标题（QQ 式紧凑两行） */
+.ch-left {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: 1;
+    min-width: 0;
+}
+.chat-header-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: none;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: transparent;
+    align-items: center;
+    justify-content: center;
+}
+.ch-titles { flex: 1; min-width: 0; }
+.ch-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
 }
 .chat-main-header h3 {
     font-size: 15px;
     font-weight: 600;
-    max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.35;
 }
+.ch-group-detail { min-width: 0; flex: 1; }
 .chat-main-header .chat-info {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--text-muted);
-    margin-top: 2px;
-    /* 防止长ID/简介撑破布局：允许断行并限制最多2行 */
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    margin-top: 1px;
+    white-space: nowrap;
     overflow: hidden;
-    line-height: 1.4;
+    text-overflow: ellipsis;
+    line-height: 1.45;
 }
+/* 群资料条压在标题同一行，标签收进「详情」，不再占用消息区高度 */
+.ch-group-detail .gp-strip {
+    margin-top: 0;
+    gap: 0 6px;
+    font-size: 11px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+.ch-group-detail .gp-strip .gp-item { max-width: 96px; }
+.ch-group-detail .gp-strip .gp-tag { display: none; }
+.ch-group-detail .gp-strip .gp-toggle { font-size: 11px; }
+/* 展开的完整群资料改为浮层，不挤压头部 */
+.ch-group-detail .gp-full {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 100%;
+    z-index: 60;
+    margin-top: 4px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .12);
+    max-height: 210px;
+}
+/* 右侧操作：桌面平铺，手机折叠成「⋯」 */
+.ch-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.ch-more {
+    display: none;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.ch-more:hover { background: var(--surface-2); }
+.ch-more-menu {
+    display: none;
+    position: absolute;
+    right: 10px;
+    top: calc(100% - 2px);
+    z-index: 70;
+    min-width: 132px;
+    padding: 4px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .14);
+}
+.ch-more-menu.show { display: block; }
+.ch-more-menu button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    background: none;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+.ch-more-menu button:hover { background: var(--surface-2); }
 /* 紧凑群资料条：单行展示成员数/分类/标签，不占大空间 */
 .gp-strip {
     display: flex;
@@ -292,7 +391,8 @@ if (!empty($bots)) {
 .chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 20px;
+    padding: 14px 18px;
+    background: var(--surface-2);
     -webkit-overflow-scrolling: touch;
     /* GPU加速滚动 */
     will-change: scroll-position;
@@ -363,7 +463,7 @@ if (!empty($bots)) {
     white-space: pre-wrap;
 }
 .chat-msg.received .chat-msg-bubble {
-    background: var(--bg);
+    background: var(--card-bg);
     border: 1px solid var(--border);
 }
 .chat-msg.sent .chat-msg-bubble {
@@ -1098,33 +1198,20 @@ if (!empty($bots)) {
         max-width: 85%;
     }
     .chat-main-header {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
-        padding: 10px 12px;
+        padding: 6px 10px;
+        min-height: 46px;
     }
     .chat-main-header h3 {
         font-size: 14px;
     }
-    /* 手机版：头部文字区占据剩余宽度，群资料条/信息行不撑破布局 */
-    .chat-main-header > div:first-child {
-        flex: 1 1 100%;
-        min-width: 0;
-    }
-    .chat-main-header .gp-strip .gp-item {
-        max-width: 120px;
-    }
-    .chat-main-header .gp-full {
-        max-height: 110px;
-    }
-    #chatTargetActions {
-        flex-wrap: wrap;
-        gap: 4px !important;
-    }
-    #chatTargetActions .btn {
-        padding: 4px 8px;
-        font-size: 11px;
-        min-width: auto;
-    }
+    /* 手机版：操作按钮收进「⋯」，头部只占一行 */
+    .ch-actions { display: none !important; }
+    .ch-more { display: inline-flex; }
+    .chat-header-avatar { width: 30px; height: 30px; }
+    .ch-group-detail .gp-strip .gp-item { max-width: 62px; }
+    .ch-group-detail .gp-full { max-height: 180px; }
     .chat-input-area {
         flex-wrap: wrap;
         gap: 6px;
@@ -1217,34 +1304,36 @@ if (!empty($bots)) {
 .page-header.chat-page-header { display: none; }
 /* 聊天卡片贴合视口：去掉多余留白，整体更宽更高 */
 .chat-layout { height: calc(100vh - 106px); height: calc(100dvh - 106px); }
-.chat-messages { padding: 18px 22px; }
-.chat-msg { gap: 12px; margin-bottom: 18px; }
+.chat-messages { padding: 14px 18px; }
+.chat-msg { gap: 12px; margin-bottom: 16px; }
 .chat-msg-avatar { width: 40px; height: 40px; border-radius: 8px; font-size: 16px; }
 .chat-msg-body { max-width: 78%; }
 .chat-msg-sender { font-size: 13px; margin-bottom: 5px; }
 .chat-msg-bubble { font-size: 15px; line-height: 1.62; padding: 11px 15px; border-radius: 10px; }
 .chat-msg-time { font-size: 12px; margin-top: 5px; }
-.chat-msg-action-btn { font-size: 12px; padding: 3px 8px; }
+.chat-msg-action-btn { font-size: 11px; padding: 2px 6px; opacity: .55; }
+.chat-msg-action-btn:hover { opacity: 1; }
+.chat-msg-actions { margin-top: 2px; gap: 2px; }
 .chat-msg-type { font-size: 12px; }
 .chat-msg-image { max-width: 260px; max-height: 260px; }
 .chat-msg-video { max-width: 300px; max-height: 240px; }
 .chat-msg-quote-content { font-size: 13px; }
 .chat-msg-quote-sender { font-size: 12px; }
 .chat-system-event { font-size: 12.5px; }
-.chat-main-header { padding: 14px 22px; }
-.chat-main-header h3 { font-size: 16px; }
+.chat-main-header { padding: 7px 16px; }
+.chat-main-header h3 { font-size: 15px; }
 .chat-input-area { padding: 12px 16px; }
 .chat-input-area textarea { font-size: 14px; }
 
 @media (max-width: 768px) {
   .chat-layout { height: calc(100vh - 84px); height: calc(100dvh - 84px); border-radius: 12px; }
-  .chat-messages { padding: 12px 11px; }
-  .chat-msg { gap: 9px; margin-bottom: 15px; }
+  .chat-messages { padding: 10px 9px; }
+  .chat-msg { gap: 9px; margin-bottom: 14px; }
   .chat-msg-avatar { width: 38px; height: 38px; }
   .chat-msg-body { max-width: 84%; }
   .chat-msg-bubble { font-size: 15px; padding: 10px 13px; }
   .chat-msg-image { max-width: 220px; max-height: 220px; }
-  .chat-main-header { padding: 10px 12px; }
+  .chat-main-header { padding: 6px 10px; }
   .chat-input-area { padding: 9px 10px; }
 }
 
@@ -1338,20 +1427,29 @@ if (!empty($bots)) {
     <!-- 右侧聊天区域 -->
     <div class="chat-main" id="chatMain">
       <div class="chat-main-header">
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="ch-left">
           <button class="chat-mobile-toggle" onclick="showSessionList()">&#9776;</button>
-          <div class="chat-header-avatar" id="chatHeaderAvatar" style="width:40px;height:40px;border-radius:8px;display:none;overflow:hidden;flex-shrink:0;background:var(--border);align-items:center;justify-content:center;font-size:18px;color:var(--text-secondary);"></div>
-          <div style="flex:1; min-width:0;">
-            <h3 id="chatTargetName">选择一个会话</h3>
+          <div class="chat-header-avatar" id="chatHeaderAvatar"></div>
+          <div class="ch-titles">
+            <div class="ch-title-row">
+              <h3 id="chatTargetName">选择一个会话</h3>
+              <div id="chatGroupDetail" class="ch-group-detail" style="display:none;"></div>
+            </div>
             <div class="chat-info" id="chatTargetInfo"></div>
-            <div id="chatGroupDetail" style="display:none;"></div>
           </div>
         </div>
-        <div id="chatTargetActions" style="display:none; gap:6px;">
+        <div id="chatTargetActions" class="ch-actions" style="display:none;">
           <button class="btn btn-outline btn-sm" onclick="showRemarkModal()">设置备注</button>
           <button class="btn btn-outline btn-sm" id="btnGroupInfo" onclick="refreshGroupInfo()" style="display:none;">刷新群信息</button>
           <button class="btn btn-outline btn-sm" id="btnMuteManage" onclick="showMuteModal()" style="display:none;">禁言管理</button>
           <button class="btn btn-outline btn-sm" onclick="retractLastMsg()">撤回最后消息</button>
+        </div>
+        <button class="ch-more" onclick="toggleChatMore(event)" aria-label="更多操作">&#8943;</button>
+        <div class="ch-more-menu" id="chatMoreMenu">
+          <button onclick="showRemarkModal();closeChatMore()">设置备注</button>
+          <button data-group-only onclick="refreshGroupInfo();closeChatMore()">刷新群信息</button>
+          <button data-group-only onclick="showMuteModal();closeChatMore()">禁言管理</button>
+          <button onclick="retractLastMsg();closeChatMore()">撤回最后消息</button>
         </div>
       </div>
       <div class="chat-messages" id="chatMessages">
@@ -1733,6 +1831,33 @@ function toggleGroupProfile() {
     renderGroupProfile(groupProfileData);
 }
 
+// ==================== 手机端「更多操作」菜单 ====================
+function toggleChatMore(e) {
+    if (e) { e.stopPropagation(); }
+    var menu = document.getElementById('chatMoreMenu');
+    if (!menu) return;
+    if (menu.classList.contains('show')) {
+        menu.classList.remove('show');
+        return;
+    }
+    var isGroup = !!(currentSession && currentSession.source_type === '群聊');
+    var items = menu.querySelectorAll('[data-group-only]');
+    for (var i = 0; i < items.length; i++) {
+        items[i].style.display = isGroup ? 'flex' : 'none';
+    }
+    menu.classList.add('show');
+}
+function closeChatMore() {
+    var menu = document.getElementById('chatMoreMenu');
+    if (menu) menu.classList.remove('show');
+}
+document.addEventListener('click', function (e) {
+    var menu = document.getElementById('chatMoreMenu');
+    if (!menu || !menu.classList.contains('show')) return;
+    if (menu.contains(e.target)) return;
+    menu.classList.remove('show');
+});
+
 // ==================== 分页加载状态 ====================
 var PAGE_SIZE = 50;       // 每页加载的消息数
 var currentMsgOffset = 0;  // 当前已加载的消息偏移量
@@ -2074,7 +2199,7 @@ function loadMentionUsers(callback) {
                     userMap[m.user_id] = {
                         id: m.user_id,
                         name: m.group_nickname || m.user_name || nicknameCache[m.user_id] || m.user_id,
-                        avatar: m.avatar || ('https://q.qlogo.cn/qqapp/' + botId + '/' + m.user_id + '/640')
+                        avatar: m.avatar || m.user_avatar || ''
                     };
                 }
             });
@@ -2292,26 +2417,14 @@ function renderSessions(list) {
     for (var i = 0; i < list.length; i++) {
         var s = list[i];
         var isActive = currentSession && currentSession.target_id === s.target_id && currentSession.source_type === s.source_type;
-        var typeIcon = s.source_type === '群聊' ? '&#128101;' : '&#128100;';
-        var avatarBg = s.source_type === '群聊' ? '#e3f2fd' : '#e8f5e9';
-        var avatarColor = s.source_type === '群聊' ? '#1565c0' : '#2e7d32';
-
-        // 优先使用自定义群头像，其次QQ默认头像
-        var avatarHtml = '';
-        var customAvatar = s.custom_avatar || groupAvatarCache[s.target_id] || '';
-        if (customAvatar) {
-            avatarHtml = '<img src="' + escapeAttr(customAvatar) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'' + typeIcon + '\';this.parentElement.style.background=\'' + avatarBg + '\';this.parentElement.style.color=\'' + avatarColor + '\';" style="width:100%;height:100%;object-fit:cover;">';
-        } else if (botId && s.target_id) {
-            var avatarUrl = 'https://q.qlogo.cn/qqapp/' + botId + '/' + s.target_id + '/640';
-            avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'' + typeIcon + '\';this.parentElement.style.background=\'' + avatarBg + '\';this.parentElement.style.color=\'' + avatarColor + '\';" style="width:100%;height:100%;object-fit:cover;">';
-        } else {
-            avatarHtml = typeIcon;
-        }
-
         // 显示昵称，没有则显示ID
-        var displayName = s.name || s.target_id;
+        var displayName = s.name || s.remark || s.target_id;
+        // 头像：官方头像 / 群自定义头像，没有则首字色块
+        var avatarSrc = s.avatar || s.custom_avatar || groupAvatarCache[s.target_id] || '';
+        var avatarHtml = avtHtml(avatarSrc, displayName, s.target_id, 36, false);
+
         html += '<div class="chat-session-item' + (isActive ? ' active' : '') + '" onclick="selectSession(\'' + escapeAttr(s.target_id) + '\',\'' + escapeAttr(s.source_type || '') + '\', this)">';
-        html += '<div class="chat-session-avatar" style="background:' + avatarBg + ';color:' + avatarColor + ';">' + avatarHtml + '</div>';
+        html += '<div class="chat-session-avatar" style="background:transparent;">' + avatarHtml + '</div>';
         html += '<div class="chat-session-info">';
         html += '<div class="chat-session-name">' + escapeHtml(displayName) + '</div>';
         html += '<div class="chat-session-preview">' + escapeHtml(s.last_msg || '') + '</div>';
@@ -2390,13 +2503,9 @@ function refreshGroupInfo() {
             var nameEl = document.getElementById('chatTargetName');
             if (nameEl && newName) nameEl.textContent = newName;
 
-            // 更新副信息行（保持精简，完整资料放群资料条）
-            var infoParts = ['群聊 · ' + shortOpenid(targetId)];
-            if (memberNum > 0) infoParts.push(memberNum + '人');
-            if (classText) infoParts.push('分类:' + classText);
-            if (tags) infoParts.push('标签:' + tags);
+            // 副信息行只保留短ID；成员数/分类/标签由标题行的群资料条展示
             var infoEl = document.getElementById('chatTargetInfo');
-            if (infoEl) infoEl.textContent = infoParts.join(' · ');
+            if (infoEl) infoEl.textContent = '群聊 · ' + shortOpenid(targetId);
 
             // 紧凑群资料条（保留当前展开状态）
             renderGroupProfile({
@@ -2455,35 +2564,20 @@ function loadMessages(targetId, sourceType) {
             // 显示昵称（优先备注）
             var displayName = info.remark || info.name || targetId;
             document.getElementById('chatTargetName').textContent = displayName;
-            // 副信息行保持精简：类型·短ID·消息数，长简介等放入群资料条，避免占屏
+            // 副信息只留类型/短ID/消息数；成员数、分类、标签统一由标题行的群资料条展示，避免重复占行
             var infoParts = [(info.source_type || '') + ' · ' + shortOpenid(targetId)];
             if (info.total) infoParts.push('共' + info.total + '条消息');
-            var gi = info.group_info;
-            if (sourceType === '群聊' && gi) {
-                if (parseInt(gi.group_member_num, 10) > 0) infoParts.push(parseInt(gi.group_member_num, 10) + '人');
-                var clsText = cleanGroupText(gi.group_class_text);
-                if (clsText) infoParts.push('分类:' + clsText);
-                var tagText = cleanGroupText(gi.group_tags);
-                if (tagText) infoParts.push('标签:' + tagText);
-            }
             document.getElementById('chatTargetInfo').textContent = infoParts.join(' · ');
+            var gi = info.group_info;
 
             // 群聊时以紧凑群资料条展示（点击「详情」展开完整资料）
             renderGroupProfile((sourceType === '群聊') ? (gi || null) : null);
 
-            // 显示聊天头部头像
+            // 显示聊天头部头像（官方头像 / 群自定义头像，没有则首字色块）
             var headerAvatar = document.getElementById('chatHeaderAvatar');
-            var botId2 = getCurrentBotId();
-            var customAvatar = info.custom_avatar || '';
-            if (sourceType === '群聊') {
-                headerAvatar.style.display = 'flex';
-                var avatarSrc = customAvatar || ('https://q.qlogo.cn/qqapp/' + botId2 + '/' + targetId + '/640');
-                headerAvatar.innerHTML = '<img src="' + escapeAttr(avatarSrc) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128101;\';" style="width:100%;height:100%;object-fit:cover;">';
-            } else {
-                headerAvatar.style.display = 'flex';
-                var userAvatarSrc = 'https://q.qlogo.cn/qqapp/' + botId2 + '/' + targetId + '/640';
-                headerAvatar.innerHTML = '<img src="' + escapeAttr(userAvatarSrc) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';" style="width:100%;height:100%;object-fit:cover;">';
-            }
+            var headerAvatarSrc = info.avatar || info.custom_avatar || '';
+            headerAvatar.style.display = 'flex';
+            headerAvatar.innerHTML = avtHtml(headerAvatarSrc, displayName, targetId, 32, false);
 
             // 缓存已加载的消息和ID
             currentLoadedMsgs = msgs;
@@ -2775,18 +2869,14 @@ function buildMsgHtml(m, botId) {
                     }
                 }
             }
-            if (sysBotAvatar) {
-                sysAvatarHtml = '<img src="' + escapeAttr(sysBotAvatar) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
-            } else if (sysBotRobotQq) {
-                sysAvatarHtml = '<img src="https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(sysBotRobotQq) + '&s=640" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
-            } else {
-                sysAvatarHtml = '&#129302;';
-            }
+            var sysBotSrc = sysBotAvatar || (sysBotRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(sysBotRobotQq) + '&s=640' : '');
+            sysAvatarHtml = avtHtml(sysBotSrc, '机', botId, 24, true);
         } else if (eventUser && botId) {
-            // 群成员事件，显示对应用户头像
-            sysAvatarHtml = '<img src="https://q.qlogo.cn/qqapp/' + escapeAttr(botId) + '/' + escapeAttr(eventUser) + '/640" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';
+            // 群成员事件：系统事件不带头像，用昵称首字色块
+            var sysUserName = m.group_nickname || m.user_name || nicknameCache[eventUser] || eventUser;
+            sysAvatarHtml = avtHtml('', sysUserName, eventUser, 24, true);
         } else {
-            sysAvatarHtml = '&#128100;';
+            sysAvatarHtml = avtHtml('', '系统', 'system', 24, true);
         }
 
         var sysHtml = '<div class="chat-msg system-event">';
@@ -2861,12 +2951,11 @@ function buildMsgHtml(m, botId) {
         roleBadge = '<span class="chat-role-badge role-bot">机器人</span>' + roleBadge;
     }
 
-    // 生成头像
+    // 生成头像（官方头像优先；没有头像时用首字色块，不再用 openid 拼 qlogo）
     var avatarHtml = '';
-    var avatarUrl = '';
     if (botId) {
         if (isSent) {
-            // 发送方为机器人：优先使用机器人头像，其次通过 robot_qq 生成，最后回退到 emoji
+            // 发送方为机器人：机器人头像 > robot_qq 拼图 > 首字「机」
             var botAvatar = '';
             var botRobotQq = '';
             if (typeof botsData !== 'undefined') {
@@ -2878,24 +2967,11 @@ function buildMsgHtml(m, botId) {
                     }
                 }
             }
-            if (botAvatar) {
-                avatarHtml = '<img src="' + escapeAttr(botAvatar) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
-            } else if (botRobotQq) {
-                // 通过QQ号生成头像
-                avatarUrl = 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(botRobotQq) + '&s=640';
-                avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#129302;\';">';
-            } else {
-                avatarHtml = '&#129302;';
-            }
-        } else if (m.avatar || m.user_avatar) {
-            // 官方 v2 直接下发头像链接，优先使用（对 openid 拼接头像不生效的场景尤其重要）
-            avatarUrl = m.avatar || m.user_avatar;
-            avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';
-        } else if (m.user_id) {
-            avatarUrl = 'https://q.qlogo.cn/qqapp/' + botId + '/' + m.user_id + '/640';
-            avatarHtml = '<img src="' + escapeAttr(avatarUrl) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'&#128100;\';">';
+            var botAvatarSrc = botAvatar || (botRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(botRobotQq) + '&s=640' : '');
+            avatarHtml = avtHtml(botAvatarSrc, '机', botId, 40, false);
         } else {
-            avatarHtml = '&#128100;';
+            // 官方 v2 直接下发头像链接，优先使用；没有则按昵称生成首字块
+            avatarHtml = avtHtml(m.avatar || m.user_avatar || '', senderName, m.user_id || '', 40, false);
         }
     } else {
         avatarHtml = isSent ? '&#8593;' : '&#8595;';
@@ -4305,6 +4381,51 @@ function escapeHtml(str) {
 function escapeAttr(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ==================== 头像渲染 ====================
+// 与 function.php 的 avtHtml() 保持同一套观感：有图显图，无图/失败显示首字色块
+var AVT_TONES = [
+    ['#3f6f8f', '#2b5470'], ['#4a7a63', '#2f5a46'],
+    ['#8a6a3c', '#684d2a'], ['#6a5a8f', '#4a3d6b'],
+    ['#8f5a5a', '#6b3d3d'], ['#4a6b8a', '#2f4a63'],
+    ['#7a6a4a', '#5a4a2f'], ['#5a7a8a', '#3d5a68']
+];
+function avtTone(seed) {
+    var s = String(seed || '');
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1000003;
+    return AVT_TONES[h % AVT_TONES.length];
+}
+function avtLetter(name, id) {
+    var n = String(name === null || name === undefined ? '' : name).trim();
+    if (!n) n = String(id === null || id === undefined ? '' : id).trim();
+    if (!n) return '?';
+    var chars = Array.from ? Array.from(n) : n.split('');
+    return String(chars[0] || '?').toUpperCase();
+}
+/**
+ * 生成头像 HTML
+ * @param {string} src   图片地址，可为空
+ * @param {string} name  昵称/群名，用于取首字
+ * @param {string} id    openid，用于稳定配色
+ * @param {number} size  像素尺寸
+ * @param {boolean} round 是否圆形
+ */
+function avtHtml(src, name, id, size, round) {
+    size = parseInt(size, 10) || 36;
+    src = String(src === null || src === undefined ? '' : src).trim();
+    if (src && !/^(https?:\/\/|\/|data:image\/)/i.test(src)) src = '';
+    var tone = avtTone(id ? id : name);
+    var radius = round ? '50%' : '10px';
+    var fontSize = Math.max(11, Math.round(size * 0.42));
+    var html = '<span class="avt' + (round ? ' is-round' : ' is-square') + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:' + radius + ';font-size:' + fontSize + 'px;--avt-bg:linear-gradient(135deg,' + tone[0] + ',' + tone[1] + ');">';
+    html += '<span class="avt-txt">' + escapeHtml(avtLetter(name, id)) + '</span>';
+    if (src) {
+        html += '<img src="' + escapeAttr(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">';
+    }
+    html += '</span>';
+    return html;
 }
 
 // ==================== 文件URL识别 ====================

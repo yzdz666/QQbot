@@ -853,11 +853,10 @@ function detectFileUrlFromContent($url) {
                 }
             } else {
                 // 用户接收的消息：显示用户头像和昵称
-                // 官方 v2 直接下发 avatar，优先使用；旧数据回退到 QQ 头像接口拼接
+                // 官方 v2 直接下发 avatar；没有时由 avtHtml() 生成首字色块
+                // 不再用 qlogo + openid 拼接：该接口只认真实 QQ 号，对 openid 只会返回默认剪影
                 if ($userAvatar !== '') {
                     $avatarUrl = $userAvatar;
-                } elseif ($msgAppid && $msgUserId) {
-                    $avatarUrl = 'https://q.qlogo.cn/qqapp/' . $msgAppid . '/' . $msgUserId . '/640';
                 }
                 // 群聊优先显示群昵称（与 QQ 客户端一致），私聊使用用户昵称
                 $displayName = $groupNickname !== '' ? $groupNickname : $userNickname;
@@ -899,13 +898,7 @@ function detectFileUrlFromContent($url) {
             </td>
             <td>
               <div class="msg-user-cell">
-                <?php if ($avatarUrl): ?>
-                <div class="msg-user-avatar">
-                  <img src="<?= htmlspecialchars($avatarUrl) ?>" onerror="this.style.display='none';this.parentElement.innerHTML='<?= $displayAvatarChar ?>';" referrerpolicy="no-referrer">
-                </div>
-                <?php else: ?>
-                <div class="msg-user-avatar"><?= $displayAvatarChar ?></div>
-                <?php endif; ?>
+                <div class="msg-user-avatar" style="background:transparent;"><?= avtHtml($avatarUrl, $displayName, $msgUserId ?: $msgAppid, 32, true) ?></div>
                 <div class="msg-user-info">
                   <div class="msg-user-nickname">
                     <?= htmlspecialchars($displayName) ?>
@@ -934,8 +927,6 @@ function detectFileUrlFromContent($url) {
                       } elseif (!empty($botInfo['robot_qq'])) {
                           $eventAvatarUrl = 'https://q1.qlogo.cn/g?b=qq&nk=' . $botInfo['robot_qq'] . '&s=640';
                       }
-                  } elseif ($msgAppid && $msgUserId) {
-                      $eventAvatarUrl = 'https://q.qlogo.cn/qqapp/' . $msgAppid . '/' . $msgUserId . '/640';
                   }
                   // 事件类型CSS类
                   $eventCls = 'event-leave';
@@ -954,13 +945,7 @@ function detectFileUrlFromContent($url) {
                   elseif ($sourceType === '频道更新') $eventCls = 'event-bot';
               ?>
                 <div class="msg-source-event">
-                  <div class="msg-event-avatar">
-                    <?php if ($eventAvatarUrl): ?>
-                    <img src="<?= htmlspecialchars($eventAvatarUrl) ?>" onerror="this.style.display='none';this.parentElement.innerHTML='<?= $eventAvatarChar ?>';" referrerpolicy="no-referrer">
-                    <?php else: ?>
-                    <?= $eventAvatarChar ?>
-                    <?php endif; ?>
-                  </div>
+                  <div class="msg-event-avatar" style="background:transparent;"><?= avtHtml($eventAvatarUrl, $displayName, $msgUserId ?: $msgAppid, 24, true) ?></div>
                   <span class="msg-event-type <?= $eventCls ?>"><?= htmlspecialchars($sourceType) ?></span>
                 </div>
               <?php else: ?>

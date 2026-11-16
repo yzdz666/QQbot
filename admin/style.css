@@ -990,3 +990,39 @@ body.nav-open { overflow: hidden; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   统一头像组件
+   有官方头像时显示图片；没有或加载失败时，显示按 ID 稳定取色的首字块，
+   不再用 qlogo + openid 拼接（该接口只认真实 QQ 号，对 openid 只能返回默认剪影）
+   ============================================================ */
+.avt {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--avt-bg, #5c6b64);
+  vertical-align: middle;
+}
+.avt > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--avt-bg, #5c6b64);
+}
+.avt .avt-txt {
+  line-height: 1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .12);
+  user-select: none;
+}
+.avt.is-round { border-radius: 50%; }
+.avt.is-square { border-radius: 10px; }
+.avt.is-sm { font-size: 12px; }

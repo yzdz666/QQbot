@@ -89,7 +89,7 @@ $defaultAppid = !empty($bots) ? $bots[0]['appid'] : '';
   .mat-preview-body { flex-direction: column; }
   .mat-preview-info { width: 100%; }
   .mat-preview-img { min-height: 160px; }
-  .mat-toolbar { width: 100%; }
+  .mat-toolbar { flex: 1 1 100%; width: auto; min-width: 0; }
   .mat-toolbar .form-control { flex: 1; min-width: 0; }
   .mat-lib-tools { flex: 0 0 100%; justify-content: flex-start; }
   .mat-lib-tools .form-control { flex: 1; width: auto; }
