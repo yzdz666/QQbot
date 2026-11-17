@@ -2224,9 +2224,8 @@ function renderMentionPopup(textarea) {
 
     var html = '';
     filtered.forEach(function(u, idx) {
-        var avatarHtml = u.avatar
-            ? '<img src="' + escapeAttr(u.avatar) + '" onerror="this.style.display=\'none\'">'
-            : '<span style="font-size:14px;">&#128100;</span>';
+        // 与消息头像同一套链路：官方 avatar → qlogo 640 兜底 → 首字色块
+        var avatarHtml = avtHtml(u.avatar || '', u.name || u.id, u.id, 20, false, getCurrentBotId());
         html += '<div class="chat-mention-item" onclick="insertMention(' + idx + ')" data-idx="' + idx + '">' +
                 avatarHtml + '<span>' + escapeHtml(u.name || u.id) + '</span></div>';
     });
@@ -2419,10 +2418,9 @@ function renderSessions(list) {
         var isActive = currentSession && currentSession.target_id === s.target_id && currentSession.source_type === s.source_type;
         // 显示昵称，没有则显示ID
         var displayName = s.name || s.remark || s.target_id;
-        // 头像：官方头像 / 群自定义头像；单聊再挂 qlogo 640 兜底，没有则首字色块
+        // 头像：官方头像 / 群自定义头像；缺图时用 qlogo 640 兜底（与 1.7.0 一致，群聊也拼）
         var avatarSrc = s.avatar || s.custom_avatar || groupAvatarCache[s.target_id] || '';
-        var sessionQlogoAppid = (s.source_type === '群聊') ? '' : (s.appid || botId);
-        var avatarHtml = avtHtml(avatarSrc, displayName, s.target_id, 36, false, sessionQlogoAppid);
+        var avatarHtml = avtHtml(avatarSrc, displayName, s.target_id, 36, false, s.appid || botId);
 
         html += '<div class="chat-session-item' + (isActive ? ' active' : '') + '" onclick="selectSession(\'' + escapeAttr(s.target_id) + '\',\'' + escapeAttr(s.source_type || '') + '\', this)">';
         html += '<div class="chat-session-avatar" style="background:transparent;">' + avatarHtml + '</div>';
@@ -2574,12 +2572,12 @@ function loadMessages(targetId, sourceType) {
             // 群聊时以紧凑群资料条展示（点击「详情」展开完整资料）
             renderGroupProfile((sourceType === '群聊') ? (gi || null) : null);
 
-            // 显示聊天头部头像（官方头像 / 群自定义头像；单聊再挂 qlogo 兜底）
+            // 显示聊天头部头像（官方头像 / 群自定义头像，缺图时 qlogo 兜底）
             var headerAvatar = document.getElementById('chatHeaderAvatar');
             var headerAvatarSrc = info.avatar || info.custom_avatar || '';
             headerAvatar.style.display = 'flex';
             headerAvatar.innerHTML = avtHtml(headerAvatarSrc, displayName, targetId, 32, false,
-                sourceType === '群聊' ? '' : (info.appid || botId));
+                info.appid || botId);
 
             // 缓存已加载的消息和ID
             currentLoadedMsgs = msgs;
@@ -2874,10 +2872,9 @@ function buildMsgHtml(m, botId) {
             var sysBotSrc = sysBotAvatar || (sysBotRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(sysBotRobotQq) + '&s=640' : '');
             sysAvatarHtml = avtHtml(sysBotSrc, '机', botId, 24, true);
         } else if (eventUser && botId) {
-            // 群成员事件：系统事件不带头像，私聊事件可挂 qlogo 兜底，最后用昵称首字色块
+            // 群成员事件：系统事件不带头像，用 qlogo 兜底，最后按昵称首字色块
             var sysUserName = m.group_nickname || m.user_name || nicknameCache[eventUser] || eventUser;
-            var sysIsGroup = !!(currentSession && currentSession.source_type === '群聊');
-            sysAvatarHtml = avtHtml('', sysUserName, eventUser, 24, true, sysIsGroup ? '' : botId);
+            sysAvatarHtml = avtHtml('', sysUserName, eventUser, 24, true, botId);
         } else {
             sysAvatarHtml = avtHtml('', '系统', 'system', 24, true);
         }
@@ -2973,10 +2970,9 @@ function buildMsgHtml(m, botId) {
             var botAvatarSrc = botAvatar || (botRobotQq ? 'https://q1.qlogo.cn/g?b=qq&nk=' + encodeURIComponent(botRobotQq) + '&s=640' : '');
             avatarHtml = avtHtml(botAvatarSrc, '机', botId, 40, false);
         } else {
-            // 官方 v2 直接下发头像链接，优先使用；单聊再挂 qlogo 640 兜底，最后按昵称生成首字块
-            var isGroupChat = !!(currentSession && currentSession.source_type === '群聊');
+            // 官方 v2 直接下发头像链接，优先使用；缺图时 qlogo 640 兜底，最后按昵称生成首字块
             avatarHtml = avtHtml(m.avatar || m.user_avatar || '', senderName, m.user_id || '', 40, false,
-                isGroupChat ? '' : (m.appid || botId));
+                m.appid || botId);
         }
     } else {
         avatarHtml = isSent ? '&#8593;' : '&#8595;';

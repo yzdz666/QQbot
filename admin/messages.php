@@ -944,7 +944,7 @@ function detectFileUrlFromContent($url) {
                   elseif ($sourceType === '频道更新') $eventCls = 'event-bot';
               ?>
                 <div class="msg-source-event">
-                  <div class="msg-event-avatar" style="background:transparent;"><?= avtHtml($eventAvatarUrl, $displayName, $msgUserId ?: $msgAppid, 24, true) ?></div>
+                  <div class="msg-event-avatar" style="background:transparent;"><?= avtHtml($eventAvatarUrl, $displayName, $msgUserId ?: $msgAppid, 24, true, $msgUserId !== '' ? $msgAppid : '') ?></div>
                   <span class="msg-event-type <?= $eventCls ?>"><?= htmlspecialchars($sourceType) ?></span>
                 </div>
               <?php else: ?>
