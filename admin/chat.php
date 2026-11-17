@@ -1341,6 +1341,7 @@ if (!empty($bots)) {
 .uic-head { display: flex; align-items: center; gap: 12px; }
 .uic-avatar { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
 .uic-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.uic-avatar .avt { width: 56px !important; height: 56px !important; border-radius: 10px; }
 .uic-name { font-size: 16px; font-weight: 600; color: var(--ink, #1f2420); word-break: break-all; line-height: 1.35; }
 .uic-sub { margin-top: 3px; font-size: 12px; color: var(--text-muted); }
 .uic-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
@@ -1355,6 +1356,21 @@ if (!empty($bots)) {
 .uic-remark-row { display: flex; gap: 8px; }
 .uic-remark-row .form-control { flex: 1; min-width: 0; }
 .uic-copy { cursor: pointer; color: var(--primary); }
+
+/* ==================== 移出群成员 ==================== */
+.kick-target { display:flex; align-items:center; gap:12px; padding:2px 0 4px; }
+.kick-target .kick-avt { width:44px; height:44px; flex-shrink:0; }
+.kick-target .kick-avt .avt { width:44px !important; height:44px !important; }
+.kick-name { font-size:15px; font-weight:600; color:var(--ink,#1f2420); word-break:break-all; line-height:1.35; }
+.kick-openid { margin-top:3px; font-family:Consolas,Monaco,monospace; font-size:11.5px; color:var(--text-muted); word-break:break-all; }
+.kick-warn { margin-top:12px; padding:9px 11px; border-radius:7px; background:#fff4f2; border:1px solid #f3c9c1; color:#a4342a; font-size:12.5px; line-height:1.6; }
+.kick-blk { margin-top:12px; display:flex; align-items:flex-start; gap:7px; font-size:13px; cursor:pointer; line-height:1.5; }
+.kick-blk input { margin-top:2px; flex-shrink:0; }
+.kick-err { margin-top:10px; padding:8px 10px; border-radius:6px; background:#fdecea; border:1px solid #f5c6c2; color:#a4342a; font-size:12px; line-height:1.5; display:none; }
+.kicked-badge { display:inline-block; margin-left:6px; padding:0 5px; border-radius:4px; font-size:10.5px; font-weight:400; line-height:16px; color:#a4342a; background:#fdecea; border:1px solid #f5c6c2; vertical-align:1px; }
+@media (max-width: 768px) {
+  .kick-target .kick-avt, .kick-target .kick-avt .avt { width:38px !important; height:38px !important; }
+}
 #chatToast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%) translateY(8px); background: rgba(30,34,30,.92); color: #fff; font-size: 13px; padding: 8px 14px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 4000; }
 #chatToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 @media (max-width: 768px) {
@@ -1514,9 +1530,36 @@ if (!empty($bots)) {
     <div class="modal-body" id="userInfoBody">
       <div class="chat-empty">加载中...</div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn btn-danger" id="userInfoKickBtn" onclick="openKickMember()" style="display:none; margin-right:auto;">移出本群</button>
       <button class="btn btn-outline" onclick="closeUserInfo()">关闭</button>
       <button class="btn btn-primary" id="userInfoRemarkBtn" onclick="saveUserInfoRemark()" style="display:none;">保存备注</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 移出群成员（POST /v2/groups/{group_id}/batch_remove_members） ==================== -->
+<div class="modal-overlay" id="kickMemberModal" style="display:none;" onclick="if (event.target === this) closeKickMember()">
+  <div class="modal" style="max-width:430px;">
+    <div class="modal-header">移出本群</div>
+    <div class="modal-body">
+      <div class="kick-target">
+        <div class="kick-avt" id="kickMemberAvatar"></div>
+        <div style="min-width:0;">
+          <div class="kick-name" id="kickMemberName"></div>
+          <div class="kick-openid" id="kickMemberOpenid"></div>
+        </div>
+      </div>
+      <div class="kick-warn">移出后该成员将不在群内，聊天记录不受影响。机器人需拥有群管理员身份，且官方群成员管理接口已开通。</div>
+      <label class="kick-blk">
+        <input type="checkbox" id="kickMemberBlk">
+        <span>同时加入群黑名单<br><span style="font-size:11.5px;color:var(--text-muted);">拉黑后该用户无法再次申请入群</span></span>
+      </label>
+      <div class="kick-err" id="kickMemberError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeKickMember()">取消</button>
+      <button class="btn btn-danger" id="kickMemberConfirm" onclick="doKickMember()">确认移出</button>
     </div>
   </div>
 </div>
@@ -4899,10 +4942,9 @@ function renderUserInfo(d) {
     var body = document.getElementById('userInfoBody');
     var remarkBtn = document.getElementById('userInfoRemarkBtn');
     var name = d.display_name || d.username || d.group_nickname || d.remark || '用户';
-    var avatarPlaceholder = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 20c.6-3.4 3.6-5.4 7.2-5.4s6.6 2 7.2 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-    var avatarHtml = d.avatar
-        ? '<img src="' + escapeAttr(d.avatar) + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentElement.innerHTML=avatarPlaceholder;">'
-        : avatarPlaceholder;
+    // 头像统一走 avtHtml：官方头像优先，加载失败或无头像时显示稳定配色的首字块
+    var avatarHtml = avtHtml(d.avatar || '', name, d.user_openid || userInfoState.userId, 56, false,
+        userInfoState.groupId ? '' : getCurrentBotId());
 
     var tags = '';
     if (d.group_nickname) tags += '<span class="uic-tag">群昵称：' + escapeHtml(d.group_nickname) + '</span>';
@@ -4948,6 +4990,93 @@ function renderUserInfo(d) {
         '</div>';
 
     remarkBtn.style.display = '';
+    var kickBtn = document.getElementById('userInfoKickBtn');
+    if (kickBtn) kickBtn.style.display = canKickMember() ? '' : 'none';
+}
+
+// 仅群聊会话、且目标不是机器人自己时可移出
+function canKickMember() {
+    if (!userInfoState.groupId || !userInfoState.userId) return false;
+    var botId = getCurrentBotId();
+    if (botId && userInfoState.userId === botId) return false;
+    return true;
+}
+
+function openKickMember() {
+    if (!canKickMember()) { chatToast('仅群聊成员支持移出'); return; }
+    var d = userInfoState.data || {};
+    var name = d.display_name || d.username || d.group_nickname || d.remark || userInfoState.userId;
+    document.getElementById('kickMemberName').textContent = name;
+    document.getElementById('kickMemberOpenid').textContent = userInfoState.userId;
+    var avtBox = document.getElementById('kickMemberAvatar');
+    avtBox.innerHTML = avtHtml(d.avatar || '', name, userInfoState.userId, 44, false, '');
+    document.getElementById('kickMemberBlk').checked = false;
+    var err = document.getElementById('kickMemberError');
+    err.style.display = 'none';
+    err.textContent = '';
+    document.getElementById('userInfoModal').style.display = 'none';
+    document.getElementById('kickMemberModal').style.display = 'flex';
+}
+
+function closeKickMember() {
+    document.getElementById('kickMemberModal').style.display = 'none';
+}
+
+function doKickMember() {
+    if (!canKickMember()) return;
+    var btn = document.getElementById('kickMemberConfirm');
+    var errBox = document.getElementById('kickMemberError');
+    var blk = document.getElementById('kickMemberBlk').checked;
+    var targetId = userInfoState.userId;
+    var groupId = userInfoState.groupId;
+    errBox.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = '处理中...';
+    apiCall('api/group_member_api.php?action=batch_remove_members', {
+        appid: getCurrentBotId(),
+        group_openid: groupId,
+        member_openids: JSON.stringify([targetId]),
+        add_to_blacklist: blk ? '1' : ''
+    }, function(res) {
+        btn.disabled = false;
+        btn.textContent = '确认移出';
+        var ok = res && (res.success || res.code === 0);
+        if (!ok) {
+            var msg = (res && (res.msg || res.message)) || '移出失败，请稍后重试';
+            if (res && res.code == 11253) {
+                msg = '官方接口未开通（11253）：群成员管理能力处于内邀阶段，需先向平台申请权限后再使用';
+            } else if (res && res.code == 400) {
+                msg = '参数缺失：' + msg;
+            }
+            errBox.textContent = msg;
+            errBox.style.display = 'block';
+            return;
+        }
+        var failBlk = (res.data && res.data.add_to_member_blacklist_fail_openids) || [];
+        closeKickMember();
+        chatToast(blk && failBlk.length ? '已移出，' + failBlk.length + ' 个拉黑失败' : (blk ? '已移出并拉黑' : '已移出本群'));
+        markMemberKicked(targetId);
+    });
+}
+
+// 消息列表里给该成员打「已移出」标记（只影响当前视图，不写库）
+function markMemberKicked(uid) {
+    if (!uid) return;
+    var msgs = document.querySelectorAll('.chat-msg');
+    for (var i = 0; i < msgs.length; i++) {
+        var raw = msgs[i].getAttribute('data-msg-data');
+        if (!raw) continue;
+        var d;
+        try { d = JSON.parse(raw); } catch (e) { continue; }
+        if (!d || d.user_id !== uid) continue;
+        var sender = msgs[i].querySelector('.chat-msg-sender');
+        if (sender && !sender.querySelector('.kicked-badge')) {
+            var b = document.createElement('span');
+            b.className = 'kicked-badge';
+            b.textContent = '已移出';
+            sender.appendChild(b);
+        }
+    }
 }
 
 function closeUserInfo() {

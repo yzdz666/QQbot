@@ -273,6 +273,7 @@ $bots = getBots();
     <div class="modal-header">成员详情</div>
     <div class="modal-body" id="memberDetailBody"></div>
     <div class="modal-footer">
+      <button class="btn btn-danger" id="memberDetailKickBtn" onclick="kickFromDetail()" style="display:none; margin-right:auto;">移出本群</button>
       <button class="btn btn-outline" onclick="closeModal('memberDetailModal')">关闭</button>
     </div>
   </div>
@@ -761,6 +762,7 @@ function renderMembers(data) {
         empty.textContent = '暂无成员数据';
         empty.style.display = 'block';
         document.getElementById('memberPager').style.display = 'none';
+        flushMemberAlert();
         return;
     }
     empty.style.display = 'none';
@@ -805,6 +807,15 @@ function renderMembers(data) {
         document.getElementById('btnMemberPrev').disabled = page <= 1;
         document.getElementById('btnMemberNext').disabled = !memberNextCursor;
     }
+    flushMemberAlert();
+}
+
+// 列表刷新会清空 alert，操作结果排在刷新后展示
+var pendingMemberAlert = null;
+function flushMemberAlert() {
+    if (!pendingMemberAlert) return;
+    showAlert('memberAlert', pendingMemberAlert.type, pendingMemberAlert.msg);
+    pendingMemberAlert = null;
 }
 
 function memberNextPage() {
@@ -824,8 +835,13 @@ function toggleSelectAll(cb) {
 }
 
 // ==================== 成员详情 ====================
+var detailMemberOpenid = '';
+
 function showMemberDetail(memberOpenid) {
     var gid = requireGroup(); if (!gid) return;
+    detailMemberOpenid = memberOpenid;
+    var kickBtn = document.getElementById('memberDetailKickBtn');
+    if (kickBtn) kickBtn.style.display = 'none';
     var body = document.getElementById('memberDetailBody');
     body.innerHTML = '<div class="text-muted" style="padding:20px; text-align:center;">加载中...</div>';
     document.getElementById('memberDetailModal').style.display = 'flex';
@@ -850,6 +866,9 @@ function showMemberDetail(memberOpenid) {
             + '<tr><td>入群时间</td><td title="' + escapeHtml(m.joined_at || '') + '">' + escapeHtml(fmtTime(m.joined_at)) + '</td></tr>'
             + '</table>';
         body.innerHTML = html;
+        // 群主无法被移出，其余成员显示「移出本群」
+        var kickBtn2 = document.getElementById('memberDetailKickBtn');
+        if (kickBtn2) kickBtn2.style.display = (m.member_role === 'owner') ? 'none' : '';
         // 追加官方用户资料（官方 20261116 GET /v2/users/{user_openid}/info）
         // 接口不可用（如非好友）时静默跳过，不打扰原有成员信息展示
         apiCall('api/chat_api.php?action=get_user_info', {
@@ -893,7 +912,7 @@ function doRemove(openids, withBlk) {
         }
         var failBlk = (res.data && res.data.add_to_member_blacklist_fail_openids) || [];
         var extra = (withBlk && failBlk.length > 0) ? '；拉黑失败 ' + failBlk.length + ' 人' : '';
-        showAlert('memberAlert', 'success', (res.msg || '移除操作已执行') + extra);
+        pendingMemberAlert = { type: 'success', msg: (res.msg || '移除操作已执行') + extra };
         // 刷新当前页（若处于"全部成员"视图则整表重载，避免把内部标记 __all__ 当游标传入接口）
         if (memberCursorStack.length === 1 && memberCursorStack[0] === '__all__') {
             loadAllMembers();
@@ -908,6 +927,15 @@ function removeSingle(memberOpenid) {
     var withBlk = document.getElementById('chkRemoveBlk').checked;
     if (!confirm(confirmRemoveMsg(1, withBlk))) return;
     doRemove([memberOpenid], withBlk);
+}
+
+// 成员详情弹窗内直接移出（POST /v2/groups/{group_id}/batch_remove_members）
+function kickFromDetail() {
+    if (!detailMemberOpenid) return;
+    var withBlk = document.getElementById('chkRemoveBlk').checked;
+    if (!confirm(confirmRemoveMsg(1, withBlk))) return;
+    closeModal('memberDetailModal');
+    doRemove([detailMemberOpenid], withBlk);
 }
 
 function batchRemoveSelected() {

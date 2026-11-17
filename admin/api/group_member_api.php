@@ -192,9 +192,15 @@ try {
                 json_response(['code' => 500, 'msg' => '接口返回格式错误', 'raw' => $resp]);
             }
             if (isset($data['code']) && $data['code'] != 0) {
+                $hintMap = [
+                    11253     => '（该接口处于内邀阶段，需向平台申请权限）',
+                    40103012  => '（群主未给机器人打开「移除群成员」权限开关）',
+                    40103011  => '（机器人侧已关闭「移除群成员」权限开关，请到 QQ 机器人管理端开启）',
+                ];
+                $hint = $hintMap[intval($data['code'])] ?? '';
                 json_response([
                     'code' => $data['code'],
-                    'msg'  => '批量移除失败: ' . ($data['message'] ?? '未知错误') . ($data['code'] == 11253 ? '（该接口处于内邀阶段，需向平台申请权限）' : ''),
+                    'msg'  => '批量移除失败: ' . ($data['message'] ?? '未知错误') . $hint,
                     'success' => false
                 ]);
             }

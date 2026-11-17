@@ -1779,9 +1779,10 @@ function 获取全部群成员($groupOpenid, $maxPages = 50) {
 // 参数:
 //   $groupOpenid        - 群 OpenID
 //   $memberOpenids      - 待移除成员的 member_openid 数组（最多20个，超过自动分批）
-//   $addToBlacklist     - 是否同时加入群黑名单（默认 false）
-// 返回: {"remove_members_result":"success","add_to_member_blacklist_fail_openids":[]}
-//       多批时返回 {"code":0,"message":"batch done","results":[...]}
+//   $addToBlacklist     - 移除后是否追加拉黑（拉黑在移除成功后另行调用黑名单接口）
+// 返回: {"remove_members_result":"success"} / {"remove_members_result":"success","add_to_member_blacklist_fail_openids":[]}
+//       多批时返回 {"code":0,"message":"batch done","results":[...],"add_to_member_blacklist_fail_openids":[]}
+// 常见错误码: 40103012 群主已关闭「移除群成员」权限 / 40103011 机器人已关闭该权限 / 11253 接口未开通
 function 群成员批量移除($groupOpenid, $memberOpenids, $addToBlacklist = false) {
     if (empty($groupOpenid) || empty($memberOpenids) || !is_array($memberOpenids)) {
         return json_encode(['code' => -1, 'message' => 'group_openid 或 member_openids 为空']);
@@ -1793,19 +1794,55 @@ function 群成员批量移除($groupOpenid, $memberOpenids, $addToBlacklist = f
         return json_encode(['code' => -1, 'message' => 'member_openids 列表为空']);
     }
     $results = [];
+    $blkFail = [];
     // 每批最多20个（API限制）
     foreach (array_chunk($memberOpenids, 20) as $batch) {
-        $data = ['member_openids' => array_values($batch)];
-        if ($addToBlacklist) {
-            $data['add_to_member_blacklist'] = true;
-        }
-        $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+        // 官方请求体仅接受 member_openids，拉黑需另行调用 member_blacklist
+        $json = json_encode(['member_openids' => array_values($batch)], JSON_UNESCAPED_UNICODE);
         $resp = BOTAPI("/v2/groups/{$groupOpenid}/batch_remove_members", "POST", $json);
         wlog("[群成员批量移除] group={$groupOpenid} 请求: " . $json . " 响应: " . $resp, defined('appid') ? appid : null);
         $results[] = $resp;
+        // 移除成功后追加拉黑（官方规则：仅不在群中的用户可加入黑名单）
+        if ($addToBlacklist) {
+            $data = json_decode($resp, true);
+            if (is_array($data) && !isset($data['code'])) {
+                $blkData = json_decode(操作群黑名单($groupOpenid, 'add', $batch), true);
+                if (is_array($blkData) && !empty($blkData['fail_openids'])) {
+                    foreach ($blkData['fail_openids'] as $f) $blkFail[] = $f;
+                } elseif (is_array($blkData) && isset($blkData['code'])) {
+                    foreach ($batch as $b) $blkFail[] = $b;
+                }
+            }
+        }
     }
-    if (count($results) === 1) return $results[0];
-    return json_encode(['code' => 0, 'message' => 'batch done', 'results' => $results], JSON_UNESCAPED_UNICODE);
+    if (count($results) === 1) {
+        $data = json_decode($results[0], true);
+        if (is_array($data) && !isset($data['code']) && $addToBlacklist) {
+            $data['add_to_member_blacklist_fail_openids'] = $blkFail;
+            return json_encode($data, JSON_UNESCAPED_UNICODE);
+        }
+        return $results[0];
+    }
+    return json_encode([
+        'code' => 0,
+        'message' => 'batch done',
+        'results' => $results,
+        'add_to_member_blacklist_fail_openids' => $blkFail,
+    ], JSON_UNESCAPED_UNICODE);
+}
+
+// ==================== 群成员管理 - 封装: 踢人（单个成员移出） ====================
+// 便于指令/插件里直接调用：踢人($groupOpenid, $memberOpenid) 或 踢人($groupOpenid, $memberOpenid, true)
+function 踢出群成员($groupOpenid, $memberOpenid, $addToBlacklist = false) {
+    if (empty($memberOpenid)) {
+        return json_encode(['code' => -1, 'message' => 'member_openid 为空']);
+    }
+    return 群成员批量移除($groupOpenid, [$memberOpenid], $addToBlacklist);
+}
+
+// 别名：踢人
+function 踢人($groupOpenid, $memberOpenid, $addToBlacklist = false) {
+    return 踢出群成员($groupOpenid, $memberOpenid, $addToBlacklist);
 }
 
 // ==================== 群成员管理 - 群黑名单查询 (GET /v2/groups/{group_openid}/member_blacklist) ====================
@@ -1832,7 +1869,7 @@ function 查询群黑名单($groupOpenid, $cursor = '', $limit = 20) {
 // ==================== 群成员管理 - 群黑名单操作 (POST /v2/groups/{group_openid}/member_blacklist) ====================
 // 参照官方文档: https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_member_blacklist.post.html
 // 20260903 变更记录新增的群成员管理接口（内邀中，错误码 11253 表示未开通）。
-// 注意: 只有目标用户不在群中时才能加入群黑名单（如需移除并拉黑，可用 群成员批量移除 的 add_to_member_blacklist 一次完成）。
+// 注意: 只有目标用户不在群中时才能加入群黑名单（如需「移除并拉黑」，请用 群成员批量移除 的 $addToBlacklist，内部会先移除再拉黑）。
 // 参数:
 //   $groupOpenid   - 群 OpenID
 //   $op            - 操作类型: add 加入黑名单 / del 移出黑名单
