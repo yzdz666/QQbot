@@ -8,13 +8,9 @@ return [
     'description' => '机器人管理后台系统',
     'changelog' => [
         '1.7.5' => [
-            '新增「语音转 Silk」可切换转码接口：后台「系统设置」可在 自建 SilkV3 服务 / oiapi / 自定义接口 之间切换，配置存于 settings.silk_config',
-            '默认改用自建 SilkV3 服务：GET /api/v1/convert/url，支持采样率 8k/16k/24k、帧长 20/40/60ms、复杂度 0-2、腾讯兼容模式与 sharecode',
-            '修复旧转码接口失效导致语音发不出：oiapi.net 的 /API/Mp32Silk 已返回 404「接口不存在」，新版不再依赖该接口',
-            '新增多接口自动降级：主接口失败可自动尝试备用接口，总超时可控（10-110 秒）；全部失败时 语音() / 推送语音 会回复文字提示，而不是把空数据传给官方接口',
-            '响应自动识别：SILK 二进制（\\x02#!SILK_V3）、base64、JSON 中的音频链接都能解析；oiapi 新版 {"code":1,"data":{"url":"..."}} 结构已兼容；非 SILK 内容会被拦截并输出文件头便于排错',
-            '后台新增「测试转换」：无需保存即可用当前表单值试转，显示服务商、SILK 文件头、体积、耗时与逐接口尝试记录',
-            'silk() 迁移到 function/silk.php，插件调用方式不变；新增 silkConvert() / silkConfig() / silkProviders() 供插件与二次开发使用',
+            '修复语音转 Silk：适配 oiapi 新返回结构（code=1，音频链接位于 data.url），参数改用 urlencode 编码',
+            '转换失败时返回空串，由 语音() / 推送语音 走文字提示，避免把空数据传给官方 /files 接口',
+            '其余功能与 1.7.4 一致（踢人、qlogo 头像兜底、用户资料卡等）',
         ],
         '1.7.4' => [
             '新增「移出本群」（踢人）：聊天记录页群聊中点击成员头像打开资料卡，底部新增「移出本群」按钮，确认后调用 POST /v2/groups/{group_id}/batch_remove_members，请求体为官方 {"member_openids":["成员openid"]}',
