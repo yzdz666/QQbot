@@ -1,5 +1,13 @@
 <?php
 
+// 语音转 SILK：可切换接口（后台「系统设置 → 语音转 Silk」），silk() 由该文件提供
+// 用 APP_ROOT 定位并做存在性判断：测试脚本会把 bot.php 镜像到临时目录再 include，此时跳过
+$__silkLib = (defined('APP_ROOT') ? APP_ROOT : __DIR__ . '/') . 'function/silk.php';
+if (is_file($__silkLib)) {
+    require_once($__silkLib);
+}
+unset($__silkLib);
+
 // ==================== 日志记录函数（数据库 + 文件双写，与原版兼容） ====================
 
 // 发送富媒体日志 → 结构化附件: 从日志类型+展示URL构造 attachments 数组 (聊天记录页回放媒体用)
@@ -338,13 +346,6 @@ function 图片($image,$content=null,$logMedia=null) {
 }
 
 
-function silk($link){
-    $link = str_replace("&","%26",$link);
-    $url = "https://oiapi.net/API/Mp32Silk?url=".$link;
-    $r = json_decode(curl($url,"GET",[],''), true);
-    return $r["message"] ?? '';
-}
-
 // ==================== 本地语音功能 ====================
 function 本地语音($yy, $logMedia = null) {
    $mediaDisp = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
@@ -419,9 +420,13 @@ function 本地语音($yy, $logMedia = null) {
 
 function 语音($yy, $logMedia = null) {
    $logContent = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia) : $yy;
+   // 统一先转 SILK（失败不再往下传空数据，直接回文字提示，避免官方接口报「媒体文件错误」）
+   $silk = silk($yy);
+   if ($silk === '') {
+      return 文字("语音转换失败，请检查后台「系统设置 → 语音转 Silk」的接口配置");
+   }
    switch (消息来源) {
      case "群聊":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -442,7 +447,6 @@ function 语音($yy, $logMedia = null) {
      case "私聊":
      case "好友增加":   // C2C生命周期事件
      case "好友删除":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -468,7 +472,6 @@ function 语音($yy, $logMedia = null) {
      case "群消息拒绝":
      case "群消息接收":
      case "互动":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -2164,6 +2167,9 @@ function 推送图片到用户($userOpenid, $image) {
 // ==================== 主动推送语音到群 ====================
 function 推送语音到群($groupOpenid, $voice) {
     $silk = silk($voice);
+    if ($silk === '') {
+        return 推送到群($groupOpenid, "语音转换失败，请检查后台「系统设置 → 语音转 Silk」的接口配置");
+    }
     $file_info = 推送富媒体("语音", $silk, $groupOpenid, true);
     if (isset($file_info['message'])) {
         return 推送到群($groupOpenid, $file_info['message']);
@@ -2185,6 +2191,9 @@ function 推送语音到群($groupOpenid, $voice) {
 // ==================== 主动推送语音到用户 ====================
 function 推送语音到用户($userOpenid, $voice) {
     $silk = silk($voice);
+    if ($silk === '') {
+        return 推送到用户($userOpenid, "语音转换失败，请检查后台「系统设置 → 语音转 Silk」的接口配置");
+    }
     $file_info = 推送富媒体("语音", $silk, $userOpenid, false);
     if (isset($file_info['message'])) {
         return 推送到用户($userOpenid, $file_info['message']);

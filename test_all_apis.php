@@ -75,7 +75,7 @@ function BOT凭证() { return 'TEST_TOKEN'; }
 function getApiBase($env = '正式') { return 'https://api.bot.qq.com'; }
 function getApiTokenUrl() { return 'https://api.bot.qq.com/app/getAppAccessToken'; }
 
-// mock silk: 真实实现会调用外部 oiapi.net, 测试中直接返回固定值
+// mock silk: 真实实现见 function/silk.php（可切换转码接口），测试中直接返回固定值
 function silk($link) {
     return $GLOBALS['__mock']['silk_resp'];
 }
@@ -1225,8 +1225,11 @@ $previouslyUntested = [
     '记录发送', '设置菜单', '语音', '跳转卡', '踢出成员',
 ];
 $missing = [];
+// silk() 已迁到 function/silk.php（支持多接口切换），检查时合并该文件源码
+$silkSource = (string)@file_get_contents(__DIR__ . '/function/silk.php');
 foreach ($previouslyUntested as $api) {
-    if (strpos($botContent, 'function ' . $api . '(') === false) {
+    $source = $botContent . ($api === 'silk' ? $silkSource : '');
+    if (strpos($source, 'function ' . $api . '(') === false) {
         $missing[] = $api;
     }
 }

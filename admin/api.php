@@ -38,6 +38,9 @@ Auth::requireSameOrigin();
 // 代发网关函数 (relay_auth_get/reset/toggle 需要; relay.php 被 include 时仅定义函数不执行入口)
 require_once(__DIR__ . '/../relay.php');
 
+// 语音转 SILK（后台可切换转码接口，silk_test 需要）
+require_once(__DIR__ . '/../function/silk.php');
+
 // 检查安装
 if (!Auth::isInstalled()) {
     json_response(['success' => false, 'message' => '系统未安装'], 503);
@@ -637,6 +640,58 @@ switch ($action) {
         db()->setSetting($key, $value);
         后台操作记录('保存设置', $key . ' = ' . $value);
         json_response(['success' => true, 'message' => '设置已保存']);
+        break;
+
+    // ==================== 语音转 SILK ====================
+    case 'save_silk_config':
+        $raw  = $_POST['config'] ?? '';
+        $data = is_array($raw) ? $raw : json_decode((string)$raw, true);
+        if (!is_array($data)) {
+            json_response(['success' => false, 'message' => '配置格式错误']);
+        }
+        $cfg = silkNormalizeConfig($data);
+        db()->setSetting('silk_config', $cfg);
+        // 只记录服务商与地址，不把 sharecode 写进操作日志
+        后台操作记录('保存语音转Silk配置', 'provider=' . $cfg['provider'] . ' base=' . $cfg['base_url']);
+        json_response(['success' => true, 'message' => '语音转 Silk 配置已保存', 'config' => $cfg]);
+        break;
+
+    case 'silk_test':
+        // 用当前表单值测试（不必先保存），转换耗时较长，放宽执行时间
+        @set_time_limit(180);
+        $audio = trim((string)($_POST['url'] ?? ''));
+        if ($audio === '' || !preg_match('#^https?://#i', $audio)) {
+            json_response(['success' => false, 'message' => '请填写以 http:// 或 https:// 开头的音频地址']);
+        }
+        $raw  = $_POST['config'] ?? '';
+        $data = is_array($raw) ? $raw : json_decode((string)$raw, true);
+        $cfg  = (is_array($data) && $data) ? silkConfig($data) : silkConfig();
+
+        $t0 = microtime(true);
+        $r  = silkConvert($audio, $cfg);
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+
+        $headHex  = '';
+        $headText = '';
+        if ($r['ok'] && $r['kind'] === 'binary') {
+            $headHex  = bin2hex(substr($r['data'], 0, 10));
+            $headText = preg_replace('#[^\x20-\x7E]#', '.', substr($r['data'], 0, 10));
+        }
+
+        json_response([
+            'success' => (bool)$r['ok'],
+            'message' => $r['ok'] ? '转换成功' : ($r['error'] !== '' ? $r['error'] : '转换失败'),
+            'data' => [
+                'provider'  => $r['provider'],
+                'kind'      => $r['kind'],
+                'bytes'     => (int)$r['bytes'],
+                'ms'        => $ms,
+                'head_hex'  => $headHex,
+                'head_text' => $headText,
+                'url'       => ($r['ok'] && $r['kind'] === 'url') ? $r['data'] : '',
+                'tries'     => $r['tries'],
+            ],
+        ]);
         break;
 
     // ==================== 代发网关鉴权 (relay.php) ====================
