@@ -284,7 +284,7 @@ if (!function_exists('silkParseResponse')) {
             if (is_array($json)) {
                 $code = $json['code'] ?? $json['status'] ?? $json['errcode'] ?? null;
                 $okCode = ($code === null)
-                       || in_array((string)$code, ['0', '200', '200000', 'success', 'ok'], true);
+                       || in_array((string)$code, ['0', '1', '200', '200000', 'success', 'ok'], true);
                 $msg = (string)($json['message'] ?? $json['msg'] ?? $json['error'] ?? $json['detail'] ?? '');
 
                 // 候选链接：message / url / silk_url / file_url / data.*
