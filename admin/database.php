@@ -156,7 +156,7 @@ function dbm_fmt_bytes($b) {
         <tbody>
         <?php foreach ($tableStats as $t => $s):
             $pct = $totalBytes > 0 ? $s['bytes'] * 100 / $totalBytes : 0;
-            $barColor = $pct > 50 ? 'var(--danger)' : ($pct > 15 ? 'var(--warn)' : 'var(--primary)');
+            $barColor = $pct > 50 ? 'var(--danger)' : 'var(--ink)';
         ?>
           <tr>
             <td>

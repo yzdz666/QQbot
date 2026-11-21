@@ -323,7 +323,7 @@ pre#wsLogBox {
       </div>
       <p style="margin:8px 0 0; font-size:13px; word-break:break-word; overflow-wrap:break-word;"><strong>宝塔面板设置方法：</strong>计划任务 → 添加任务 → 任务类型选 Shell脚本 → 执行周期选每1分钟 → 脚本内容填上面的命令</p>
       <p style="margin:4px 0 0; font-size:13px; word-break:break-word; overflow-wrap:break-word;"><strong>SSH设置方法：</strong>执行 <code>crontab -e</code>，添加上面的命令，保存退出</p>
-      <p style="margin:4px 0 0; font-size:13px; color:var(--success-color, #28a745); word-break:break-word; overflow-wrap:break-word;"><strong>✓ 已配置好定时任务？</strong> 点击"启动守护进程"后，系统将在1分钟内自动启动 WS</p>
+      <p style="margin:4px 0 0; font-size:13px; color:var(--success-color, #14653f); word-break:break-word; overflow-wrap:break-word;"><strong>✓ 已配置好定时任务？</strong> 点击"启动守护进程"后，系统将在1分钟内自动启动 WS</p>
     </div>
 
     <!-- 待处理状态提示 -->
@@ -394,7 +394,7 @@ pre#wsLogBox {
         <h4 style="font-size:14px; font-weight:600; margin:0;">运行日志（最近50行）</h4>
         <button class="btn btn-outline btn-sm" onclick="wsClearLogs()">清空日志</button>
       </div>
-      <pre id="wsLogBox" style="background:var(--bg-secondary, #1a1a2e); color:#e0e0e0; padding:12px; border-radius:var(--radius-sm); max-height:300px; overflow-y:auto; font-size:12px; font-family:'SF Mono',Consolas,monospace; white-space:pre-wrap; word-break:break-all;">等待加载...</pre>
+      <pre id="wsLogBox" style="background:var(--bg-secondary, #0b0b0c); color:#e0e0e0; padding:12px; border-radius:var(--radius-sm); max-height:300px; overflow-y:auto; font-size:12px; font-family:'SF Mono',Consolas,monospace; white-space:pre-wrap; word-break:break-all;">等待加载...</pre>
     </div>
 
     <div class="alert alert-info" style="margin-top:16px; display:block; max-width:100%; overflow-x:hidden; word-break:break-word; overflow-wrap:break-word;">

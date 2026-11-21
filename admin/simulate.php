@@ -83,12 +83,12 @@ $bots = getBots();
     font-size: 11px;
     font-weight: 500;
 }
-.reply-type-badge.text { background: #e3f2fd; color: #1565c0; }
-.reply-type-badge.md { background: #f3e5f5; color: #7b1fa2; }
-.reply-type-badge.image { background: #e8f5e9; color: #2e7d32; }
-.reply-type-badge.audio { background: #fff3e0; color: #e65100; }
-.reply-type-badge.video { background: #fce4ec; color: #c62828; }
-.reply-type-badge.file { background: #efebe9; color: #5d4037; }
+.reply-type-badge.text { background: #f2f2ef; color: #4c4c53; }
+.reply-type-badge.md { background: #f2f2ef; color: #4c4c53; }
+.reply-type-badge.image { background: #26262b; color: #fff; }
+.reply-type-badge.audio { background: #fff; color: #0b0b0c; box-shadow: inset 0 0 0 1px #c9c9c3; }
+.reply-type-badge.video { background: #26262b; color: #fff; }
+.reply-type-badge.file { background: #fff; color: #0b0b0c; box-shadow: inset 0 0 0 1px #c9c9c3; }
 
 .reply-content {
     font-size: 14px;
@@ -320,7 +320,7 @@ function renderReplies(res, elapsed, statusEl, container) {
         }
     } else {
         html += '<div class="reply-item reply-error">';
-        html += '<div class="reply-meta"><span class="reply-type-badge" style="background:#ffebee;color:#c62828;">错误</span></div>';
+        html += '<div class="reply-meta"><span class="reply-type-badge" style="background:#f9efed;color:#a8291d;">错误</span></div>';
         html += '<div class="reply-content">' + escapeHtml(res.msg || res.message || '未知错误') + '</div>';
         html += '</div>';
         statusEl.textContent = '失败 · ' + elapsed + 'ms';

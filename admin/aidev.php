@@ -63,9 +63,9 @@ try {
     border-radius: 50%;
     display: inline-block;
 }
-.ai-status-dot.connected { background: var(--success); }
-.ai-status-dot.disconnected { background: var(--danger); }
-.ai-status-dot.unknown { background: var(--text-muted); }
+.ai-status-dot.connected { background: var(--ink); }
+.ai-status-dot.disconnected { background: var(--line-2); }
+.ai-status-dot.unknown { background: var(--line-2); }
 
 /* 需求输入区 */
 .requirement-card {
@@ -605,13 +605,13 @@ try {
             highlighted = highlighted.replace(regex, '<span style="color:#795e26;">$1</span>');
         }
         // 字符串
-        highlighted = highlighted.replace(/(&#39;[^&#]*?&#39;)/g, '<span style="color:#2e7d32;">$1</span>');
-        highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)/g, '<span style="color:#2e7d32;">$1</span>');
+        highlighted = highlighted.replace(/(&#39;[^&#]*?&#39;)/g, '<span style="color:#14653f;">$1</span>');
+        highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)/g, '<span style="color:#14653f;">$1</span>');
         // 注释
         highlighted = highlighted.replace(/(\/\/.*)/g, '<span style="color:#8c8c8c;">$1</span>');
         highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#8c8c8c;">$1</span>');
         // PHP标签
-        highlighted = highlighted.replace(/(&lt;\?php)/g, '<span style="color:#c62828;">$1</span>');
+        highlighted = highlighted.replace(/(&lt;\?php)/g, '<span style="color:#a8291d;">$1</span>');
 
         container.innerHTML = '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;">' + highlighted + '</pre>';
     }

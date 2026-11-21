@@ -96,7 +96,7 @@ function mk_monogram($name) {
 /* 市场源 */
 .mk-source { margin-bottom:14px; }
 .mk-source-line { min-height:46px; padding:10px 16px; display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
-.mk-dot { width:6px; height:6px; background:var(--ok); flex:0 0 6px; }
+.mk-dot { width:6px; height:6px; background:var(--ink); flex:0 0 6px; border-radius:50%; }
 .mk-dot.off { background:var(--danger); }
 .mk-source-label { font-size:12.5px; font-weight:600; color:var(--ink); }
 .mk-source-url {
@@ -617,12 +617,12 @@ function mk_monogram($name) {
     box.innerHTML = '<span style="color:#9aa5b4;">正在连接…</span>';
     post('test', { url: url }).then(function (res) {
       if (res.success) {
-        box.innerHTML = '<span style="color:#19ad81;">连接正常</span>，共 ' + (res.data.total || 0) + ' 个插件';
+        box.innerHTML = '<span style="color:#0b0b0c;font-weight:600;">连接正常</span>，共 ' + (res.data.total || 0) + ' 个插件';
       } else {
-        box.innerHTML = '<span style="color:#e05a6b;">连接失败：' + esc(res.message) + '</span>';
+        box.innerHTML = '<span style="color:#a8291d;">连接失败：' + esc(res.message) + '</span>';
       }
     }).catch(function (e) {
-      box.innerHTML = '<span style="color:#e05a6b;">' + esc(e.message) + '</span>';
+      box.innerHTML = '<span style="color:#a8291d;">' + esc(e.message) + '</span>';
     }).finally(function () { btn.disabled = false; });
   });
 

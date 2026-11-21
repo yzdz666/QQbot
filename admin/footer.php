@@ -2,6 +2,19 @@
 <?php if (basename($_SERVER['SCRIPT_NAME']) !== 'login.php'): ?>
   </div><!-- /.main-content -->
 </div><!-- /.layout -->
+
+<div class="cmd-panel" id="cmdPanel" hidden>
+  <div class="cmd-mask" data-cmd-close></div>
+  <div class="cmd-dialog" role="dialog" aria-modal="true" aria-label="快速跳转">
+    <div class="cmd-input-row">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input type="text" id="cmdInput" placeholder="搜索页面、功能…" autocomplete="off" spellcheck="false">
+      <kbd>ESC</kbd>
+    </div>
+    <div class="cmd-list" id="cmdList"></div>
+    <div class="cmd-foot"><span>↑↓ 选择</span><span>↵ 打开</span><span>ESC 关闭</span></div>
+  </div>
+</div>
 <script>
 (function () {
   var sidebar = document.getElementById('adminSidebar');
@@ -63,6 +76,196 @@ window.avtLoaded = function (img) {
     window.avtNext(img);
   }
 };
+</script>
+<script>
+/* 界面微交互：滚动进度、顶栏收缩、实时时钟、数字滚动
+   全部为渐进增强，任一元素缺失都不会影响页面功能 */
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var doc = document.documentElement;
+  var progress = document.getElementById('scrollProgress');
+  var topbar = document.querySelector('.topbar');
+
+  function onScroll() {
+    var max = doc.scrollHeight - window.innerHeight;
+    if (progress) {
+      if (max <= 4) {
+        progress.style.width = '0';
+        progress.style.opacity = '0';
+      } else {
+        progress.style.opacity = '1';
+        progress.style.width = (Math.min(1, Math.max(0, window.scrollY / max)) * 100).toFixed(2) + '%';
+      }
+    }
+    if (topbar) topbar.classList.toggle('is-scrolled', window.scrollY > 6);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  // 顶栏时钟
+  var clock = document.getElementById('topbarClock');
+  if (clock) {
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var tick = function () {
+      var d = new Date();
+      clock.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    };
+    tick();
+    setInterval(tick, 1000);
+  }
+
+  // 数字滚动：只处理纯整数，含斜杠/小数/中文的一律跳过
+  function countUp(el) {
+    var raw = (el.textContent || '').trim();
+    if (!/^\d{1,9}$/.test(raw)) return;
+    var target = parseInt(raw, 10);
+    if (!target) return;
+    var start = 0, dur = 760;
+    el.textContent = '0';
+    function step(now) {
+      if (!start) start = now;
+      var p = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = String(Math.round(target * eased));
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  if (!reduce) {
+    var targets = document.querySelectorAll('.stat-value, .dashboard-stat .ds-text strong');
+    for (var i = 0; i < targets.length; i++) countUp(targets[i]);
+  }
+})();
+</script>
+<script>
+/* 命令面板：Ctrl/⌘ + K 唤起，模糊过滤侧栏导航，↑↓ 选择，Enter 跳转 */
+(function () {
+  var trigger = document.getElementById('cmdTrigger');
+  var panel = document.getElementById('cmdPanel');
+  if (!trigger || !panel) return;
+
+  var input = document.getElementById('cmdInput');
+  var list = document.getElementById('cmdList');
+  var kbd = document.getElementById('cmdKbd');
+  var isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');
+  if (kbd) kbd.textContent = isMac ? '⌘ K' : 'Ctrl K';
+
+  var items = [];
+  var filtered = [];
+  var cursor = 0;
+
+  var menu = document.querySelector('.sidebar .nav-menu');
+  if (menu) {
+    var group = '';
+    Array.prototype.forEach.call(menu.children, function (el) {
+      if (el.classList.contains('nav-section')) {
+        group = (el.textContent || '').trim();
+      } else if (el.classList.contains('nav-item')) {
+        var clone = el.cloneNode(true);
+        var badge = clone.querySelector('.nav-badge');
+        if (badge) badge.parentNode.removeChild(badge);
+        items.push({
+          label: (clone.textContent || '').replace(/\s+/g, ' ').trim(),
+          group: group,
+          href: el.getAttribute('href') || '#'
+        });
+      }
+    });
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function paint() {
+    if (!filtered.length) {
+      list.innerHTML = '<div class="cmd-empty">没有匹配的页面</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < filtered.length; i++) {
+      var it = filtered[i];
+      html += '<a class="cmd-item' + (i === cursor ? ' active' : '') + '" href="' + esc(it.href) + '">'
+        + '<span>' + esc(it.label) + '</span>'
+        + (it.group ? '<span class="cmd-group">' + esc(it.group) + '</span>' : '')
+        + '<span class="cmd-arrow">↵</span></a>';
+    }
+    list.innerHTML = html;
+    var active = list.querySelector('.cmd-item.active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  function filter(kw) {
+    kw = (kw || '').trim().toLowerCase();
+    filtered = [];
+    for (var i = 0; i < items.length; i++) {
+      if (!kw || items[i].label.toLowerCase().indexOf(kw) > -1 || (items[i].group || '').toLowerCase().indexOf(kw) > -1) {
+        filtered.push(items[i]);
+      }
+    }
+    cursor = 0;
+    paint();
+  }
+
+  function open() {
+    panel.hidden = false;
+    document.body.classList.add('nav-open');
+    input.value = '';
+    filter('');
+    setTimeout(function () { input.focus(); }, 30);
+  }
+
+  function close() {
+    panel.hidden = true;
+    document.body.classList.remove('nav-open');
+    trigger.focus();
+  }
+
+  function move(step) {
+    if (!filtered.length) return;
+    cursor = (cursor + step + filtered.length) % filtered.length;
+    paint();
+  }
+
+  trigger.addEventListener('click', open);
+  var mask = panel.querySelector('[data-cmd-close]');
+  if (mask) mask.addEventListener('click', close);
+
+  input.addEventListener('input', function () { filter(input.value); });
+
+  list.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('.cmd-item') : null;
+    if (a) close();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var key = e.key || '';
+    if ((e.ctrlKey || e.metaKey) && (key === 'k' || key === 'K')) {
+      e.preventDefault();
+      if (panel.hidden) open(); else close();
+      return;
+    }
+    if (panel.hidden) return;
+    if (key === 'Escape') { e.preventDefault(); close(); }
+    else if (key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (key === 'Enter') {
+      var active = list.querySelector('.cmd-item.active');
+      if (active) {
+        e.preventDefault();
+        var href = active.getAttribute('href');
+        close();
+        if (href && href !== '#') location.href = href;
+      }
+    }
+  });
+
+  // 点击顶栏按钮以外的空白：面板外点击关闭（mask 已覆盖，兜底）
+  window.addEventListener('hashchange', function () { if (!panel.hidden) close(); });
+})();
 </script>
 <?php endif; ?>
 </body>

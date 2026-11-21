@@ -259,7 +259,7 @@ function detectFileUrlFromContent($url) {
     white-space: nowrap;
     cursor: pointer;
 }
-.msg-target-id:hover { color: #2c6b9e; text-decoration: underline; }
+.msg-target-id:hover { color: #0b0b0c; text-decoration: underline; }
 .msg-target-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 /* 文件URL预览样式 */
 .msg-file-preview {
@@ -268,16 +268,16 @@ function detectFileUrlFromContent($url) {
     gap: 6px;
     cursor: pointer;
     padding: 4px 10px;
-    border-radius: 6px;
-    background: #f0f4ff;
-    border: 1px solid #d0dfff;
+    border-radius: 4px;
+    background: #f6f6f4;
+    border: 1px solid #dcdcd7;
     transition: all 0.15s;
     max-width: 100%;
     overflow: hidden;
 }
 .msg-file-preview:hover {
-    background: #e0eaff;
-    border-color: #a0c0ff;
+    background: #eeeeeb;
+    border-color: #b5b5ae;
 }
 .msg-file-preview .file-type-icon {
     font-size: 16px;
@@ -286,7 +286,7 @@ function detectFileUrlFromContent($url) {
 .msg-file-preview .file-name-text {
     font-size: 12px;
     font-weight: 500;
-    color: #2c6b9e;
+    color: #0b0b0c;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -300,41 +300,41 @@ function detectFileUrlFromContent($url) {
     color: white;
     flex-shrink: 0;
 }
-.file-ext-mp4, .file-ext-webm, .file-ext-mov, .file-ext-avi, .file-ext-mkv { background: #c62828; }
-.file-ext-mp3, .file-ext-wav, .file-ext-ogg, .file-ext-m4a, .file-ext-aac { background: #2e7d32; }
-.file-ext-jpg, .file-ext-jpeg, .file-ext-png, .file-ext-gif, .file-ext-webp { background: #e65100; }
-.file-ext-pdf { background: #d32f2f; }
-.file-ext-doc, .file-ext-docx { background: #1565c0; }
-.file-ext-xls, .file-ext-xlsx { background: #2e7d32; }
-.file-ext-ppt, .file-ext-pptx { background: #ef6c00; }
-.file-ext-zip, .file-ext-rar, .file-ext-7z { background: #7b1fa2; }
-.file-ext-txt, .file-ext-csv, .file-ext-md, .file-ext-log { background: #546e7a; }
-.file-ext-json, .file-ext-xml, .file-ext-yaml, .file-ext-yml, .file-ext-toml { background: #00838f; }
-.file-ext-js, .file-ext-mjs, .file-ext-cjs { background: #f7df1e; color: #000; }
-.file-ext-ts, .file-ext-tsx, .file-ext-jsx { background: #3178c6; }
-.file-ext-css, .file-ext-scss, .file-ext-sass, .file-ext-less { background: #c6538c; }
-.file-ext-html, .file-ext-htm { background: #e44d26; }
-.file-ext-php { background: #777bb4; }
-.file-ext-py { background: #3776ab; }
-.file-ext-java { background: #f89820; }
-.file-ext-c, .file-ext-cpp, .file-ext-h, .file-ext-hpp { background: #00599c; }
-.file-ext-go { background: #00add8; }
-.file-ext-rs { background: #dea584; color: #000; }
-.file-ext-rb { background: #cc342d; }
-.file-ext-swift { background: #fa7343; }
-.file-ext-kt, .file-ext-kts { background: #7f52ff; }
-.file-ext-sh, .file-ext-bash, .file-ext-zsh { background: #4eaa25; }
-.file-ext-sql { background: #e38c00; }
-.file-ext-vue { background: #42b883; }
-.file-ext-dockerfile { background: #2496ed; }
-.file-ext-exe, .file-ext-msi, .file-ext-apk, .file-ext-dmg, .file-ext-deb, .file-ext-rpm { background: #455a64; }
-.file-ext-jar, .file-ext-war, .file-ext-ear { background: #e76f00; }
-.file-ext-epub, .file-ext-mobi, .file-ext-azw3 { background: #689f38; }
-.file-ext-ttf, .file-ext-otf, .file-ext-woff, .file-ext-woff2 { background: #5c6bc0; }
-.file-ext-iso, .file-ext-img { background: #607d8b; }
-.file-ext-sketch, .file-ext-fig, .file-ext-xd { background: #9c27b0; }
+.file-ext-mp4, .file-ext-webm, .file-ext-mov, .file-ext-avi, .file-ext-mkv { background: #0b0b0c; }
+.file-ext-mp3, .file-ext-wav, .file-ext-ogg, .file-ext-m4a, .file-ext-aac { background: #26262b; }
+.file-ext-jpg, .file-ext-jpeg, .file-ext-png, .file-ext-gif, .file-ext-webp { background: #3a3a41; }
+.file-ext-pdf { background: #0b0b0c; }
+.file-ext-doc, .file-ext-docx { background: #26262b; }
+.file-ext-xls, .file-ext-xlsx { background: #26262b; }
+.file-ext-ppt, .file-ext-pptx { background: #26262b; }
+.file-ext-zip, .file-ext-rar, .file-ext-7z { background: #4c4c53; }
+.file-ext-txt, .file-ext-csv, .file-ext-md, .file-ext-log { background: #84848b; }
+.file-ext-json, .file-ext-xml, .file-ext-yaml, .file-ext-yml, .file-ext-toml { background: #4c4c53; }
+.file-ext-js, .file-ext-mjs, .file-ext-cjs { background: #7c7c84; }
+.file-ext-ts, .file-ext-tsx, .file-ext-jsx { background: #7c7c84; }
+.file-ext-css, .file-ext-scss, .file-ext-sass, .file-ext-less { background: #7c7c84; }
+.file-ext-html, .file-ext-htm { background: #4c4c53; }
+.file-ext-php { background: #5a5a60; }
+.file-ext-py { background: #5a5a60; }
+.file-ext-java { background: #5a5a60; }
+.file-ext-c, .file-ext-cpp, .file-ext-h, .file-ext-hpp { background: #5a5a60; }
+.file-ext-go { background: #5a5a60; }
+.file-ext-rs { background: #5a5a60; }
+.file-ext-rb { background: #5a5a60; }
+.file-ext-swift { background: #5a5a60; }
+.file-ext-kt, .file-ext-kts { background: #5a5a60; }
+.file-ext-sh, .file-ext-bash, .file-ext-zsh { background: #5a5a60; }
+.file-ext-sql { background: #5a5a60; }
+.file-ext-vue { background: #5a5a60; }
+.file-ext-dockerfile { background: #5a5a60; }
+.file-ext-exe, .file-ext-msi, .file-ext-apk, .file-ext-dmg, .file-ext-deb, .file-ext-rpm { background: #5a5a60; }
+.file-ext-jar, .file-ext-war, .file-ext-ear { background: #5a5a60; }
+.file-ext-epub, .file-ext-mobi, .file-ext-azw3 { background: #5a5a60; }
+.file-ext-ttf, .file-ext-otf, .file-ext-woff, .file-ext-woff2 { background: #5a5a60; }
+.file-ext-iso, .file-ext-img { background: #5a5a60; }
+.file-ext-sketch, .file-ext-fig, .file-ext-xd { background: #5a5a60; }
 /* 默认文件后缀颜色（未识别的后缀） */
-.msg-file-preview .file-ext-badge { background: #607d8b; }
+.msg-file-preview .file-ext-badge { background: #5a5a60; }
 
 /* 消息列表用户头像和昵称 */
 .msg-user-cell {
@@ -388,8 +388,8 @@ function detectFileUrlFromContent($url) {
     margin-left: 4px;
     font-weight: 500;
     vertical-align: middle;
-    background: #f3e5f5;
-    color: #7b1fa2;
+    background: #f0f0ee;
+    color: #3a3a41;
     border: 1px solid #ce93d8;
 }
 /* 系统事件来源类型（带头像） */
@@ -409,7 +409,7 @@ function detectFileUrlFromContent($url) {
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    color: #666;
+    color: #4c4c53;
 }
 .msg-event-avatar img {
     width: 100%;
@@ -422,12 +422,12 @@ function detectFileUrlFromContent($url) {
     padding: 2px 8px;
     border-radius: 4px;
     background: #f5f5f5;
-    color: #666;
+    color: #4c4c53;
 }
-.msg-event-type.event-join { background: #e8f5e9; color: #2e7d32; }
-.msg-event-type.event-leave { background: #fff3e0; color: #e65100; }
-.msg-event-type.event-remove { background: #fce4ec; color: #c62828; }
-.msg-event-type.event-bot { background: #e3f2fd; color: #1565c0; }
+.msg-event-type.event-join { background: #eef4ef; color: #14653f; }
+.msg-event-type.event-leave { background: #f8f2df; color: #7a5a10; }
+.msg-event-type.event-remove { background: #f9efed; color: #a8291d; }
+.msg-event-type.event-bot { background: #f1f1ee; color: #0b0b0c; }
 /* 内容类型徽章 */
 .msg-content-type {
     display: inline-block;
@@ -436,30 +436,30 @@ function detectFileUrlFromContent($url) {
     border-radius: 4px;
     font-weight: 500;
 }
-.msg-content-type.type-text { background: #f0f0f0; color: #666; }
-.msg-content-type.type-image { background: #fff3e0; color: #e65100; }
-.msg-content-type.type-voice, .msg-content-type.type-audio { background: #e8f5e9; color: #2e7d32; }
-.msg-content-type.type-video { background: #fce4ec; color: #c62828; }
-.msg-content-type.type-file { background: #e3f2fd; color: #1565c0; }
-.msg-content-type.type-md, .msg-content-type.type-markdown { background: #f3e5f5; color: #7b1fa2; }
-.msg-content-type.type-quote { background: #fff8e1; color: #f57c00; }
-.msg-content-type.type-button { background: #e0f7fa; color: #00838f; }
-.msg-content-type.type-json { background: #f3e5f5; color: #7b1fa2; }
-.msg-content-type.type-unknown { background: #eceff1; color: #546e7a; }
+.msg-content-type.type-text { background: #f0f0f0; color: #4c4c53; }
+.msg-content-type.type-image { background: #f8f2df; color: #7a5a10; }
+.msg-content-type.type-voice, .msg-content-type.type-audio { background: #eef4ef; color: #14653f; }
+.msg-content-type.type-video { background: #f9efed; color: #a8291d; }
+.msg-content-type.type-file { background: #f1f1ee; color: #0b0b0c; }
+.msg-content-type.type-md, .msg-content-type.type-markdown { background: #f0f0ee; color: #3a3a41; }
+.msg-content-type.type-quote { background: #f8f2df; color: #7a5a10; }
+.msg-content-type.type-button { background: #f0f0f2; color: #3a3a42; }
+.msg-content-type.type-json { background: #f0f0ee; color: #3a3a41; }
+.msg-content-type.type-unknown { background: #f1f1ee; color: #5a5a60; }
 
 /* 引用消息块 (消息日志页) */
 .msg-quote-block {
     margin: 2px 0 4px 0;
     padding: 4px 8px;
     border-left: 3px solid #d0d7de;
-    background: #f6f8fa;
+    background: #f6f6f4;
     border-radius: 0 4px 4px 0;
     font-size: 12px;
     max-width: 480px;
 }
 .msg-quote-label {
     font-weight: 600;
-    color: #f57c00;
+    color: #7a5a10;
     font-size: 11px;
     margin-bottom: 2px;
 }
@@ -492,9 +492,9 @@ function detectFileUrlFromContent($url) {
     gap: 4px;
     font-size: 11px;
     padding: 2px 8px;
-    background: #eceff1;
-    border-radius: 10px;
-    color: #546e7a;
+    background: #f1f1ee;
+    border-radius: 4px;
+    color: #5a5a60;
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -517,7 +517,7 @@ function detectFileUrlFromContent($url) {
 }
 .file-preview-content {
     background: white;
-    border-radius: 12px;
+    border-radius: 4px;
     max-width: 800px;
     width: 100%;
     max-height: 90vh;
@@ -553,7 +553,7 @@ function detectFileUrlFromContent($url) {
 .file-preview-body video {
     max-width: 100%;
     max-height: 60vh;
-    border-radius: 8px;
+    border-radius: 4px;
 }
 .file-preview-body audio {
     width: 100%;
@@ -561,15 +561,15 @@ function detectFileUrlFromContent($url) {
 .file-preview-body img {
     max-width: 100%;
     max-height: 60vh;
-    border-radius: 8px;
+    border-radius: 4px;
 }
 .file-preview-body .file-download-card {
     display: flex;
     align-items: center;
     gap: 16px;
     padding: 24px;
-    background: #f5f7fa;
-    border-radius: 10px;
+    background: #f6f6f4;
+    border-radius: 4px;
     border: 1px solid var(--border);
 }
 .file-preview-body .file-download-card .file-icon-large {
@@ -592,7 +592,7 @@ function detectFileUrlFromContent($url) {
     padding: 10px 20px;
     background: var(--primary);
     color: white;
-    border-radius: 8px;
+    border-radius: 4px;
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -1509,7 +1509,7 @@ function replaceAtMentionsInMsgLog(cellData) {
         var html = item.cell.innerHTML;
         item.matches.forEach(function(m) {
             var nick = msgNicknameCache[m.userId] || (m.userId.length > 8 ? m.userId.substring(0, 8) + '...' : m.userId);
-            var replacement = '<span style="color:#7b1fa2;background:#f3e5f5;padding:1px 4px;border-radius:3px;font-size:12px;">@' + escapeHtml(nick) + '</span>';
+            var replacement = '<span style="color:#3a3a41;background:#f0f0ee;padding:1px 4px;border-radius:3px;font-size:12px;">@' + escapeHtml(nick) + '</span>';
             // 需要转义fullMatch中的特殊字符用于正则
             var escapedMatch = m.fullMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             html = html.replace(new RegExp(escapedMatch, 'g'), replacement);

@@ -29,8 +29,8 @@ $bots = getBots();
 .gm-copy-tip.show { opacity:1; }
 .gm-check-cell { width:36px; }
 #blacklistTable td:nth-child(3) { word-break:break-all; }
-.gm-role-owner { background:#fff3e0; color:#e65100; }
-.gm-role-admin { background:#e3f2fd; color:#1565c0; }
+.gm-role-owner { background:#f8f2df; color:#7a5a10; }
+.gm-role-admin { background:#f1f1ee; color:#0b0b0c; }
 .gm-role-member { background:#f5f5f5; color:#616161; }
 .gm-tip { font-size:12px; color:var(--text-muted); line-height:1.7; }
 
@@ -55,7 +55,7 @@ $bots = getBots();
   #memberTable tbody, #blacklistTable tbody, #joinTable tbody { display: block; }
   #memberTable tr, #blacklistTable tr {
     display: flex; flex-wrap: wrap; align-items: center;
-    border: 1px solid var(--border); border-radius: 10px;
+    border: 1px solid var(--border); border-radius: 4px;
     margin: 10px 12px; padding: 10px 12px;
     background: var(--bg);
   }
@@ -84,7 +84,7 @@ $bots = getBots();
   /* 入群申请卡片 */
   #joinTable tr {
     display: flex; flex-wrap: wrap; align-items: center;
-    border: 1px solid var(--border); border-radius: 10px;
+    border: 1px solid var(--border); border-radius: 4px;
     margin: 10px 12px; padding: 10px 12px; background: var(--bg);
   }
   #joinTable td { display: block; border: none; padding: 2px 0; text-align: left; width: auto; }

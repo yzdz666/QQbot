@@ -156,7 +156,7 @@ function formatFileSize($bytes)
           ?>
           <tr>
             <td style="min-width:140px; word-break:break-all;">
-              <span style="font-weight:500; color:var(--text, #1f2937);"><?= htmlspecialchars($displayName) ?></span>
+              <span style="font-weight:500; color:var(--text, #0b0b0c);"><?= htmlspecialchars($displayName) ?></span>
               <?php if (!empty($plugin['version'])): ?><span class="badge badge-secondary" style="margin-left:6px;font-size:10px;">v<?= htmlspecialchars($plugin['version']) ?></span><?php endif; ?>
               <div class="text-muted" style="font-size:12px; word-break:break-all;">
                 <?= htmlspecialchars($plugin['filename']) ?>

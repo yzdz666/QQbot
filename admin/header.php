@@ -59,6 +59,7 @@ try {
 </head>
 <body>
 <?php if ($currentScript !== 'login.php'): ?>
+<div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
 <script>
 window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
 (function () {
@@ -244,9 +245,15 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
           <span class="breadcrumb-sep">/</span>
           <strong><?= htmlspecialchars($pageTitle ?? '仪表盘') ?></strong>
         </div>
+        <button class="cmd-trigger" type="button" id="cmdTrigger" aria-label="搜索页面">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span class="cmd-trigger-text">搜索页面</span>
+          <kbd class="cmd-kbd" id="cmdKbd">Ctrl K</kbd>
+        </button>
       </div>
       <div class="topbar-right">
         <span class="topbar-status"><i></i> 服务运行中</span>
+        <span class="topbar-clock" id="topbarClock"></span>
         <span class="topbar-version">v<?= htmlspecialchars($sysVersionNo) ?></span>
       </div>
     </header>

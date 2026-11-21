@@ -51,7 +51,7 @@ if (!empty($bots)) {
 .chat-sidebar-title .sidebar-title-icon {
     width: 30px;
     height: 30px;
-    border-radius: 7px;
+    border-radius: 4px;
     background: var(--primary);
     color: #fff;
     display: inline-flex;
@@ -91,13 +91,13 @@ if (!empty($bots)) {
     gap: 8px;
     padding: 8px 10px;
     background: var(--bg);
-    border-radius: 6px;
+    border-radius: 4px;
     margin-top: 2px;
 }
 .chat-bot-info-avatar {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border-radius: 4px;
     flex-shrink: 0;
     overflow: hidden;
     display: flex;
@@ -154,7 +154,7 @@ if (!empty($bots)) {
 .chat-session-avatar {
     width: 36px;
     height: 36px;
-    border-radius: 6px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -189,10 +189,14 @@ if (!empty($bots)) {
     white-space: nowrap;
 }
 .chat-session-time {
-    font-size: 11px;
+    font-family: var(--mono);
+    font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
+    margin-left: 6px;
+    padding-top: 3px;
+    letter-spacing: -.01em;
 }
 
 /* 聊天主区域 */
@@ -230,7 +234,7 @@ if (!empty($bots)) {
 .chat-header-avatar {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: 4px;
     display: none;
     overflow: hidden;
     flex-shrink: 0;
@@ -285,7 +289,7 @@ if (!empty($bots)) {
     margin-top: 4px;
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 4px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, .12);
     max-height: 210px;
 }
@@ -298,7 +302,7 @@ if (!empty($bots)) {
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 4px;
     background: var(--card-bg);
     color: var(--text-secondary);
     font-size: 17px;
@@ -317,7 +321,7 @@ if (!empty($bots)) {
     padding: 4px;
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 4px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, .14);
 }
 .ch-more-menu.show { display: block; }
@@ -328,7 +332,7 @@ if (!empty($bots)) {
     padding: 8px 10px;
     border: 0;
     background: none;
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 13px;
     color: var(--text);
     text-align: left;
@@ -355,7 +359,7 @@ if (!empty($bots)) {
 .gp-strip .gp-tag {
     display: inline-block;
     padding: 0 6px;
-    border-radius: 8px;
+    border-radius: 4px;
     background: var(--bg-alt, rgba(0,0,0,0.05));
     color: var(--text-secondary);
     font-size: 11px;
@@ -378,7 +382,7 @@ if (!empty($bots)) {
     margin-top: 6px;
     padding: 8px 10px;
     background: var(--bg-alt, rgba(0,0,0,0.04));
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.6;
@@ -422,7 +426,7 @@ if (!empty($bots)) {
 .chat-msg-avatar {
     width: 36px;
     height: 36px;
-    border-radius: 6px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -436,12 +440,12 @@ if (!empty($bots)) {
     object-fit: cover;
 }
 .chat-msg.sent .chat-msg-avatar {
-    background: #e8f5e9;
-    color: #2e7d32;
+    background: #eef4ef;
+    color: #14653f;
 }
 .chat-msg.received .chat-msg-avatar {
-    background: #e3f2fd;
-    color: #1565c0;
+    background: #f1f1ee;
+    color: #0b0b0c;
 }
 .chat-msg-body {
     max-width: 70%;
@@ -456,7 +460,7 @@ if (!empty($bots)) {
 }
 .chat-msg-bubble {
     padding: 10px 14px;
-    border-radius: 8px;
+    border-radius: 4px;
     font-size: 14px;
     line-height: 1.5;
     word-break: break-word;
@@ -484,8 +488,8 @@ if (!empty($bots)) {
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    color: #e53935;
-    background: #ffebee;
+    color: #a8291d;
+    background: #f9efed;
     border-radius: 4px;
     padding: 2px 8px;
     margin-top: 4px;
@@ -514,7 +518,7 @@ if (!empty($bots)) {
     gap: 6px;
     padding: 4px 12px;
     background: var(--bg);
-    border-radius: 12px;
+    border-radius: 4px;
     font-size: 12px;
     color: var(--text-muted);
     max-width: 80%;
@@ -597,9 +601,9 @@ if (!empty($bots)) {
     align-items: center;
     gap: 6px;
     padding: 10px 14px;
-    background: var(--bg, #f5f6f8);
-    border: 1px dashed var(--border, #d8dde6);
-    border-radius: 8px;
+    background: var(--bg, #f6f6f4);
+    border: 1px dashed var(--border, #dcdcd7);
+    border-radius: 4px;
     color: var(--text-muted, #8a94a6);
     font-size: 12px;
     min-width: 120px;
@@ -691,13 +695,13 @@ if (!empty($bots)) {
 .chat-media-viewer-body img {
     max-width: 90vw;
     max-height: 85vh;
-    border-radius: 8px;
+    border-radius: 4px;
     object-fit: contain;
 }
 .chat-media-viewer-body video {
     max-width: 90vw;
     max-height: 85vh;
-    border-radius: 8px;
+    border-radius: 4px;
 }
 .chat-media-viewer-body audio {
     width: 400px;
@@ -714,7 +718,7 @@ if (!empty($bots)) {
     text-decoration: none;
     font-size: 13px;
     padding: 6px 16px;
-    border-radius: 6px;
+    border-radius: 4px;
     background: rgba(255,255,255,0.15);
     transition: background 0.15s;
 }
@@ -740,15 +744,15 @@ if (!empty($bots)) {
 
 /* @提及高亮 */
 .chat-at-user {
-    color: #2c6b9e;
+    color: #0b0b0c;
     font-weight: 500;
-    background: rgba(44, 107, 158, 0.08);
+    background: rgba(11, 11, 12, 0.06);
     padding: 0 4px;
     border-radius: 3px;
 }
 .chat-msg.sent .chat-at-user {
-    color: #a8d4ff;
-    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
 }
 
 /* 群成员角色徽章 */
@@ -761,25 +765,26 @@ if (!empty($bots)) {
     font-weight: 500;
     vertical-align: middle;
 }
+/* 角色徽章：用明度区分层级，群主最高对比 */
 .chat-role-badge.role-owner {
-    background: #fff3e0;
-    color: #e65100;
-    border: 1px solid #ffb74d;
+    background: #0b0b0c;
+    color: #fff;
+    border: 1px solid #0b0b0c;
 }
 .chat-role-badge.role-admin {
-    background: #e3f2fd;
-    color: #1565c0;
-    border: 1px solid #64b5f6;
+    background: #f1f1ee;
+    color: #0b0b0c;
+    border: 1px solid #c9c9c3;
 }
 .chat-role-badge.role-member {
-    background: #f5f5f5;
-    color: #757575;
-    border: 1px solid #e0e0e0;
+    background: #fafaf9;
+    color: #84848b;
+    border: 1px solid #e3e3df;
 }
 .chat-role-badge.role-bot {
-    background: #f3e5f5;
-    color: #7b1fa2;
-    border: 1px solid #ce93d8;
+    background: #eeeeeb;
+    color: #3a3a41;
+    border: 1px solid #d8d8d3;
 }
 .chat-msg.sent .chat-role-badge.role-bot {
     background: rgba(255,255,255,0.15);
@@ -837,7 +842,7 @@ if (!empty($bots)) {
     font-size: 11px;
     padding: 2px 8px;
     background: rgba(0,0,0,0.04);
-    border-radius: 10px;
+    border-radius: 4px;
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -905,7 +910,7 @@ if (!empty($bots)) {
 .chat-md-content img.chat-md-img {
     max-width: 240px;
     max-height: 240px;
-    border-radius: 6px;
+    border-radius: 4px;
     display: block;
     margin: 4px 0;
     cursor: zoom-in;
@@ -915,9 +920,9 @@ if (!empty($bots)) {
     display: inline-block;
     padding: 3px 14px;
     margin: 2px 4px 2px 0;
-    border: 1px solid var(--border, #d8dde6);
+    border: 1px solid var(--border, #dcdcd7);
     border-radius: 16px;
-    background: var(--bg, #f5f6f8);
+    background: var(--bg, #f6f6f4);
     font-size: 13px;
     cursor: pointer;
     user-select: none;
@@ -938,7 +943,7 @@ if (!empty($bots)) {
     background: rgba(20,24,34,0.92);
     color: #fff;
     padding: 8px 16px;
-    border-radius: 8px;
+    border-radius: 4px;
     font-size: 13px;
     opacity: 0;
     pointer-events: none;
@@ -1040,7 +1045,7 @@ if (!empty($bots)) {
     width: 38px;
     height: 38px;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--border);
     flex-shrink: 0;
 }
@@ -1065,7 +1070,7 @@ if (!empty($bots)) {
     width: 34px;
     height: 34px;
     object-fit: cover;
-    border-radius: 5px;
+    border-radius: 4px;
     vertical-align: middle;
     margin-right: 8px;
     border: 1px solid var(--border);
@@ -1078,7 +1083,7 @@ if (!empty($bots)) {
     position: absolute;
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 4px;
     box-shadow: var(--shadow-hover);
     max-height: 200px;
     overflow-y: auto;
@@ -1125,17 +1130,17 @@ if (!empty($bots)) {
     padding: 5px 8px;
 }
 
-/* 类型徽章颜色 */
-.type-text { background: #f0f0f0; color: #666; }
-.type-image { background: #fff3e0; color: #e65100; }
-.type-voice { background: #e8f5e9; color: #2e7d32; }
-.type-video { background: #fce4ec; color: #c62828; }
-.type-file { background: #e3f2fd; color: #1565c0; }
-.type-md { background: #f3e5f5; color: #7b1fa2; }
-.type-quote { background: #fff8e1; color: #f57c00; }
-.type-button { background: #e0f7fa; color: #00838f; }
-.type-json { background: #f3e5f5; color: #7b1fa2; }
-.type-unknown { background: #eceff1; color: #546e7a; }
+/* 类型徽章：黑白灰阶，用明度表达信息权重，避免彩色抢夺注意力 */
+.type-text { background: #f2f2ef; color: #4c4c53; box-shadow: inset 0 0 0 1px #e3e3df; }
+.type-image { background: #26262b; color: #fff; }
+.type-voice { background: #fff; color: #0b0b0c; box-shadow: inset 0 0 0 1px #c9c9c3; }
+.type-video { background: #26262b; color: #fff; }
+.type-file { background: #fff; color: #0b0b0c; box-shadow: inset 0 0 0 1px #c9c9c3; }
+.type-md { background: #f2f2ef; color: #4c4c53; box-shadow: inset 0 0 0 1px #e3e3df; }
+.type-quote { background: #eeeeeb; color: #3a3a41; }
+.type-button { background: #eeeeeb; color: #3a3a41; }
+.type-json { background: #f2f2ef; color: #4c4c53; box-shadow: inset 0 0 0 1px #e3e3df; }
+.type-unknown { background: #fff; color: #84848b; box-shadow: inset 0 0 0 1px #e3e3df; }
 
 /* 移动端会话切换按钮 */
 .chat-mobile-toggle {
@@ -1259,8 +1264,8 @@ if (!empty($bots)) {
 }
 .chat-msg.sent .chat-at-user.everyone {
     color: #4a3408;
-    background: #f0d49a;
-    border-color: #f0d49a;
+    background: #e6d9b6;
+    border-color: #e6d9b6;
 }
 .chat-msg.sent .chat-md-media {
     background: rgba(255, 255, 255, .12);
@@ -1306,10 +1311,10 @@ if (!empty($bots)) {
 .chat-layout { height: calc(100vh - 106px); height: calc(100dvh - 106px); }
 .chat-messages { padding: 14px 18px; }
 .chat-msg { gap: 12px; margin-bottom: 16px; }
-.chat-msg-avatar { width: 40px; height: 40px; border-radius: 8px; font-size: 16px; }
+.chat-msg-avatar { width: 40px; height: 40px; border-radius: 4px; font-size: 16px; }
 .chat-msg-body { max-width: 78%; }
 .chat-msg-sender { font-size: 13px; margin-bottom: 5px; }
-.chat-msg-bubble { font-size: 15px; line-height: 1.62; padding: 11px 15px; border-radius: 10px; }
+.chat-msg-bubble { font-size: 15px; line-height: 1.62; padding: 11px 15px; border-radius: 4px; }
 .chat-msg-time { font-size: 12px; margin-top: 5px; }
 .chat-msg-action-btn { font-size: 11px; padding: 2px 6px; opacity: .55; }
 .chat-msg-action-btn:hover { opacity: 1; }
@@ -1326,7 +1331,7 @@ if (!empty($bots)) {
 .chat-input-area textarea { font-size: 14px; }
 
 @media (max-width: 768px) {
-  .chat-layout { height: calc(100vh - 84px); height: calc(100dvh - 84px); border-radius: 12px; }
+  .chat-layout { height: calc(100vh - 84px); height: calc(100dvh - 84px); border-radius: 4px; }
   .chat-messages { padding: 10px 9px; }
   .chat-msg { gap: 9px; margin-bottom: 14px; }
   .chat-msg-avatar { width: 38px; height: 38px; }
@@ -1339,10 +1344,10 @@ if (!empty($bots)) {
 
 /* ==================== 用户资料卡 ==================== */
 .uic-head { display: flex; align-items: center; gap: 12px; }
-.uic-avatar { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+.uic-avatar { width: 56px; height: 56px; border-radius: 4px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
 .uic-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.uic-avatar .avt { width: 56px !important; height: 56px !important; border-radius: 10px; }
-.uic-name { font-size: 16px; font-weight: 600; color: var(--ink, #1f2420); word-break: break-all; line-height: 1.35; }
+.uic-avatar .avt { width: 56px !important; height: 56px !important; border-radius: 4px; }
+.uic-name { font-size: 16px; font-weight: 600; color: var(--ink, #0b0b0c); word-break: break-all; line-height: 1.35; }
 .uic-sub { margin-top: 3px; font-size: 12px; color: var(--text-muted); }
 .uic-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .uic-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
@@ -1350,7 +1355,7 @@ if (!empty($bots)) {
 .uic-row { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.5; }
 .uic-row .k { width: 88px; flex-shrink: 0; color: var(--text-muted); }
 .uic-row .v { flex: 1; min-width: 0; word-break: break-all; color: var(--ink-2, #333); }
-.uic-warn { margin-top: 12px; padding: 8px 10px; border-radius: 6px; background: #fff8e6; border: 1px solid #f0dca8; color: #8a6d1f; font-size: 12px; line-height: 1.5; }
+.uic-warn { margin-top: 12px; padding: 8px 10px; border-radius: 4px; background: #f8f2df; border: 1px solid #f0dca8; color: #8a6d1f; font-size: 12px; line-height: 1.5; }
 .uic-remark { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
 .uic-remark label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px; }
 .uic-remark-row { display: flex; gap: 8px; }
@@ -1361,17 +1366,17 @@ if (!empty($bots)) {
 .kick-target { display:flex; align-items:center; gap:12px; padding:2px 0 4px; }
 .kick-target .kick-avt { width:44px; height:44px; flex-shrink:0; }
 .kick-target .kick-avt .avt { width:44px !important; height:44px !important; }
-.kick-name { font-size:15px; font-weight:600; color:var(--ink,#1f2420); word-break:break-all; line-height:1.35; }
+.kick-name { font-size:15px; font-weight:600; color:var(--ink,#0b0b0c); word-break:break-all; line-height:1.35; }
 .kick-openid { margin-top:3px; font-family:Consolas,Monaco,monospace; font-size:11.5px; color:var(--text-muted); word-break:break-all; }
-.kick-warn { margin-top:12px; padding:9px 11px; border-radius:7px; background:#fff4f2; border:1px solid #f3c9c1; color:#a4342a; font-size:12.5px; line-height:1.6; }
+.kick-warn { margin-top:12px; padding:9px 11px; border-radius:7px; background:#f9efed; border:1px solid #f3c9c1; color:#a8291d; font-size:12.5px; line-height:1.6; }
 .kick-blk { margin-top:12px; display:flex; align-items:flex-start; gap:7px; font-size:13px; cursor:pointer; line-height:1.5; }
 .kick-blk input { margin-top:2px; flex-shrink:0; }
-.kick-err { margin-top:10px; padding:8px 10px; border-radius:6px; background:#fdecea; border:1px solid #f5c6c2; color:#a4342a; font-size:12px; line-height:1.5; display:none; }
-.kicked-badge { display:inline-block; margin-left:6px; padding:0 5px; border-radius:4px; font-size:10.5px; font-weight:400; line-height:16px; color:#a4342a; background:#fdecea; border:1px solid #f5c6c2; vertical-align:1px; }
+.kick-err { margin-top:10px; padding:8px 10px; border-radius:6px; background:#f9efed; border:1px solid #eacfc9; color:#a8291d; font-size:12px; line-height:1.5; display:none; }
+.kicked-badge { display:inline-block; margin-left:6px; padding:0 5px; border-radius:4px; font-size:10.5px; font-weight:400; line-height:16px; color:#a8291d; background:#f9efed; border:1px solid #eacfc9; vertical-align:1px; }
 @media (max-width: 768px) {
   .kick-target .kick-avt, .kick-target .kick-avt .avt { width:38px !important; height:38px !important; }
 }
-#chatToast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%) translateY(8px); background: rgba(30,34,30,.92); color: #fff; font-size: 13px; padding: 8px 14px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 4000; }
+#chatToast { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%) translateY(8px); background: rgba(30,34,30,.92); color: #fff; font-size: 13px; padding: 8px 14px; border-radius: 4px; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 4000; }
 #chatToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 @media (max-width: 768px) {
   /* 发送类型/快捷按钮单行横滑，给消息区多留出高度 */
@@ -1576,7 +1581,7 @@ if (!empty($bots)) {
           <div class="kick-openid" id="privateReplyOpenid"></div>
         </div>
       </div>
-      <div class="kick-warn" style="background:#f2f7ff;border-color:#cfe0f7;color:#2a5b93;">
+      <div class="kick-warn" style="background:#f6f6f4;border-color:#dcdcd7;color:#4c4c53;">
         仅该用户可见。要求用户已添加机器人为好友；群消息发出后 60 分钟内有效，每条消息最多 5 次（机器人管理员为群主/管理员时 50 次），与群内回复共用次数。
       </div>
       <textarea id="privateReplyContent" rows="4" placeholder="输入要私聊发送的内容…" style="margin-top:12px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line,#d8e0da);border-radius:8px;font-size:14px;line-height:1.6;resize:vertical;font-family:inherit;"></textarea>
@@ -1728,7 +1733,7 @@ if (!empty($bots)) {
         <img id="imageUrlPreviewImg" style="max-width:100%; max-height:180px; border-radius:8px; border:1px solid var(--border);" alt="预览">
         <div id="imageUrlPreviewTip" style="font-size:11px; color:var(--text-muted); margin-top:4px;">预览加载成功，可直接发送</div>
       </div>
-      <div id="imageUrlPreviewError" style="display:none; font-size:12px; color:#c0392b; text-align:center;">预览加载失败（链接仍可尝试发送，QQ服务器可能可以访问）</div>
+      <div id="imageUrlPreviewError" style="display:none; font-size:12px; color:#a8291d; text-align:center;">预览加载失败（链接仍可尝试发送，QQ服务器可能可以访问）</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeImageUrlModal()">取消</button>
@@ -2484,7 +2489,20 @@ function renderSessions(list) {
     for (var i = 0; i < list.length; i++) {
         var s = list[i];
         var isActive = currentSession && currentSession.target_id === s.target_id && currentSession.source_type === s.source_type;
-        // 显示昵称，没有则显示ID
+        // 会话列表时间：今天 HH:MM，今年 MM-DD，跨年 YY-MM-DD（避免长串时间挤压昵称）
+function fmtSessionTime(t) {
+    if (!t) return '';
+    var m = String(t).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (!m) return t;
+    var now = new Date();
+    if (+m[1] === now.getFullYear()) {
+        if (+m[2] === (now.getMonth() + 1) && +m[3] === now.getDate()) return m[4] + ':' + m[5];
+        return m[2] + '-' + m[3] + ' ' + m[4] + ':' + m[5];
+    }
+    return m[1].slice(2) + '-' + m[2] + '-' + m[3];
+}
+
+// 显示昵称，没有则显示ID
         var displayName = s.name || s.remark || s.target_id;
         // 头像：官方头像 / 群自定义头像；缺图时用 qlogo 640 兜底（与 1.7.0 一致，群聊也拼）
         var avatarSrc = s.avatar || s.custom_avatar || groupAvatarCache[s.target_id] || '';
@@ -2496,7 +2514,7 @@ function renderSessions(list) {
         html += '<div class="chat-session-name">' + escapeHtml(displayName) + '</div>';
         html += '<div class="chat-session-preview">' + escapeHtml(s.last_msg || '') + '</div>';
         html += '</div>';
-        html += '<div class="chat-session-time">' + escapeHtml(s.last_time || '') + '</div>';
+        html += '<div class="chat-session-time">' + escapeHtml(fmtSessionTime(s.last_time || '')) + '</div>';
         html += '</div>';
     }
     container.innerHTML = html;
@@ -3215,7 +3233,7 @@ function buildMsgHtml(m, botId) {
             } else if (att.type === 'file') {
                 var fName = resolveFileName(att.filename, attUrl, content);
                 var fileInfo = detectFileUrl(attUrl);
-                var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#1565c0;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
+                var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#0b0b0c;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
                 var extLabel = fileInfo ? fileInfo.extension.toUpperCase() : '';
                 html += '<div class="chat-msg-bubble" style="padding:8px 12px;">';
                 html += '<a href="' + escapeAttr(attUrl) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">';
@@ -3278,7 +3296,7 @@ function buildMsgHtml(m, botId) {
         var fName = resolveFileName(fileName, fileUrl, content);
         // 使用带颜色的文件类型徽章
         var fileInfo = detectFileUrl(fileUrl);
-        var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#1565c0;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
+        var iconHtml = fileInfo ? getFileTypeIcon(fileInfo.extension) : '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#0b0b0c;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;">FILE</span>';
         var extLabel = fileInfo ? fileInfo.extension.toUpperCase() : '';
         html += '<div class="chat-msg-bubble" style="padding:8px 12px;">';
         html += '<a href="' + escapeAttr(fileUrl) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">';
@@ -3289,8 +3307,8 @@ function buildMsgHtml(m, botId) {
         html += '<div class="chat-msg-bubble chat-md-content">' + renderMarkdown(content) + '</div>';
     } else if (contentType === 'ark' || contentType === 'Ark') {
         // Ark 消息渲染
-        html += '<div class="chat-msg-bubble" style="border-left:3px solid #1565c0;padding:10px 14px;min-width:200px;">';
-        html += '<div style="font-size:11px;color:#1565c0;font-weight:600;margin-bottom:6px;">Ark消息</div>';
+        html += '<div class="chat-msg-bubble" style="border-left:3px solid #0b0b0c;padding:10px 14px;min-width:200px;">';
+        html += '<div style="font-size:11px;color:#0b0b0c;font-weight:600;margin-bottom:6px;">Ark消息</div>';
         // 尝试解析内容中的模板信息
         var arkContent = content;
         var arkData = null;
@@ -3311,7 +3329,7 @@ function buildMsgHtml(m, botId) {
                         if (val.indexOf('http') === 0 && /\.(jpg|jpeg|png|gif|webp)/i.test(val)) {
                             html += '<div style="margin:6px 0;"><img src="' + escapeAttr(val.replace(/`/g, '')) + '" style="max-width:100%;border-radius:6px;" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'"></div>';
                         } else if (val.indexOf('http') === 0) {
-                            html += '<div style="margin:3px 0;"><span style="color:var(--text-muted);font-size:11px;">' + escapeHtml(item.key) + ':</span> <a href="' + escapeAttr(val.replace(/`/g, '')) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="color:#1565c0;text-decoration:none;word-break:break-all;">' + escapeHtml(val) + '</a></div>';
+                            html += '<div style="margin:3px 0;"><span style="color:var(--text-muted);font-size:11px;">' + escapeHtml(item.key) + ':</span> <a href="' + escapeAttr(val.replace(/`/g, '')) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="color:#0b0b0c;text-decoration:none;word-break:break-all;">' + escapeHtml(val) + '</a></div>';
                         } else {
                             html += '<div style="margin:3px 0;"><span style="color:var(--text-muted);font-size:11px;">' + escapeHtml(item.key) + ':</span> ' + escapeHtml(val) + '</div>';
                         }
@@ -3341,7 +3359,7 @@ function buildMsgHtml(m, botId) {
             if (tuwenData.title) html += '<div style="font-size:14px;font-weight:600;margin-bottom:4px;">' + escapeHtml(tuwenData.title) + '</div>';
             if (tuwenData.description) html += '<div style="font-size:12px;color:var(--text-secondary);line-height:1.4;">' + escapeHtml(tuwenData.description) + '</div>';
             if (tuwenData.url) {
-                html += '<a href="' + escapeAttr(String(tuwenData.url).replace(/`/g, '')) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="display:inline-block;margin-top:8px;font-size:12px;color:#1565c0;text-decoration:none;">查看详情 →</a>';
+                html += '<a href="' + escapeAttr(String(tuwenData.url).replace(/`/g, '')) + '" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" style="display:inline-block;margin-top:8px;font-size:12px;color:#0b0b0c;text-decoration:none;">查看详情 →</a>';
             }
             html += '</div>';
         } else {
@@ -3902,7 +3920,7 @@ function showFilePreviewModal(file, uploadType) {
         // 其他文件类型
         var ext = file.name.split('.').pop().toUpperCase();
         previewArea.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:24px;background:var(--bg-secondary);border-radius:8px;">' +
-            '<span style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:8px;background:#1565c0;color:#fff;font-size:14px;font-weight:700;">' + ext + '</span>' +
+            '<span style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:8px;background:#0b0b0c;color:#fff;font-size:14px;font-weight:700;">' + ext + '</span>' +
             '<span style="font-size:14px;color:var(--text-muted);">点击下方按钮发送文件</span></div>';
         fileInfo.textContent = file.name + ' · ' + sizeStr + ' · 文件';
         textRow.style.display = 'none';
@@ -4541,10 +4559,10 @@ function escapeAttr(str) {
 // ==================== 头像渲染 ====================
 // 与 function.php 的 avtHtml() 保持同一套观感：有图显图，无图/失败显示首字色块
 var AVT_TONES = [
-    ['#3f6f8f', '#2b5470'], ['#4a7a63', '#2f5a46'],
-    ['#8a6a3c', '#684d2a'], ['#6a5a8f', '#4a3d6b'],
-    ['#8f5a5a', '#6b3d3d'], ['#4a6b8a', '#2f4a63'],
-    ['#7a6a4a', '#5a4a2f'], ['#5a7a8a', '#3d5a68']
+    ['#2b2b30', '#1a1a1e'], ['#3a3a41', '#26262b'],
+    ['#4c4c53', '#333338'], ['#5c5c64', '#404046'],
+    ['#6b6b73', '#4c4c53'], ['#26262b', '#161619'],
+    ['#45454c', '#2e2e33'], ['#57575f', '#3d3d43']
 ];
 function avtTone(seed) {
     var s = String(seed || '');
@@ -4723,49 +4741,28 @@ function detectFileUrl(url) {
     return { type: type, fileName: fileName, extension: extension };
 }
 
-// 根据扩展名返回带颜色的文件类型徽章图标
+// 根据扩展名返回文件类型徽章图标（黑白主题：按类别分灰阶）
 function getFileTypeIcon(ext) {
     ext = (ext || '').toLowerCase();
-    var color = '#1565c0';
-    // 文档
-    if (['pdf'].indexOf(ext) > -1) color = '#e53935';
-    else if (['doc', 'docx', 'rtf', 'odt'].indexOf(ext) > -1) color = '#1976d2';
-    else if (['xls', 'xlsx', 'ods', 'csv'].indexOf(ext) > -1) color = '#2e7d32';
-    else if (['ppt', 'pptx', 'odp'].indexOf(ext) > -1) color = '#ef6c00';
-    else if (['txt', 'md', 'log'].indexOf(ext) > -1) color = '#546e7a';
-    // 代码
-    else if (['js', 'mjs', 'cjs'].indexOf(ext) > -1) color = '#f7df1e';
-    else if (['ts', 'tsx', 'jsx'].indexOf(ext) > -1) color = '#3178c6';
-    else if (['css', 'scss', 'sass', 'less', 'styl'].indexOf(ext) > -1) color = '#c6538c';
-    else if (['html', 'htm', 'xhtml'].indexOf(ext) > -1) color = '#e44d26';
-    else if (['php'].indexOf(ext) > -1) color = '#777bb4';
-    else if (['py'].indexOf(ext) > -1) color = '#3776ab';
-    else if (['java'].indexOf(ext) > -1) color = '#f89820';
-    else if (['c', 'cpp', 'h', 'hpp', 'cc', 'cxx', 'hxx'].indexOf(ext) > -1) color = '#00599c';
-    else if (['go'].indexOf(ext) > -1) color = '#00add8';
-    else if (['rs'].indexOf(ext) > -1) color = '#dea584';
-    else if (['rb'].indexOf(ext) > -1) color = '#cc342d';
-    else if (['swift'].indexOf(ext) > -1) color = '#fa7343';
-    else if (['kt', 'kts'].indexOf(ext) > -1) color = '#7f52ff';
-    else if (['sh', 'bash', 'zsh'].indexOf(ext) > -1) color = '#4eaa25';
-    else if (['sql'].indexOf(ext) > -1) color = '#e38c00';
-    else if (['vue'].indexOf(ext) > -1) color = '#42b883';
-    else if (['json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf'].indexOf(ext) > -1) color = '#00838f';
-    else if (['dockerfile', 'env'].indexOf(ext) > -1) color = '#2496ed';
+    var color = '#0b0b0c';
+    // 文档：PDF 最重，Office 次之，纯文本最轻
+    if (['pdf'].indexOf(ext) > -1) color = '#0b0b0c';
+    else if (['doc', 'docx', 'rtf', 'odt', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp'].indexOf(ext) > -1) color = '#26262b';
+    else if (['txt', 'md', 'log'].indexOf(ext) > -1) color = '#6b6b73';
+    // 代码与配置
+    else if (['js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'css', 'scss', 'sass', 'less', 'styl', 'html', 'htm', 'xhtml',
+              'php', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cc', 'cxx', 'hxx', 'go', 'rs', 'rb', 'swift', 'kt', 'kts',
+              'sh', 'bash', 'zsh', 'sql', 'vue', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf',
+              'dockerfile', 'env'].indexOf(ext) > -1) color = '#4c4c53';
     // 压缩包
-    else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst', 'tgz'].indexOf(ext) > -1) color = '#7b1fa2';
-    // 应用
-    else if (['exe', 'msi', 'apk', 'ipa', 'deb', 'rpm', 'dmg', 'pkg'].indexOf(ext) > -1) color = '#455a64';
-    else if (['jar', 'war', 'ear'].indexOf(ext) > -1) color = '#e76f00';
-    // 电子书
-    else if (['epub', 'mobi', 'azw3'].indexOf(ext) > -1) color = '#689f38';
-    // 字体
-    else if (['ttf', 'otf', 'woff', 'woff2', 'eot'].indexOf(ext) > -1) color = '#5c6bc0';
-    // 镜像
-    else if (['iso', 'img'].indexOf(ext) > -1) color = '#607d8b';
+    else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst', 'tgz'].indexOf(ext) > -1) color = '#3a3a41';
+    // 应用与安装包
+    else if (['exe', 'msi', 'apk', 'ipa', 'deb', 'rpm', 'dmg', 'pkg', 'jar', 'war', 'ear'].indexOf(ext) > -1) color = '#5a5a60';
+    // 电子书 / 字体 / 镜像
+    else if (['epub', 'mobi', 'azw3', 'ttf', 'otf', 'woff', 'woff2', 'eot', 'iso', 'img'].indexOf(ext) > -1) color = '#6b6b73';
     var label = ext ? ext.toUpperCase() : 'FILE';
-    var textColor = (ext === 'js' || ext === 'mjs' || ext === 'cjs' || ext === 'rs') ? '#000' : '#fff';
-    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:' + color + ';color:' + textColor + ';font-size:10px;font-weight:700;flex-shrink:0;">' + escapeHtml(label) + '</span>';
+    var textColor = '#fff';
+    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:4px;background:' + color + ';color:' + textColor + ';font-size:10px;font-weight:700;flex-shrink:0;">' + escapeHtml(label) + '</span>';
 }
 
 // 渲染文件URL内容（视频/音频/图片/文件下载链接）
@@ -5828,7 +5825,7 @@ function updateTuwenPreview() {
     }
     html += '<div style="padding:10px 12px;">';
     if (title) html += '<div style="font-size:14px;font-weight:600;margin-bottom:4px;">' + escapeHtml(title) + '</div>';
-    if (desc) html += '<div style="font-size:12px;color:#666;line-height:1.4;">' + escapeHtml(desc) + '</div>';
+    if (desc) html += '<div style="font-size:12px;color:#4c4c53;line-height:1.4;">' + escapeHtml(desc) + '</div>';
     if (prompt) html += '<div style="font-size:11px;color:#999;margin-top:6px;">' + escapeHtml(prompt) + '</div>';
     html += '</div>';
     document.getElementById('tuwenPreview').innerHTML = html;

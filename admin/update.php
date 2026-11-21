@@ -107,7 +107,7 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
   <div class="upd-metric">
     <div class="k">环境</div>
     <div class="v" style="font-size:13px;font-weight:500;line-height:1.5;">PHP <?= htmlspecialchars(PHP_VERSION) ?></div>
-    <div class="s"><?= $zipOk ? 'ZipArchive 已就绪' : '<span style="color:#c62828">缺少 php-zip</span>' ?></div>
+    <div class="s"><?= $zipOk ? 'ZipArchive 已就绪' : '<span style="color:#a8291d">缺少 php-zip</span>' ?></div>
   </div>
 </div>
 
@@ -399,13 +399,13 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
       asset_hint: document.getElementById('updHint').value.trim()
     }).then(function (r) {
       msg.textContent = r.success ? '已保存' : (r.message || '保存失败');
-      msg.style.color = r.success ? '#2e7d32' : '#c62828';
+      msg.style.color = r.success ? '#14653f' : '#a8291d';
       if (r.success) {
         document.getElementById('updRepo').textContent = document.getElementById('updRepoInput').value.trim() || '<?= htmlspecialchars(更新默认仓库) ?>';
       }
     }).catch(function (e) {
       msg.textContent = '保存失败：' + e.message;
-      msg.style.color = '#c62828';
+      msg.style.color = '#a8291d';
     });
   });
 
