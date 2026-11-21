@@ -1189,6 +1189,140 @@ pass('分片上传(沙箱环境已通过代码审查)');
 
 @unlink($chunkImgPath);
 
+// ==================== 群消息私聊回复（官方 20261117） ====================
+echo "\n========== 群消息私聊回复 ==========\n";
+
+resetMock();
+$resp = 群消息私聊回复('user_openid_1', '只发给你', 'group_msg_1');
+$call = $GLOBALS['__mock']['last_botapi'];
+if ($call && $call['address'] === '/v2/users/user_openid_1/messages' && $call['method'] === 'POST') {
+    $body = json_decode($call['json'], true);
+    if (($body['msg_id'] ?? '') === 'group_msg_1'
+        && ($body['msg_type'] ?? -1) === 0
+        && ($body['content'] ?? '') === '只发给你'
+        && !empty($body['msg_seq'])) {
+        pass('群消息私聊回复(文本) 报文正确');
+    } else {
+        fail('群消息私聊回复(文本) 报文', $call['json']);
+    }
+} else {
+    fail('群消息私聊回复(文本) 路由', json_encode($call));
+}
+
+// 同一 msg_id 连续回复时 msg_seq 必须递增，否则官方 40054005 去重
+resetMock();
+群消息私聊回复('user_openid_1', '第二条', 'group_msg_seq');
+$seq1 = json_decode($GLOBALS['__mock']['last_botapi']['json'], true)['msg_seq'] ?? 0;
+resetMock();
+群消息私聊回复('user_openid_1', '第三条', 'group_msg_seq');
+$seq2 = json_decode($GLOBALS['__mock']['last_botapi']['json'], true)['msg_seq'] ?? 0;
+if ($seq1 > 0 && $seq1 !== $seq2) {
+    pass('同一 msg_id 的 msg_seq 自动递增');
+} else {
+    fail('msg_seq 递增', "seq1={$seq1} seq2={$seq2}");
+}
+
+// 空 openid 本地拦截
+$resp = 群消息私聊回复('', '内容', 'm1');
+$data = json_decode($resp, true);
+if (is_array($data) && ($data['code'] ?? 0) === 400) {
+    pass('缺少 user_openid 本地拦截');
+} else {
+    fail('缺少 user_openid 本地拦截', $resp);
+}
+
+// Markdown
+resetMock();
+群消息私聊回复MD('user_openid_1', '# 标题', 'group_msg_md', 'kb_1', true);
+$call = $GLOBALS['__mock']['last_botapi'];
+$body = $call ? json_decode($call['json'], true) : [];
+if ($call && strpos($call['address'], '/v2/users/user_openid_1/messages') !== false
+    && ($body['msg_type'] ?? 0) === 2
+    && ($body['markdown']['content'] ?? '') === '# 标题'
+    && ($body['markdown']['force_verify_image_resource'] ?? false) === true
+    && ($body['keyboard']['id'] ?? '') === 'kb_1'
+    && ($body['msg_id'] ?? '') === 'group_msg_md') {
+    pass('群消息私聊回复MD 报文正确');
+} else {
+    fail('群消息私聊回复MD 报文', $call ? $call['json'] : '未调用');
+}
+
+// 图片：先上传到 /v2/users/{openid}/files，再发 msg_type=7
+resetMock();
+$resp = 群消息私聊回复图片('user_openid_1', 'https://example.com/a.png', 'group_msg_img', '配文');
+$calls = $GLOBALS['__mock']['botapi_calls'];
+$uploadOk = false;
+$sendOk = false;
+foreach ($calls as $c) {
+    if (strpos($c['address'], '/v2/users/user_openid_1/files') !== false) $uploadOk = true;
+    if (strpos($c['address'], '/v2/users/user_openid_1/messages') !== false) {
+        $b = json_decode($c['json'], true);
+        if (($b['msg_type'] ?? 0) === 7 && !empty($b['media']['file_info']) && ($b['msg_id'] ?? '') === 'group_msg_img') {
+            $sendOk = true;
+        }
+    }
+}
+if ($uploadOk && $sendOk) {
+    pass('群消息私聊回复图片(上传→发送)');
+} else {
+    fail('群消息私聊回复图片', json_encode($calls));
+}
+
+// 图文卡片
+resetMock();
+群消息私聊回复图文('user_openid_1', '标题', '描述', 'https://example.com/p.png', 'https://example.com/x', 'group_msg_tw');
+$body = json_decode($GLOBALS['__mock']['last_botapi']['json'], true);
+if (($body['msg_type'] ?? 0) === 8 && ($body['card']['type'] ?? '') === 'tuwen'
+    && ($body['card']['content']['title'] ?? '') === '标题') {
+    pass('群消息私聊回复图文 报文正确');
+} else {
+    fail('群消息私聊回复图文', json_encode($body));
+}
+
+// 图文参数校验
+$resp = 群消息私聊回复图文('u1', '', '描述', 'https://a/p.png', 'https://a/x');
+$data = json_decode($resp, true);
+if (is_array($data) && ($data['code'] ?? 0) === 400) {
+    pass('图文卡片缺标题拦截');
+} else {
+    fail('图文卡片缺标题拦截', $resp);
+}
+
+// 事件里取发送者 openid：优先 user_openid，其次 id，最后 member_openid
+$openid1 = 群消息发送者Openid(['d' => ['author' => ['user_openid' => 'u_9', 'member_openid' => 'mem_1']]]);
+$openid2 = 群消息发送者Openid(['d' => ['author' => ['member_openid' => 'mem_1']]]);
+$openid3 = 群消息发送者Openid(['d' => ['author' => ['id' => 'id_7', 'member_openid' => 'mem_1']]]);
+if ($openid1 === 'u_9' && $openid2 === 'mem_1' && $openid3 === 'id_7') {
+    pass('群消息发送者Openid 取值优先级');
+} else {
+    fail('群消息发送者Openid 取值优先级', "{$openid1} / {$openid2} / {$openid3}");
+}
+
+// 错误码翻译
+$r = 群消息私聊结果('{"code":40054004,"message":"not friend"}');
+if ($r['ok'] === false && strpos($r['message'], '好友') !== false) {
+    pass('错误码 40054004 翻译为好友关系提示');
+} else {
+    fail('错误码 40054004 翻译', json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+
+$r = 群消息私聊结果('{"id":"MSG_OK","timestamp":"2026-11-21T10:00:00+08:00"}');
+if ($r['ok'] === true && $r['id'] === 'MSG_OK') {
+    pass('单聊接口成功响应解析');
+} else {
+    fail('单聊接口成功响应解析', json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+
+// 当前群消息便捷封装：raw 里没有 author 时回退到「用户」常量
+resetMock();
+私聊回复当前群消息('快捷回复', 'group_msg_quick');
+$call = $GLOBALS['__mock']['last_botapi'];
+if ($call && strpos($call['address'], '/v2/users/admin_user/messages') !== false) {
+    pass('私聊回复当前群消息 回退到「用户」常量');
+} else {
+    fail('私聊回复当前群消息', json_encode($call));
+}
+
 // ==================== 验证函数定义存在 ====================
 echo "\n========== 验证新增函数定义存在 ==========\n";
 
@@ -1234,6 +1368,24 @@ if (empty($missing)) {
     pass('bot.php 保留全部 ' . count($previouslyUntested) . ' 个此前未测试的API函数');
 } else {
     fail('bot.php 缺失API', implode(', ', $missing));
+}
+
+// 群消息私聊回复（官方 20261117）函数组
+$privateReplyFns = [
+    '群消息私聊错误码', '群消息私聊结果', '群消息私聊序号', '群消息私聊发送',
+    '群消息私聊回复', '群消息私聊回复MD', '群消息私聊回复图片', '群消息私聊回复图文',
+    '群消息发送者Openid', '私聊回复当前群消息',
+];
+$missingPrivate = [];
+foreach ($privateReplyFns as $fn) {
+    if (strpos($botContent, 'function ' . $fn . '(') === false) {
+        $missingPrivate[] = $fn;
+    }
+}
+if (empty($missingPrivate)) {
+    pass('bot.php 含群消息私聊回复函数组（' . count($privateReplyFns) . ' 个）');
+} else {
+    fail('群消息私聊回复函数缺失', implode(', ', $missingPrivate));
 }
 
 // ==================== 结果汇总 ====================

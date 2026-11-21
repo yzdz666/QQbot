@@ -2399,6 +2399,353 @@ function 推送图文到用户($userOpenid, $title, $description, $pic_url, $url
     return $resp;
 }
 
+// ==================== 群消息私聊回复（官方 20261117 新增能力） ====================
+// 官方说明：群消息的 msg_id 可以直接用于发送单聊消息接口
+//           POST /v2/users/{user_openid}/messages，私聊回复该群消息的发送者。
+//
+// 使用约束（官方文档）：
+//   1) user_openid 必须是该群消息的发送者，且该用户与机器人为好友（否则 40054004 / 40034024）
+//   2) 被动回复 60 分钟内有效；每条群消息最多 5 次，机器人开发者是群主/管理员时提升到 50 次
+//   3) 与群内回复共用同一个 msg_id 的次数上限
+//   4) 相同 msg_id + msg_seq 重复发送会失败（40054005），本文件用递增序号规避
+//
+// 典型用法（群消息事件里）：
+//   私聊回复当前群消息('这条只发给你', 消息ID, 用户);
+//   或显式指定：群消息私聊回复($userOpenid, '内容', $群消息ID);
+
+/**
+ * 把单聊接口的业务错误码翻译成人话（官方 err_code / code 均可）
+ *
+ * @param int|string $code
+ * @param string     $fallback 未收录时追加的原始提示
+ * @return string
+ */
+function 群消息私聊错误码($code, $fallback = '') {
+    $map = [
+        22006    => '消息类型与内容不匹配',
+        304061   => '消息内容无效',
+        304080   => '文件信息无效，请检查 file_info',
+        304103   => '消息ID已过期，请在收到群消息后尽快回复',
+        40034004 => '富媒体信息转存失败，请重试',
+        40034005 => '回复消息 msg_id 已过期，请在收到群消息后 60 分钟内回复',
+        40034006 => '消息内容违规，请修改后重试',
+        40034008 => 'markdown 参数存在空值',
+        40034011 => '无效的 markdown 内容',
+        40034024 => 'msg_id 无效或越权：请确认传的是群消息 ID，且 user_openid 为该消息发送者',
+        40034026 => 'event_id 已过期',
+        40034027 => '该事件不支持回复消息',
+        40034100 => '主动消息发送超过频控限制',
+        40034105 => '主动消息发送失败，无权限',
+        40034128 => '被动回复时间或次数超限：每条群消息最多 5 次（管理员 50 次），与群内回复共用',
+        40054004 => '无好友关系：该用户未添加机器人为好友，无法私聊回复',
+        40054005 => '消息被去重：相同 msg_id + msg_seq 已发送过，请更换序号',
+        40054006 => '验证好友关系失败，请稍后重试',
+        40054007 => '消息长度超限，请缩短内容',
+        40054013 => '用户拒收消息',
+        50055002 => '消息发送异常，请稍后重试',
+    ];
+    $codeInt = (int)$code;
+    $msg = $map[$codeInt] ?? '';
+    if ($msg === '') {
+        $msg = '发送失败（错误码 ' . $codeInt . '）';
+    }
+    if ($fallback !== '' && trim((string)$fallback) !== '') {
+        $msg .= '：' . trim((string)$fallback);
+    }
+    return $msg;
+}
+
+/**
+ * 统一解析单聊接口响应
+ *
+ * @param string $resp BOTAPI 原始返回
+ * @return array{ok:bool,code:int,message:string,id:string,data:array}
+ */
+function 群消息私聊结果($resp) {
+    $data = json_decode((string)$resp, true);
+    if (!is_array($data)) {
+        return ['ok' => false, 'code' => 0, 'message' => '接口返回非 JSON：' . mb_substr((string)$resp, 0, 100), 'id' => '', 'data' => []];
+    }
+    $code = (int)($data['err_code'] ?? $data['code'] ?? 0);
+    $id   = (string)($data['id'] ?? '');
+    // 成功：有 id 且没有业务错误码
+    $ok = ($id !== '' && $code === 0);
+    $message = $ok ? '' : 群消息私聊错误码($code, (string)($data['message'] ?? ''));
+    if (!$ok && $code === 0) {
+        $message = '发送失败：' . ((string)($data['message'] ?? '') !== '' ? (string)$data['message'] : '响应中没有消息 ID');
+    }
+    return ['ok' => $ok, 'code' => $code, 'message' => $message, 'id' => $id, 'data' => $data];
+}
+
+/**
+ * 为同一个 msg_id 生成递增的 msg_seq，避免 40054005（相同 msg_id + msg_seq 去重）
+ *
+ * @param string $msgId 群消息 ID（空字符串代表主动消息）
+ * @param bool   $reset 重新取随机起点
+ * @return int 1-9999
+ */
+function 群消息私聊序号($msgId = '', $reset = false) {
+    static $seqs = [];
+    $key = $msgId !== '' ? (string)$msgId : '__active__';
+    if ($reset || !isset($seqs[$key])) {
+        $seqs[$key] = mt_rand(1, 5000);
+    } else {
+        $seqs[$key]++;
+        if ($seqs[$key] > 9999) $seqs[$key] = 1;
+    }
+    return $seqs[$key];
+}
+
+/**
+ * 底层：向指定用户发单聊消息，可携带群消息 msg_id 做被动回复
+ *
+ * @param string   $userOpenid 目标用户 openid（群消息发送者）
+ * @param array    $payload    报文（msg_type / content / markdown / media / card / keyboard ...）
+ * @param string   $msgId      群消息 ID；留空则为主动消息（受频控，多数机器人无权限）
+ * @param int|null $msgSeq     回复序号；null 时自动递增
+ * @param string   $logAction  日志动作
+ * @param string   $logType    日志类型
+ * @param string   $logContent 日志内容
+ * @return string BOTAPI 原始响应
+ */
+function 群消息私聊发送($userOpenid, $payload, $msgId = '', $msgSeq = null, $logAction = '发送群消息私聊回复', $logType = '文字', $logContent = '') {
+    $userOpenid = trim((string)$userOpenid);
+    $msgId      = trim((string)$msgId);
+
+    if ($userOpenid === '') {
+        return json_encode(['code' => 400, 'message' => '缺少 user_openid（群消息发送者）'], JSON_UNESCAPED_UNICODE);
+    }
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+
+    if ($msgId !== '') {
+        $payload['msg_id']  = $msgId;
+        $payload['msg_seq'] = ($msgSeq !== null) ? (int)$msgSeq : 群消息私聊序号($msgId);
+    } elseif ($msgSeq !== null) {
+        $payload['msg_seq'] = (int)$msgSeq;
+    }
+
+    $url  = '/v2/users/' . rawurlencode($userOpenid) . '/messages';
+    $resp = BOTAPI($url, 'POST', json_encode($payload, JSON_UNESCAPED_UNICODE));
+
+    $data      = json_decode($resp, true);
+    $messageId = is_array($data) ? (string)($data['id'] ?? '') : '';
+
+    // 私聊回复必须落在「私聊」会话里，不能沿用当前群聊的 source_type
+    if ($logContent === '') $logContent = $logType;
+    if (function_exists('logMessage')) {
+        logMessage(defined('appid') ? appid : '', '发送', '私聊', $userOpenid, $logType, $logContent,
+                   $messageId, $userOpenid, $resp);
+    }
+    if (function_exists('wlog')) {
+        $entry = [
+            'direction'    => '发送',
+            'action'       => $logAction,
+            'source_type'  => '私聊',
+            'target_id'    => $userOpenid,
+            'msg_id'       => $msgId,
+            'content_type' => $logType,
+            'content'      => $logContent,
+            'time'         => date('Y-m-d H:i:s'),
+        ];
+        if ($messageId !== '') $entry['id'] = $messageId;
+        wlog(json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), defined('appid') ? appid : null);
+    }
+
+    return $resp;
+}
+
+/**
+ * 群消息私聊回复：文本
+ *
+ * @param string   $userOpenid 群消息发送者 openid
+ * @param string   $content    文本内容
+ * @param string   $msgId      群消息 ID（必须来自 GROUP_AT_MESSAGE_CREATE / GROUP_MESSAGE_CREATE）
+ * @param int|null $msgSeq     回复序号，默认自动递增
+ * @return string
+ */
+function 群消息私聊回复($userOpenid, $content, $msgId = '', $msgSeq = null) {
+    $content = (string)$content;
+    if (trim($content) === '') $content = ' ';
+    return 群消息私聊发送($userOpenid, [
+        'msg_type' => 0,
+        'content'  => $content,
+    ], $msgId, $msgSeq, '发送群消息私聊回复', '文字', $content);
+}
+
+/**
+ * 群消息私聊回复：Markdown
+ *
+ * @param string   $userOpenid
+ * @param string   $md
+ * @param string   $msgId
+ * @param string|null $keyboard 键盘模板 ID
+ * @param bool     $forceVerify 图片转存失败是否中止发送
+ * @param int|null $msgSeq
+ * @return string
+ */
+function 群消息私聊回复MD($userOpenid, $md, $msgId = '', $keyboard = null, $forceVerify = false, $msgSeq = null) {
+    $md = (string)$md;
+    if (trim($md) === '') {
+        return json_encode(['code' => 400, 'message' => 'Markdown 内容不能为空'], JSON_UNESCAPED_UNICODE);
+    }
+    $mdObj = ['content' => $md];
+    if ($forceVerify) $mdObj['force_verify_image_resource'] = true;
+
+    $payload = ['msg_type' => 2, 'markdown' => $mdObj];
+    if ($keyboard !== null && $keyboard !== '') {
+        $payload['keyboard'] = is_array($keyboard) ? $keyboard : ['id' => (string)$keyboard];
+    }
+    return 群消息私聊发送($userOpenid, $payload, $msgId, $msgSeq, '发送群消息私聊回复MD', 'MD', $md);
+}
+
+/**
+ * 群消息私聊回复：图片（URL 或二进制）
+ *
+ * @param string   $userOpenid
+ * @param string   $image    http(s) 链接或二进制数据
+ * @param string   $msgId
+ * @param string|null $content 可选配文
+ * @param string|null $logMedia 日志展示用的本地留存 URL
+ * @param int|null $msgSeq
+ * @return string
+ */
+function 群消息私聊回复图片($userOpenid, $image, $msgId = '', $content = null, $logMedia = null, $msgSeq = null) {
+    $userOpenid = trim((string)$userOpenid);
+    if ($userOpenid === '') {
+        return json_encode(['code' => 400, 'message' => '缺少 user_openid（群消息发送者）'], JSON_UNESCAPED_UNICODE);
+    }
+    if (!function_exists('推送富媒体')) {
+        return json_encode(['code' => 500, 'message' => '推送富媒体函数不存在'], JSON_UNESCAPED_UNICODE);
+    }
+
+    $fileInfo = 推送富媒体('图片', $image, $userOpenid, false);
+    if (!is_array($fileInfo) || empty($fileInfo['file_info'])) {
+        $msg = is_array($fileInfo) ? (string)($fileInfo['message'] ?? '') : '';
+        if ($msg === '') $msg = '图片上传失败（接口未返回 file_info）';
+        return json_encode(['code' => 500, 'message' => $msg], JSON_UNESCAPED_UNICODE);
+    }
+
+    $payload = [
+        'msg_type' => 7,
+        'media'    => ['file_info' => $fileInfo['file_info']],
+        'content'  => '',
+    ];
+    $hasText = ($content !== null && trim((string)$content) !== '');
+    if ($hasText) $payload['content'] = "\n" . trim((string)$content);
+
+    $dispUrl = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia)
+             : ((is_string($image) && preg_match('#^https?://#i', $image)) ? $image : '[上传图片]');
+    $logContent = $hasText ? ($dispUrl . ' ' . trim((string)$content)) : $dispUrl;
+
+    return 群消息私聊发送($userOpenid, $payload, $msgId, $msgSeq,
+        $hasText ? '发送群消息私聊图文' : '发送群消息私聊图片',
+        $hasText ? '图文' : '图片', $logContent);
+}
+
+/**
+ * 群消息私聊回复：图文卡片（msg_type=8）
+ *
+ * @param string   $userOpenid
+ * @param string   $title
+ * @param string   $description
+ * @param string   $pic_url  https 图片
+ * @param string   $url      https 跳转链接
+ * @param string   $msgId
+ * @param int|null $msgSeq
+ * @return string
+ */
+function 群消息私聊回复图文($userOpenid, $title, $description, $pic_url, $url, $msgId = '', $msgSeq = null) {
+    $title       = trim((string)$title);
+    $description = trim((string)$description);
+    $pic_url     = trim((string)$pic_url);
+    $url         = trim((string)$url);
+
+    if ($title === '' || $description === '' || $pic_url === '' || $url === '') {
+        return json_encode(['code' => 400, 'message' => '图文卡片需要标题、描述、图片 URL、跳转链接'], JSON_UNESCAPED_UNICODE);
+    }
+    if (mb_strlen($title, 'UTF-8') > 50) {
+        return json_encode(['code' => 400, 'message' => '图文卡片标题最多 50 个字'], JSON_UNESCAPED_UNICODE);
+    }
+    if (mb_strlen($description, 'UTF-8') > 200) {
+        return json_encode(['code' => 400, 'message' => '图文卡片描述最多 200 个字'], JSON_UNESCAPED_UNICODE);
+    }
+    if (!preg_match('#^https://#i', $pic_url) || !preg_match('#^https://#i', $url)) {
+        return json_encode(['code' => 400, 'message' => '图文卡片的图片 URL 与跳转链接必须使用 https://'], JSON_UNESCAPED_UNICODE);
+    }
+    if (strlen($pic_url) > 1024 || strlen($url) > 1024) {
+        return json_encode(['code' => 400, 'message' => '图文卡片链接长度不能超过 1024 个字符'], JSON_UNESCAPED_UNICODE);
+    }
+
+    $payload = [
+        'msg_type' => 8,
+        'card'     => [
+            'type'    => 'tuwen',
+            'content' => [
+                'title'       => $title,
+                'description' => $description,
+                'pic_url'     => $pic_url,
+                'url'         => $url,
+            ],
+        ],
+    ];
+    return 群消息私聊发送($userOpenid, $payload, $msgId, $msgSeq,
+        '发送群消息私聊图文卡片', '图文卡片', $title);
+}
+
+/**
+ * 从群消息事件里取发送者 openid
+ *
+ * 取值顺序：author.user_openid → author.id → author.member_openid → 顶层 member_openid
+ * 说明：官方群消息事件的 author 只有 member_openid（群内标识），
+ *       单聊接口要求 user_openid；部分版本会同时下发 user_openid / id，故按优先级回退。
+ *
+ * @param array|string|null $raw 事件数组或 JSON；null 时读取当前事件的 raw 常量
+ * @return string
+ */
+function 群消息发送者Openid($raw = null) {
+    if ($raw === null) {
+        if (defined('raw')) $raw = raw;
+        else return '';
+    }
+    $event = is_array($raw) ? $raw : json_decode((string)$raw, true);
+    if (!is_array($event)) return '';
+    $d = (isset($event['d']) && is_array($event['d'])) ? $event['d'] : $event;
+    $author = (isset($d['author']) && is_array($d['author'])) ? $d['author'] : [];
+
+    foreach (['user_openid', 'id', 'member_openid'] as $key) {
+        $val = trim((string)($author[$key] ?? ''));
+        if ($val !== '') return $val;
+    }
+    return trim((string)($d['member_openid'] ?? ''));
+}
+
+/**
+ * 便捷封装：在当前群消息事件上下文中，私聊回复该消息的发送者
+ *
+ * 用法（群消息处理逻辑里）：
+ *   私聊回复当前群消息('这条内容只发给你');
+ *   私聊回复当前群消息('内容', 消息ID, $userOpenid);
+ *
+ * @param string      $content
+ * @param string|null $msgId      默认取当前事件「消息ID」
+ * @param string|null $userOpenid 默认从 raw 事件里取发送者
+ * @param int|null    $msgSeq
+ * @return string
+ */
+function 私聊回复当前群消息($content, $msgId = null, $userOpenid = null, $msgSeq = null) {
+    if ($msgId === null) $msgId = defined('消息ID') ? 消息ID : '';
+    if ($userOpenid === null || $userOpenid === '') {
+        $userOpenid = 群消息发送者Openid();
+        if ($userOpenid === '' && defined('用户')) $userOpenid = 用户;
+    }
+    if ($userOpenid === '') {
+        return json_encode(['code' => 400, 'message' => '无法确定群消息发送者的 user_openid，请显式传入'], JSON_UNESCAPED_UNICODE);
+    }
+    return 群消息私聊回复($userOpenid, $content, $msgId, $msgSeq);
+}
+
 // ==================== 获取机器人在群中的成员信息 (对应Python get_bot_member) ====================
 function 获取机器人成员($groupOpenid) {
     $botInfo = BOT信息();

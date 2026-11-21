@@ -1564,6 +1564,31 @@ if (!empty($bots)) {
   </div>
 </div>
 
+<!-- ==================== 群消息私聊回复（官方 20261117） ==================== -->
+<div class="modal-overlay" id="privateReplyModal" style="display:none;" onclick="if (event.target === this) closePrivateReply()">
+  <div class="modal" style="max-width:470px;">
+    <div class="modal-header">私聊回复</div>
+    <div class="modal-body">
+      <div class="kick-target">
+        <div class="kick-avt" id="privateReplyAvatar"></div>
+        <div style="min-width:0;">
+          <div class="kick-name" id="privateReplyName"></div>
+          <div class="kick-openid" id="privateReplyOpenid"></div>
+        </div>
+      </div>
+      <div class="kick-warn" style="background:#f2f7ff;border-color:#cfe0f7;color:#2a5b93;">
+        仅该用户可见。要求用户已添加机器人为好友；群消息发出后 60 分钟内有效，每条消息最多 5 次（机器人管理员为群主/管理员时 50 次），与群内回复共用次数。
+      </div>
+      <textarea id="privateReplyContent" rows="4" placeholder="输入要私聊发送的内容…" style="margin-top:12px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line,#d8e0da);border-radius:8px;font-size:14px;line-height:1.6;resize:vertical;font-family:inherit;"></textarea>
+      <div class="kick-err" id="privateReplyError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closePrivateReply()">取消</button>
+      <button class="btn btn-primary" id="privateReplySend" onclick="doPrivateReply()">发送</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== 设置备注/头像 模态框 ==================== -->
 <div class="modal-overlay" id="remarkModal" style="display:none;">
   <div class="modal">
@@ -3362,12 +3387,98 @@ function buildMsgHtml(m, botId) {
     if (!isSent && m.user_id && currentSession && currentSession.source_type === '群聊') {
         html += '<button class="chat-msg-action-btn" onclick="quickMuteMember(this)" data-user-id="' + escapeAttr(m.user_id) + '" data-target-id="' + escapeAttr(m.target_id || '') + '">禁言</button>';
         html += '<button class="chat-msg-action-btn" onclick="quickUnmuteMember(this)" data-user-id="' + escapeAttr(m.user_id) + '" data-target-id="' + escapeAttr(m.target_id || '') + '">解禁</button>';
+        // 官方 20261117：群消息私聊回复（用该群消息 msg_id 向发送者单聊）
+        if (m.msg_id) {
+            html += '<button class="chat-msg-action-btn" onclick="openPrivateReply(this)">私聊</button>';
+        }
     }
     html += '<button class="chat-msg-action-btn" onclick="copyText(this)" data-text="' + escapeAttr(m.content || '') + '">复制</button>';
     html += '</div>';
 
     html += '</div></div>';
     return html;
+}
+
+// ==================== 群消息私聊回复（官方 20261117） ====================
+var privateReplyTarget = null;
+
+function openPrivateReply(btn) {
+    var msgEl = btn.closest('.chat-msg');
+    var msgData = msgEl ? msgEl.getAttribute('data-msg-data') : null;
+    var m = null;
+    try { m = msgData ? JSON.parse(msgData) : null; } catch (e) { m = null; }
+    if (!m || !m.user_id || !m.msg_id) {
+        alert('该消息缺少发送者或消息 ID，无法私聊回复');
+        return;
+    }
+    privateReplyTarget = m;
+
+    var nameEl = document.getElementById('privateReplyName');
+    var openidEl = document.getElementById('privateReplyOpenid');
+    var avtEl = document.getElementById('privateReplyAvatar');
+    var errEl = document.getElementById('privateReplyError');
+    var textEl = document.getElementById('privateReplyContent');
+
+    var displayName = m.group_nickname || m.user_name || m.username || nicknameCache[m.user_id] || m.user_id;
+    nameEl.textContent = displayName;
+    openidEl.textContent = m.user_id;
+    avtEl.innerHTML = avtHtml(m.avatar || m.user_avatar || '', displayName, m.user_id || '', 44, false, m.appid || botId || '');
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+    textEl.value = '';
+    document.getElementById('privateReplyModal').style.display = 'flex';
+    setTimeout(function () { textEl.focus(); }, 60);
+}
+
+function closePrivateReply() {
+    var el = document.getElementById('privateReplyModal');
+    if (el) el.style.display = 'none';
+    privateReplyTarget = null;
+}
+
+function doPrivateReply() {
+    if (!privateReplyTarget) return;
+    var textEl = document.getElementById('privateReplyContent');
+    var errEl = document.getElementById('privateReplyError');
+    var btn = document.getElementById('privateReplySend');
+    var content = textEl.value.trim();
+
+    if (!content) {
+        errEl.style.display = 'block';
+        errEl.textContent = '请输入要发送的内容';
+        textEl.focus();
+        return;
+    }
+    var botId = getCurrentBotId();
+    if (!botId) {
+        errEl.style.display = 'block';
+        errEl.textContent = '请先选择机器人';
+        return;
+    }
+
+    btn.disabled = true;
+    var orig = btn.textContent;
+    btn.textContent = '发送中...';
+    errEl.style.display = 'none';
+
+    apiCall('api/chat_api.php?action=private_reply', {
+        appid: botId,
+        user_openid: privateReplyTarget.user_id,
+        msg_id: privateReplyTarget.msg_id,
+        reply_type: 'text',
+        message: content
+    }, function (res) {
+        btn.disabled = false;
+        btn.textContent = orig;
+        if (res && (res.success || res.code === 0)) {
+            var name = privateReplyTarget.group_nickname || privateReplyTarget.user_name || privateReplyTarget.username || '该成员';
+            closePrivateReply();
+            chatToast('已私聊回复 ' + name);
+        } else {
+            errEl.style.display = 'block';
+            errEl.textContent = (res && (res.message || res.msg)) || '发送失败';
+        }
+    });
 }
 
 // ==================== 引用消息（简化操作，和撤回一样简单） ====================

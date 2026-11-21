@@ -870,6 +870,74 @@ try {
             }
             break;
 
+        // ==================== 群消息私聊回复（官方 20261117） ====================
+        // 用群消息的 msg_id 调 POST /v2/users/{user_openid}/messages，私聊回复该群消息发送者
+        case 'private_reply': {
+            $appid      = trim($_POST['appid'] ?? '');
+            $userOpenid = trim($_POST['user_openid'] ?? '');
+            $msgId      = trim($_POST['msg_id'] ?? '');
+            $replyType  = trim($_POST['reply_type'] ?? 'text');
+            $content    = (string)($_POST['message'] ?? $_POST['content'] ?? '');
+
+            if ($appid === '' || $userOpenid === '' || $msgId === '') {
+                json_response(['code' => 400, 'msg' => '缺少 appid / user_openid / msg_id']);
+            }
+            if (!in_array($replyType, ['text', 'md'], true)) {
+                json_response(['code' => 400, 'msg' => 'reply_type 只支持 text / md']);
+            }
+            if (trim($content) === '') {
+                json_response(['code' => 400, 'msg' => '私聊回复内容不能为空']);
+            }
+
+            $bot = getBot($appid);
+            if (!$bot) {
+                json_response(['code' => 404, 'msg' => '机器人不存在']);
+            }
+
+            // 群消息 author 里的 member_openid 与单聊 user_openid 可能不同：
+            // 优先从落库的原始事件里取 author.user_openid / id，取不到再用前端传的 user_id
+            $resolvedOpenid = $userOpenid;
+            try {
+                $row = db()->fetch(
+                    "SELECT raw_data FROM messages
+                     WHERE appid = ? AND message_id = ? AND direction = '接收'
+                     ORDER BY id DESC LIMIT 1",
+                    [$appid, $msgId]
+                );
+                if ($row && !empty($row['raw_data'])) {
+                    $ev = json_decode($row['raw_data'], true);
+                    $author = (isset($ev['d']['author']) && is_array($ev['d']['author'])) ? $ev['d']['author'] : [];
+                    foreach (['user_openid', 'id', 'member_openid'] as $k) {
+                        $v = trim((string)($author[$k] ?? ''));
+                        if ($v !== '') { $resolvedOpenid = $v; break; }
+                    }
+                }
+            } catch (Throwable $e) {
+                $resolvedOpenid = $userOpenid;
+            }
+
+            if (!defined('appid')) define('appid', $bot['appid']);
+            if (!defined('secret')) define('secret', $bot['secret']);
+            if (!defined('type')) define('type', $bot['env']);
+            if (!defined('消息来源')) define('消息来源', '群聊');
+            if (!defined('来源')) define('来源', '');
+            if (!defined('消息ID')) define('消息ID', '');
+            if (!defined('事件ID')) define('事件ID', '');
+
+            require_once(__DIR__ . '/../../bot.php');
+
+            $resp = ($replyType === 'md')
+                ? 群消息私聊回复MD($resolvedOpenid, $content, $msgId)
+                : 群消息私聊回复($resolvedOpenid, $content, $msgId);
+
+            $result = 群消息私聊结果($resp);
+            if ($result['ok']) {
+                后台操作记录('群消息私聊回复', '目标:' . $resolvedOpenid . ' 群消息:' . $msgId, $appid);
+                json_response(['code' => 0, 'msg' => '已私聊回复', 'success' => true, 'data' => $result['data']]);
+            }
+            json_response(['code' => 500, 'msg' => $result['message'], 'success' => false, 'data' => $result['data']]);
+        }
+
         // ==================== 分片上传: 追加分片 ====================
         // 前端把 >1.5MB 的文件按 1MB/片逐片 POST 到此, 全部完成后调 upload_complete 合并发送。
         // 分片存放 data/uploads/tmp/ (受 data/.htaccess 保护), 覆盖写保证同分片重传幂等。
