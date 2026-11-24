@@ -709,6 +709,121 @@ switch ($action) {
         ]);
         break;
 
+    // ==================== 自定义 API ====================
+    case 'customapi_list':
+        $list = customapi列表(false);
+        $cats = [];
+        foreach ($list as $it) {
+            $c = trim((string)$it['category']);
+            if ($c !== '') $cats[$c] = true;
+        }
+        json_response([
+            'success' => true,
+            'list'    => $list,
+            'cats'    => array_keys($cats),
+            'options' => customapi选项(),
+        ]);
+        break;
+
+    case 'customapi_save':
+        $form = json_decode((string)($_POST['form'] ?? ''), true);
+        if (!is_array($form)) {
+            json_response(['success' => false, 'message' => '表单数据格式错误']);
+        }
+        $id = (int)($form['id'] ?? 0);
+        list($ok, $ret) = customapi保存($form, $id);
+        if (!$ok) {
+            json_response(['success' => false, 'message' => $ret]);
+        }
+        后台操作记录($id > 0 ? '编辑自定义API' : '新建自定义API', (string)($form['name'] ?? ''));
+        json_response(['success' => true, 'message' => '已保存', 'id' => (int)$ret]);
+        break;
+
+    case 'customapi_delete':
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) json_response(['success' => false, 'message' => '参数错误']);
+        $api = customapi取($id);
+        if (!customapi删除($id)) {
+            json_response(['success' => false, 'message' => '删除失败']);
+        }
+        后台操作记录('删除自定义API', $api ? (string)$api['name'] : ('#' . $id));
+        json_response(['success' => true, 'message' => '已删除']);
+        break;
+
+    case 'customapi_toggle':
+        $id      = (int)($_POST['id'] ?? 0);
+        $enabled = (string)($_POST['enabled'] ?? '1') === '1';
+        if ($id <= 0) json_response(['success' => false, 'message' => '参数错误']);
+        if (!customapi启用($id, $enabled)) {
+            json_response(['success' => false, 'message' => '操作失败']);
+        }
+        json_response(['success' => true, 'message' => $enabled ? '已启用' : '已停用', 'enabled' => $enabled]);
+        break;
+
+    case 'customapi_test':
+        $form = json_decode((string)($_POST['form'] ?? ''), true);
+        if (!is_array($form)) {
+            json_response(['success' => false, 'message' => '表单数据格式错误']);
+        }
+        $api  = customapi规范化($form);
+        $text = trim((string)($_POST['args'] ?? ''));
+        $args = ['全部' => $text, '列表' => customapi拆参数($text), '完整' => $text];
+
+        $r = customapi执行($api, $args);
+        // 响应体太大时不回传全量，避免后台 JSON 爆掉
+        $raw = (string)$r['raw'];
+        if (mb_strlen($raw, 'UTF-8') > 6000) {
+            $raw = mb_substr($raw, 0, 6000, 'UTF-8') . "\n…（已截断）";
+        }
+        $values = [];
+        foreach (($r['values'] ?? []) as $k => $v) {
+            if (is_array($v) || is_object($v)) $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+            $values[$k] = mb_substr((string)$v, 0, 2000, 'UTF-8');
+        }
+        json_response([
+            'success' => (bool)$r['ok'],
+            'message' => $r['ok'] ? '调用成功' : ('调用失败：' . $r['error']),
+            'data'    => [
+                'ok'      => $r['ok'],
+                'error'   => $r['error'],
+                'request' => $r['request'],
+                'http'    => $r['http'],
+                'raw'     => $raw,
+                'values'  => $values,
+                'text'    => (string)$r['text'],
+                'send'    => customapi预览发送($api, $r),
+            ],
+        ]);
+        break;
+
+    case 'customapi_probe':
+        $form = json_decode((string)($_POST['form'] ?? ''), true);
+        if (!is_array($form)) {
+            json_response(['success' => false, 'message' => '表单数据格式错误']);
+        }
+        $api  = customapi规范化($form);
+        $text = trim((string)($_POST['args'] ?? ''));
+        $args = ['全部' => $text, '列表' => customapi拆参数($text), '完整' => $text];
+
+        $r = customapi探测($api, $args);
+        $preview = (string)($r['preview'] ?? '');
+        if (mb_strlen($preview, 'UTF-8') > 6000) {
+            $preview = mb_substr($preview, 0, 6000, 'UTF-8') . "\n…（已截断）";
+        }
+        json_response([
+            'success' => (bool)$r['ok'],
+            'message' => $r['ok'] ? '已拿到返回结构' : ('请求失败：' . ($r['error'] ?: '未知错误')),
+            'data'    => [
+                'type'    => $r['type'],
+                'request' => $r['request'],
+                'http'    => $r['http'],
+                'preview' => $preview,
+                'paths'   => $r['paths'],
+                'error'   => $r['error'],
+            ],
+        ]);
+        break;
+
     // ==================== 代发网关鉴权 (relay.php) ====================
     case 'relay_auth_get':
         // 查看代发签名密钥与开关状态 (密钥用于外部脚本计算 HMAC-SHA256 签名)

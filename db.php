@@ -105,6 +105,35 @@ class Database {
                 PRIMARY KEY (appid, plugin_name)
             )",
 
+            // 自定义 API（后台可视化配置的触发 → 请求 → 取值 → 发送）
+            "CREATE TABLE IF NOT EXISTS custom_apis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                category TEXT DEFAULT '',
+                icon TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                trigger_type TEXT DEFAULT 'message',
+                event_type TEXT DEFAULT '',
+                event_filter TEXT DEFAULT '',
+                trigger TEXT DEFAULT '',
+                match_mode TEXT DEFAULT 'exact',
+                scope TEXT DEFAULT 'all',
+                permission TEXT DEFAULT 'all',
+                method TEXT DEFAULT 'GET',
+                url TEXT DEFAULT '',
+                headers TEXT DEFAULT '',
+                body TEXT DEFAULT '',
+                timeout INTEGER DEFAULT 20,
+                parse TEXT DEFAULT 'json',
+                extracts TEXT DEFAULT '[]',
+                reply_type TEXT DEFAULT 'text',
+                reply_template TEXT DEFAULT '',
+                error_template TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                updated_at TEXT DEFAULT (datetime('now','localtime'))
+            )",
+
             // 消息日志表
             "CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,6 +321,11 @@ class Database {
                 'user_name' => "ALTER TABLE messages ADD COLUMN user_name TEXT DEFAULT ''",
                 'user_avatar' => "ALTER TABLE messages ADD COLUMN user_avatar TEXT DEFAULT ''",
                 'group_nickname' => "ALTER TABLE messages ADD COLUMN group_nickname TEXT DEFAULT ''",
+            ],
+            'custom_apis' => [
+                'trigger_type' => "ALTER TABLE custom_apis ADD COLUMN trigger_type TEXT DEFAULT 'message'",
+                'event_type'   => "ALTER TABLE custom_apis ADD COLUMN event_type TEXT DEFAULT ''",
+                'event_filter' => "ALTER TABLE custom_apis ADD COLUMN event_filter TEXT DEFAULT ''",
             ],
         ];
 

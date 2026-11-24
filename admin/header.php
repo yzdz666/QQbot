@@ -186,6 +186,12 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
         自定义菜单
       </a>
       <div class="nav-section">开发</div>
+      <a href="apis.php" class="nav-item <?= $currentPage === 'apis.php' ? 'active' : '' ?>">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 1.5V4M10 1.5V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4.5 4H11.5V7.5C11.5 9.4 9.9 11 8 11C6.1 11 4.5 9.4 4.5 7.5V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 11V14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        自定义 API
+      </a>
       <a href="aidev.php" class="nav-item <?= $currentPage === 'aidev.php' ? 'active' : '' ?>">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5V9M8 11V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>

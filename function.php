@@ -42,6 +42,7 @@ include(APP_ROOT . "function/Mail/class.smtp.php");
 include_once(APP_ROOT . "function/Mail/PHPMailer.php");
 include(APP_ROOT . "function/tuwen.php");
 include_once(APP_ROOT . "function/silk.php");
+include_once(APP_ROOT . "function/customapi.php");
 
 // 定义 sodium 常量（如果未定义）
 if (!defined('SODIUM_CRYPTO_SIGN_SEEDBYTES')) {
