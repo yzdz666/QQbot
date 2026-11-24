@@ -64,6 +64,21 @@ function customapi_ensure_table() {
                 db()->execute("ALTER TABLE custom_apis ADD COLUMN {$name} {$type}");
             }
         }
+
+        // 调用记录：排查「机器人没回复」时，能直接看到有没有命中、接口返回什么、发送是否成功
+        db()->execute("CREATE TABLE IF NOT EXISTS customapi_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            appid TEXT DEFAULT '',
+            api_id INTEGER DEFAULT 0,
+            api_name TEXT DEFAULT '',
+            trigger_type TEXT DEFAULT '',
+            trigger_text TEXT DEFAULT '',
+            http_code INTEGER DEFAULT 0,
+            elapsed_ms INTEGER DEFAULT 0,
+            sent INTEGER DEFAULT 0,
+            errors TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )");
     } catch (Throwable $e) {
         // 表已存在或数据库只读：交由调用方兜底
     }
@@ -639,11 +654,36 @@ function customapi触发词($raw) {
 }
 
 /**
+ * 清洗用户发来的指令文本
+ *
+ * 框架入口已经用 清理消息内容() 洗过一遍；这里再兜一层，
+ * 保证只替换了插件文件的旧站点也能正确匹配。
+ */
+function customapi清洗消息($text) {
+    $text = (string)$text;
+    if ($text === '') return '';
+
+    // 1. 零宽字符
+    $text = preg_replace('/[\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $text);
+    // 2. <@!123> / <@123> 提及
+    $text = preg_replace('/<@!?[A-Za-z0-9_\-]+>/', '', $text);
+    // 3. 少数客户端把 @昵称 当纯文本发过来（要求后面还有正文）
+    $stripped = preg_replace('/^@[^\s\x{3000}]{1,32}[\s\x{3000}]+/u', '', (string)$text);
+    if (is_string($stripped) && trim($stripped) !== '') {
+        $text = $stripped;
+    }
+    // 4. 首尾空白（含全角空格）与指令斜杠（含全角）
+    $text = preg_replace('/^[\s\x{3000}\x{00A0}\/／]+|[\s\x{3000}\x{00A0}\/／]+$/u', '', (string)$text);
+
+    return trim((string)$text);
+}
+
+/**
  * 匹配一条消息
  * @return array [api|null, args]  args = ['全部'=>..., '列表'=>[...]]
  */
 function customapi匹配($text) {
-    $text = trim((string)$text);
+    $text = customapi清洗消息($text);
     if ($text === '') return [null, []];
 
     foreach (customapi列表(true) as $api) {
@@ -796,16 +836,17 @@ function customapi匹配单个($api, $trigger, $text) {
 
     if ($mode === 'prefix') {
         $len = mb_strlen($trigger, 'UTF-8');
-        if ($len > 0 && mb_substr($text, 0, $len, 'UTF-8') === $trigger) {
+        // ASCII 指令不区分大小写（Weather / weather 都能触发），中文不受影响
+        if ($len > 0 && mb_substr(mb_strtolower($text, 'UTF-8'), 0, $len, 'UTF-8') === mb_strtolower($trigger, 'UTF-8')) {
             $rest = trim(mb_substr($text, $len, null, 'UTF-8'));
-            $rest = preg_replace('/^[\/／,，:：\s]+/u', '', $rest);
+            $rest = preg_replace('/^[\/／,，:：\s\x{3000}]+/u', '', $rest);
             return ['全部' => $rest, '列表' => customapi拆参数($rest), '完整' => $text];
         }
         return null;
     }
 
     // exact
-    if ($text === $trigger) {
+    if (mb_strtolower($text, 'UTF-8') === mb_strtolower($trigger, 'UTF-8')) {
         return ['全部' => '', '列表' => [], '完整' => $text];
     }
     return null;
@@ -1275,12 +1316,13 @@ function customapi调用发送($type, $args) {
         return ['ok' => false, 'error' => $e->getMessage()];
     }
 
-    // 框架函数失败时一般返回 {"code":400,"message":"..."}
-    if (is_string($ret) && $ret !== '') {
-        $j = json_decode($ret, true);
-        if (is_array($j) && isset($j['code']) && (int)$j['code'] >= 400) {
-            return ['ok' => false, 'error' => (string)($j['message'] ?? ('code ' . $j['code'])), 'result' => $ret];
-        }
+    // 框架函数失败时一般返回 {"code":400,"message":"..."}（字符串或数组）
+    $decoded = is_array($ret) ? $ret : (is_string($ret) && $ret !== '' ? json_decode($ret, true) : null);
+    if (is_array($decoded) && isset($decoded['code']) && (int)$decoded['code'] >= 400) {
+        return ['ok' => false, 'error' => (string)($decoded['message'] ?? ('code ' . $decoded['code'])), 'result' => $ret];
+    }
+    if ($ret === false) {
+        return ['ok' => false, 'error' => '发送函数返回失败'];
     }
     return ['ok' => true, 'error' => '', 'result' => $ret];
 }
@@ -1316,6 +1358,18 @@ function customapi发送($api, $result) {
             $errors[] = customapi发送类型()[$a['type']]['label'] . '：' . $r['error'];
         }
     }
+
+    // 一条都没发出去时给个明确回执：静默比报错更难排查
+    if ($sent === 0 && !empty($errors) && ($api['reply_type'] ?? '') !== 'none') {
+        $isAdmin = function_exists('是否管理员') ? 是否管理员() : false;
+        $msg = $isAdmin
+            ? '消息发送失败：' . implode('；', $errors)
+            : '消息发送失败，请联系管理员检查「自定义 API」配置。';
+        $msg = mb_substr($msg, 0, 300, 'UTF-8');
+        $r = customapi调用发送('text', [$msg]);
+        if ($r['ok']) $sent++;
+    }
+
     return ['sent' => $sent, 'actions' => $actions, 'errors' => $errors];
 }
 
@@ -1377,14 +1431,8 @@ function customapi运行($api, $args = []) {
         }
     }
 
-    // 同一个人 2 秒内只触发一次，避免连点刷接口
-    $uid = defined('用户') ? (string)用户 : '';
-    $key = 'ca_' . (int)$api['id'] . '_' . $uid;
-    $now = microtime(true);
-    if (isset($GLOBALS['__customapi_last'][$key]) && $now - $GLOBALS['__customapi_last'][$key] < 2) {
-        return true;
-    }
-    $GLOBALS['__customapi_last'][$key] = $now;
+    // 不再按「人」限频：同一条消息重复触发由框架的事件去重负责，
+    // 这里限频反而会吞掉用户 2 秒内连发的两次指令（例如连点两次「一言」）。
 
     try {
         $r = customapi执行($api, $args);
@@ -1394,6 +1442,11 @@ function customapi运行($api, $args = []) {
                  defined('appid') ? appid : null);
         }
         if (function_exists('文字')) 文字('接口调用出错了，请稍后再试。');
+        customapi写日志($api, [
+            'http' => ['code' => 0, 'elapsed_ms' => 0],
+            'errors' => [$e->getMessage()],
+            'sent' => 0,
+        ]);
         return true;
     }
 
@@ -1408,6 +1461,13 @@ function customapi运行($api, $args = []) {
             'errors'     => $send['errors'],
         ], JSON_UNESCAPED_UNICODE), defined('appid') ? appid : null);
     }
+
+    customapi写日志($api, [
+        'http'   => $r['http'],
+        'sent'   => $send['sent'],
+        'errors' => $send['errors'],
+    ]);
+
     return true;
 }
 
@@ -1493,4 +1553,178 @@ function customapi候选路径($data, $prefix = '', $depth = 0, &$out = null) {
         ];
     }
     return $out;
+}
+
+/* =========================================================================
+ * 运行入口、自检与调用记录
+ * ========================================================================= */
+
+/**
+ * 写入一条调用记录（只保留最近 300 条，避免库无限增长）
+ * 后台「运行状态」和排查「机器人没回复」都靠它。
+ */
+function customapi写日志($api, $result) {
+    try {
+        customapi_ensure_table();
+        $errors = $result['errors'] ?? [];
+        if (is_array($errors)) $errors = implode('；', array_map('strval', $errors));
+        db()->execute(
+            "INSERT INTO customapi_logs (appid, api_id, api_name, trigger_type, trigger_text, http_code, elapsed_ms, sent, errors)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                defined('appid') ? (string)appid : '',
+                (int)($api['id'] ?? 0),
+                (string)($api['name'] ?? ''),
+                (string)($api['trigger_type'] ?? 'message'),
+                (string)($api['trigger'] ?? ''),
+                (int)($result['http']['code'] ?? 0),
+                (int)($result['http']['elapsed_ms'] ?? 0),
+                (int)($result['sent'] ?? 0),
+                mb_substr((string)$errors, 0, 1000, 'UTF-8'),
+            ]
+        );
+        // 概率清理，避免每条消息都做一次 DELETE
+        if (mt_rand(1, 20) === 1) {
+            db()->execute("DELETE FROM customapi_logs WHERE id NOT IN (SELECT id FROM customapi_logs ORDER BY id DESC LIMIT 300)");
+        }
+    } catch (Throwable $e) {
+        // 记录失败不影响正常回复
+    }
+}
+
+/** 最近调用记录（后台展示） */
+function customapi最近日志($limit = 10) {
+    customapi_ensure_table();
+    try {
+        $rows = db()->fetchAll(
+            "SELECT * FROM customapi_logs ORDER BY id DESC LIMIT " . max(1, min(50, (int)$limit))
+        );
+    } catch (Throwable $e) {
+        return [];
+    }
+    return is_array($rows) ? $rows : [];
+}
+
+/**
+ * 处理当前请求（事件 + 消息），同一请求只执行一次
+ *
+ * 插件文件和内核兜底都调用它：插件正常加载时由插件调用，
+ * 文件缺失/加载失败时由内核补位，避免「后台配好了但机器人不说话」。
+ *
+ * @return bool 是否命中并处理了 API
+ */
+function customapi处理当前请求() {
+    static $done = false;
+    if ($done) return false;
+    $done = true;
+
+    $handled = false;
+
+    // ---------- 事件触发 ----------
+    $event = customapi当前事件();
+    if ($event !== '') {
+        foreach (customapi匹配事件全部($event) as $api) {
+            customapi运行($api, ['全部' => '', '列表' => [], '完整' => '']);
+            $handled = true;
+        }
+    }
+
+    // ---------- 消息指令 ----------
+    if (!defined('消息')) return $handled;
+    $text = customapi清洗消息((string)消息);
+    if ($text === '') return $handled;
+
+    list($api, $args) = customapi匹配($text);
+    if (!$api) return $handled;
+
+    customapi运行($api, $args);
+    return true;
+}
+
+/**
+ * 内核兜底：插件文件缺失时也能工作；插件被显式禁用时尊重用户设置
+ */
+function customapi核心兜底() {
+    if (!empty($GLOBALS['__customapi_plugin_loaded'])) return false;
+
+    $file = rtrim(APP_ROOT, '/\\') . '/plugin/自定义API.php';
+    if (is_file($file) && defined('plugin') && is_array(plugin) && empty(plugin['自定义API'])) {
+        return false; // 用户在插件管理里明确关掉了
+    }
+    return customapi处理当前请求();
+}
+
+/** 插件文件状态 */
+function customapi插件状态() {
+    $file = rtrim(APP_ROOT, '/\\') . '/plugin/自定义API.php';
+    $exists = is_file($file);
+    $enabled = true;
+    if (defined('plugin') && is_array(plugin)) {
+        $enabled = !empty(plugin['自定义API']);
+    }
+    return [
+        'exists'   => $exists,
+        'enabled'  => $enabled,
+        'writable' => is_dir(dirname($file)) && is_writable(dirname($file)) && (!$exists || is_writable($file)),
+        'path'     => $file,
+        'bytes'    => $exists ? (int)filesize($file) : 0,
+    ];
+}
+
+/** 插件文件内容（重建用，与发布包中的文件保持一致） */
+function customapi插件源码() {
+    $tpl = <<<'PHP'
+<?php
+/**
+ * @name 自定义API
+ * @version 1.2.0
+ * @author 月下独酌
+ * @description 在后台「开发 → 自定义 API」里可视化配置：指令或事件触发 → 调用接口 → 从返回内容取值 → 用文字、图片、语音、文卡、Ark、按钮等函数发送。无需写代码，改完即时生效。
+ * @category 开发
+ * @license MIT
+ */
+
+require_once __DIR__ . '/../function/customapi.php';
+
+// 标记插件已加载：内核兜底看到这个标记就不再重复执行
+$GLOBALS['__customapi_plugin_loaded'] = true;
+
+customapi处理当前请求();
+PHP;
+
+    return $tpl . "\n";
+}
+
+/**
+ * 重建插件文件
+ * @return array [bool, 提示]
+ */
+function customapi确保插件文件($overwrite = false) {
+    $state = customapi插件状态();
+    if ($state['exists'] && !$overwrite) return [true, '插件文件已存在'];
+
+    $dir = dirname($state['path']);
+    if (!is_dir($dir)) {
+        if (!@mkdir($dir, 0755, true)) return [false, 'plugin 目录不存在且创建失败'];
+    }
+    if (!is_writable($dir)) return [false, 'plugin 目录不可写，请检查目录权限'];
+
+    $ok = @file_put_contents($state['path'], customapi插件源码());
+    if ($ok === false) return [false, '写入 plugin/自定义API.php 失败'];
+    if (function_exists('opcache_invalidate')) @opcache_invalidate($state['path'], true);
+
+    return [true, '已重建 plugin/自定义API.php'];
+}
+
+/** 在当前机器人下启用插件 */
+function customapi插件启用($appid) {
+    $appid = trim((string)$appid);
+    if ($appid === '') return [false, '请选择机器人'];
+    try {
+        db()->execute("INSERT OR IGNORE INTO plugin_status (appid, plugin_name, enabled) VALUES (?, ?, 1)", [$appid, '自定义API']);
+        db()->execute("UPDATE plugin_status SET enabled = 1 WHERE appid = ? AND plugin_name = ?", [$appid, '自定义API']);
+        return [true, '已启用'];
+    } catch (Throwable $e) {
+        return [false, '启用失败：' . $e->getMessage()];
+    }
 }

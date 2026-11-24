@@ -824,6 +824,87 @@ switch ($action) {
         ]);
         break;
 
+    // ==================== 运行状态 / 自检 ====================
+    case 'customapi_status':
+        $state = customapi插件状态();
+        $bots  = [];
+        foreach ((array)getBots() as $b) {
+            $bots[] = [
+                'appid'    => (string)$b['appid'],
+                'nickname' => (string)($b['nickname'] ?? ''),
+            ];
+        }
+        $logs = [];
+        foreach (customapi最近日志(8) as $row) {
+            $logs[] = [
+                'time'     => (string)($row['created_at'] ?? ''),
+                'name'     => (string)($row['api_name'] ?? ''),
+                'http'     => (int)($row['http_code'] ?? 0),
+                'ms'       => (int)($row['elapsed_ms'] ?? 0),
+                'sent'     => (int)($row['sent'] ?? 0),
+                'errors'   => (string)($row['errors'] ?? ''),
+                'appid'    => (string)($row['appid'] ?? ''),
+            ];
+        }
+        // 被显式禁用的机器人（plugin_status.enabled = 0）
+        $disabled = [];
+        try {
+            foreach ((array)db()->fetchAll("SELECT appid FROM plugin_status WHERE plugin_name = ? AND enabled = 0", ['自定义API']) as $row) {
+                $disabled[] = (string)$row['appid'];
+            }
+        } catch (Throwable $e) {
+        }
+        json_response([
+            'success' => true,
+            'data'    => [
+                'plugin'   => $state,
+                'count'    => count(customapi列表(true)),
+                'total'    => count(customapi列表(false)),
+                'logs'     => $logs,
+                'bots'     => $bots,
+                'disabled' => $disabled,
+            ],
+        ]);
+        break;
+
+    case 'customapi_repair':
+        list($ok, $msg) = customapi确保插件文件(true);
+        后台操作记录('重建自定义API插件文件', $ok ? '成功' : $msg);
+        json_response(['success' => (bool)$ok, 'message' => $msg, 'plugin' => customapi插件状态()]);
+        break;
+
+    case 'customapi_enable':
+        $appid = (string)($_POST['appid'] ?? '');
+        list($ok, $msg) = customapi插件启用($appid);
+        if ($ok) 后台操作记录('启用自定义API插件', $appid);
+        json_response(['success' => (bool)$ok, 'message' => $msg]);
+        break;
+
+    case 'customapi_match':
+        $text = (string)($_POST['text'] ?? '');
+        if (trim($text) === '') {
+            json_response(['success' => false, 'message' => '请输入要测试的指令']);
+        }
+        $clean = customapi清洗消息($text);
+        list($api, $args) = customapi匹配($clean);
+        json_response([
+            'success' => true,
+            'data'    => [
+                'input'   => $text,
+                'clean'   => $clean,
+                'hit'     => $api ? [
+                    'id'         => (int)$api['id'],
+                    'name'       => (string)$api['name'],
+                    'trigger'    => (string)$api['trigger'],
+                    'match_mode' => (string)$api['match_mode'],
+                    'reply_type' => (string)$api['reply_type'],
+                    'args'       => (string)($args['全部'] ?? ''),
+                ] : null,
+                'enabled' => count(customapi列表(true)),
+            ],
+        ]);
+        break;
+
     // ==================== 代发网关鉴权 (relay.php) ====================
     case 'relay_auth_get':
         // 查看代发签名密钥与开关状态 (密钥用于外部脚本计算 HMAC-SHA256 签名)

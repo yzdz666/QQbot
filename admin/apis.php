@@ -11,23 +11,43 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
 
 <style>
 .ca-modal { width: 900px; max-width: 97%; max-height: 92vh; }
+.ca-modal .modal-header { flex-wrap: wrap; gap: 8px; }
+.ca-modal-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
+.ca-modal-tools #caTpl { height: 28px; font-size: 11.5px; width: auto; max-width: 100%; min-width: 0; }
+@media (max-width: 560px) {
+  /* 窄屏：标题独占一行，模板下拉与关闭按钮换到下一行，标题不再被挤成竖排 */
+  .ca-modal .modal-header { position: relative; padding-right: 34px; }
+  .ca-modal-tools { flex: 1 1 100%; margin-left: 0; }
+  .ca-modal-tools #caTpl { flex: 1 1 auto; width: 100%; }
+  .ca-modal .modal-close { position: absolute; top: 8px; right: 8px; }
+}
 .ca-intro { border-left: 2px solid var(--ink); }
-.ca-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
-.ca-step { padding: 2px 18px; border-right: 1px solid var(--line); }
+.ca-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+.ca-step { padding: 2px 18px; border-right: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 .ca-step:last-child { border-right: 0; }
 .ca-step b { display: block; font-size: 12.5px; margin-bottom: 5px; letter-spacing: -.01em; }
 .ca-step span { display: block; font-size: 11.5px; line-height: 1.65; color: var(--ink-3); }
-.ca-step em { font-style: normal; font-family: var(--mono); font-size: 11px; background: var(--surface-3); padding: 1px 4px; border-radius: 2px; }
+.ca-step em { font-style: normal; font-family: var(--mono); font-size: 11px; background: var(--surface-3); padding: 1px 4px; border-radius: 2px; overflow-wrap: anywhere; word-break: break-word; }
 @media (max-width: 860px) {
-  .ca-steps { grid-template-columns: 1fr 1fr; }
+  .ca-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ca-step { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 12px; }
   .ca-step:nth-child(odd) { border-right: 1px solid var(--line); }
   .ca-step:nth-child(n+3) { border-bottom: 0; }
 }
-.ca-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  /* 窄屏单列：手机字体放大时两列会把卡片撑出屏幕 */
+  .ca-steps { grid-template-columns: minmax(0, 1fr); }
+  .ca-step { border-right: 0 !important; border-bottom: 1px solid var(--line); padding: 11px 12px; }
+  .ca-step:last-child { border-bottom: 0; }
+}
+.ca-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 .ca-toolbar .form-control { height: 32px; font-size: 12.5px; }
-.ca-toolbar #caSearch { width: 220px; }
-.ca-toolbar #caCat { width: 140px; }
+.ca-toolbar #caSearch { width: auto; flex: 1 1 180px; min-width: 0; }
+.ca-toolbar #caCat { width: auto; flex: 0 1 150px; min-width: 110px; }
+@media (max-width: 560px) {
+  .ca-toolbar { width: 100%; }
+  .ca-toolbar #caSearch, .ca-toolbar #caCat { flex: 1 1 100%; width: 100%; }
+}
 .ca-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .ca-item:last-child { border-bottom: 0; }
 .ca-item:hover { background: #f6f6f4; }
@@ -37,8 +57,33 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
 .ca-item-title strong { font-size: 13px; font-weight: 620; letter-spacing: -.01em; }
 .ca-item-desc { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; line-height: 1.6; }
 .ca-item-meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 7px; font-size: 11px; color: var(--ink-2); }
-.ca-item-meta code { font-size: 10.5px; background: var(--surface-3); padding: 1px 4px; border-radius: 2px; color: var(--ink-2); }
+.ca-item-meta code { font-size: 10.5px; background: var(--surface-3); padding: 1px 4px; border-radius: 2px; color: var(--ink-2); word-break: break-all; }
 .ca-item-side { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+@media (max-width: 560px) {
+  .ca-item { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
+  .ca-item-side { width: 100%; justify-content: flex-end; border-top: 1px dashed var(--line); padding-top: 9px; }
+}
+
+/* 运行状态 / 自检 */
+.ca-health { border-left: 2px solid var(--ink); }
+.ca-health-body { padding: 11px 16px 12px; }
+.ca-health-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 3px 0; font-size: 12px; color: var(--ink-2); }
+.ca-health-row b { font-weight: 600; color: var(--ink); }
+.ca-health-row .btn { margin-left: 2px; }
+.ca-health-row .form-control { height: 28px; font-size: 12px; max-width: 220px; }
+.ca-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); flex: 0 0 6px; }
+.ca-dot.ok { background: #14915b; }
+.ca-dot.warn { background: #c98700; }
+.ca-dot.bad { background: var(--danger); }
+.ca-health-test { display: flex; gap: 8px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ca-health-test .form-control { height: 32px; font-size: 12px; flex: 1 1 auto; min-width: 0; }
+.ca-health-out { display: none; margin-top: 8px; font-size: 11.5px; line-height: 1.7; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); padding: 8px 10px; border-radius: 2px; }
+.ca-health-out code { font-size: 10.5px; background: var(--surface-3); padding: 1px 4px; }
+@media (max-width: 560px) {
+  .ca-health-test { flex-wrap: wrap; }
+  .ca-health-test .form-control { flex: 1 1 100%; width: 100%; }
+  .ca-health-test .btn { flex: 0 0 auto; }
+}
 .ca-sec { margin: 0 0 6px; padding: 18px 0 8px; font-size: 12px; font-weight: 650; letter-spacing: .02em; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ca-sec:first-child { padding-top: 0; }
 .ca-sec small { font-weight: 400; color: var(--ink-3); font-size: 11px; }
@@ -76,6 +121,35 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
   <div class="actions">
     <button type="button" class="btn btn-outline" onclick="openEditor(0, true)">从模板新建</button>
     <button type="button" class="btn btn-primary" onclick="openEditor(0)">+ 新建 API</button>
+  </div>
+</div>
+
+<div class="card mb-3 ca-health">
+  <div class="card-body ca-health-body">
+    <div class="ca-health-row">
+      <span class="ca-dot" id="caDotFile"></span>
+      <span>插件文件</span>
+      <b id="caFileState">检测中…</b>
+      <button type="button" class="btn btn-outline btn-sm" id="caRepairBtn" style="display:none;" onclick="caRepair()">重建插件文件</button>
+    </div>
+    <div class="ca-health-row">
+      <span class="ca-dot" id="caDotBot"></span>
+      <span>机器人触发</span>
+      <b id="caBotState">检测中…</b>
+      <select class="form-control" id="caBotSel" style="display:none;" aria-label="选择机器人"></select>
+      <button type="button" class="btn btn-outline btn-sm" id="caEnableBtn" style="display:none;" onclick="caEnable()">启用</button>
+    </div>
+    <div class="ca-health-row">
+      <span class="ca-dot" id="caDotLog"></span>
+      <span>最近调用</span>
+      <b id="caLastLog">暂无记录</b>
+    </div>
+    <div class="ca-health-test">
+      <input type="text" class="form-control" id="caMatchText" placeholder="输入一句话，测试会命中哪条 API，例如：一言">
+      <button type="button" class="btn btn-primary btn-sm" onclick="caMatchTest()">测试命中</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="loadHealth()">刷新状态</button>
+    </div>
+    <div class="ca-health-out" id="caMatchOut"></div>
   </div>
 </div>
 
@@ -122,12 +196,12 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
   <div class="modal ca-modal" role="dialog" aria-modal="true" aria-label="编辑自定义 API">
     <div class="modal-header">
       <h3 id="caModalTitle">新建 API</h3>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <select class="form-control" id="caTpl" style="height:28px; font-size:11.5px; width:auto; display:none;" onchange="applyTemplate(this.value)">
+      <div class="ca-modal-tools">
+        <select class="form-control" id="caTpl" style="display:none;" onchange="applyTemplate(this.value)">
           <option value="">套用示例模板…</option>
-          <option value="hitokoto">示例：一言（GET + 纯文本）</option>
-          <option value="json">结构：GET + JSON 取字段</option>
-          <option value="post">结构：POST JSON + 取字段</option>
+          <option value="hitokoto">示例：一言（GET 文本）</option>
+          <option value="json">结构：GET + JSON</option>
+          <option value="post">结构：POST JSON</option>
         </select>
         <button type="button" class="modal-close" onclick="closeEditor()" aria-label="关闭">&times;</button>
       </div>
@@ -1004,7 +1078,134 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
+// ==================== 运行状态 ====================
+var CA_HEALTH = null;
+
+function caHealthMsg(text, ok) {
+    var out = document.getElementById('caMatchOut');
+    if (!out) return;
+    out.style.display = 'block';
+    out.style.color = ok ? '' : 'var(--danger)';
+    out.textContent = text;
+}
+
+function loadHealth() {
+    caCall('customapi_status', {}, function (res) {
+        if (!res || !res.success || !res.data) return;
+        var d = res.data, p = d.plugin || {};
+        CA_HEALTH = d;
+
+        var fileState = document.getElementById('caFileState');
+        var dotFile = document.getElementById('caDotFile');
+        if (p.exists) {
+            fileState.textContent = '已安装' + (p.bytes ? '（' + Math.max(1, Math.round(p.bytes / 1024)) + ' KB）' : '');
+            dotFile.className = 'ca-dot ok';
+        } else {
+            fileState.textContent = '缺失，机器人不会触发';
+            dotFile.className = 'ca-dot bad';
+        }
+        document.getElementById('caRepairBtn').style.display = p.exists ? 'none' : '';
+
+        var bots = d.bots || [], disabled = d.disabled || [];
+        var botState = document.getElementById('caBotState');
+        var dotBot = document.getElementById('caDotBot');
+        var sel = document.getElementById('caBotSel');
+        var btn = document.getElementById('caEnableBtn');
+        if (!bots.length) {
+            botState.textContent = '还没有添加机器人';
+            dotBot.className = 'ca-dot warn';
+            sel.style.display = 'none';
+            btn.style.display = 'none';
+        } else {
+            var allOff = bots.every(function (b) { return disabled.indexOf(b.appid) >= 0; });
+            var someOff = disabled.length > 0;
+            if (allOff) {
+                botState.textContent = '插件被禁用';
+                dotBot.className = 'ca-dot bad';
+            } else if (someOff) {
+                botState.textContent = '部分机器人已禁用';
+                dotBot.className = 'ca-dot warn';
+            } else {
+                botState.textContent = '正常';
+                dotBot.className = 'ca-dot ok';
+            }
+            sel.style.display = (allOff || someOff) ? '' : 'none';
+            btn.style.display = (allOff || someOff) ? '' : 'none';
+            sel.innerHTML = bots.map(function (b) {
+                var label = b.nickname ? b.appid + '（' + b.nickname + '）' : b.appid;
+                return '<option value="' + caEsc(b.appid) + '">' + caEsc(label) + '</option>';
+            }).join('');
+        }
+
+        var logs = d.logs || [];
+        var logEl = document.getElementById('caLastLog');
+        var dotLog = document.getElementById('caDotLog');
+        if (!logs.length) {
+            logEl.textContent = '暂无记录（在群里发一次指令后会显示在这里）';
+            dotLog.className = 'ca-dot';
+        } else {
+            var l = logs[0];
+            var ok = Number(l.sent) > 0;
+            logEl.textContent = l.time + ' · ' + l.name + ' · ' + (ok ? '已发送' : '未发送') +
+                (l.errors ? '（' + l.errors.slice(0, 60) + '）' : '');
+            dotLog.className = 'ca-dot ' + (ok ? 'ok' : 'bad');
+        }
+    });
+}
+
+function caRepair() {
+    var btn = document.getElementById('caRepairBtn');
+    btn.disabled = true;
+    btn.textContent = '重建中…';
+    caCall('customapi_repair', {}, function (res) {
+        btn.disabled = false;
+        btn.textContent = '重建插件文件';
+        caHealthMsg(res.message || '已处理', !!res.success);
+        loadHealth();
+    });
+}
+
+function caEnable() {
+    var appid = caVal('caBotSel');
+    if (!appid) { caHealthMsg('请先选择机器人', false); return; }
+    caCall('customapi_enable', { appid: appid }, function (res) {
+        caHealthMsg(res.message || '已处理', !!res.success);
+        loadHealth();
+    });
+}
+
+function caMatchTest() {
+    var text = caVal('caMatchText');
+    if (!text) {
+        caHealthMsg('请先输入一句话，例如：一言', false);
+        document.getElementById('caMatchText').focus();
+        return;
+    }
+    caHealthMsg('匹配中…', true);
+    caCall('customapi_match', { text: text }, function (res) {
+        if (!res.success) { caHealthMsg(res.message || '测试失败', false); return; }
+        var d = res.data;
+        var html = '清洗后：<code>' + caEsc(d.clean) + '</code><br>';
+        if (d.hit) {
+            html += '命中 <b>' + caEsc(d.hit.name) + '</b>（' + caEsc(d.hit.trigger) + '）→ ' + caEsc(replyLabel(d.hit.reply_type));
+            if (d.hit.args) html += '，参数：<code>' + caEsc(d.hit.args) + '</code>';
+        } else if (!d.enabled) {
+            html += '当前没有启用的 API。';
+        } else {
+            html += '没有命中任何 API。检查触发词是否完全一致，或把匹配方式改成「开头匹配」。';
+        }
+        if (CA_HEALTH && CA_HEALTH.plugin && !CA_HEALTH.plugin.exists) {
+            html += '<br><span style="color:var(--danger)">插件文件缺失，需要先点上方「重建插件文件」，否则机器人不会触发。</span>';
+        }
+        var out = document.getElementById('caMatchOut');
+        out.style.display = 'block';
+        out.style.color = '';
+        out.innerHTML = html;
+    });
+}
+
 loadList();
+loadHealth();
 </script>
 
 <?php require_once('footer.php'); ?>

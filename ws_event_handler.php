@@ -75,10 +75,8 @@ switch ($eventType) {
     case 'GROUP_MESSAGE_CREATE':
         define('消息来源', '群聊');
         define('消息ID', $d['id'] ?? '');
-        // 内容清洗: 去首尾空白 + 去@前缀 (参照 Python MessageUtils.sanitize_content)
-        $content = trim($d['content'] ?? '', '/ ');
-        $content = preg_replace('/<@!?[A-Za-z0-9]+>/', '', $content);
-        $content = trim($content);
+        // 内容清洗: 去 @ 提及 + 首尾空白 + 指令斜杠（含全角，见 清理消息内容）
+        $content = 清理消息内容($d['content'] ?? '');
         define('消息', $content);
         // 参照 Python base.py: group_openid 优先, group_id 兜底
         define('来源', $d['group_openid'] ?? ($d['group_id'] ?? ''));
@@ -88,7 +86,7 @@ switch ($eventType) {
     case 'C2C_MESSAGE_CREATE':
         define('消息来源', '私聊');
         define('消息ID', $d['id'] ?? '');
-        $content = trim($d['content'] ?? '', '/ ');
+        $content = 清理消息内容($d['content'] ?? '');
         define('消息', $content);
         define('来源', $d['author']['user_openid'] ?? ($d['author']['id'] ?? ''));
         define('用户', $d['author']['user_openid'] ?? ($d['author']['id'] ?? ''));
@@ -229,7 +227,7 @@ switch ($eventType) {
         // 频道消息 (私域)
         define('消息来源', '频道');
         define('消息ID', $d['id'] ?? '');
-        $content = trim($d['content'] ?? '', '/ ');
+        $content = 清理消息内容($d['content'] ?? '');
         define('消息', $content);
         define('来源', $d['channel_id'] ?? ($d['guild_id'] ?? ''));
         define('用户', $d['author']['id'] ?? '');
@@ -239,7 +237,7 @@ switch ($eventType) {
         // 频道私信
         define('消息来源', '频道私信');
         define('消息ID', $d['id'] ?? '');
-        $content = trim($d['content'] ?? '', '/ ');
+        $content = 清理消息内容($d['content'] ?? '');
         define('消息', $content);
         define('来源', $d['guild_id'] ?? ($d['channel_id'] ?? ''));
         define('用户', $d['author']['id'] ?? '');
@@ -652,6 +650,12 @@ if (is_dir($pluginDir)) {
             }
         }
     }
+}
+
+// ==================== 自定义 API 内核兜底 ====================
+// 插件文件缺失或加载失败时，仍能按后台配置触发；插件已加载时内部会跳过
+if (function_exists('customapi核心兜底')) {
+    customapi核心兜底();
 }
 
 // ==================== 互动回调确认 (在插件执行完毕后调用) ====================

@@ -353,7 +353,7 @@ ok('预览是原始 JSON', strpos($probe['preview'], '"code"') !== false);
 $probeText = customapi探测(customapi规范化(['url' => $base . '/text']), []);
 ok('纯文本识别为 text', $probeText['type'] === 'text');
 
-// ==================== 8. 前台运行（权限 / 范围 / 限频 / 发送） ====================
+// ==================== 8. 前台运行（权限 / 范围 / 发送） ====================
 echo "\n== 8. 前台运行 ==\n";
 $runApi = customapi规范化([
     'name' => '运行', 'trigger' => '运行', 'url' => $base . '/json',
@@ -368,7 +368,7 @@ ok('发送内容用了模板', $GLOBALS['__sent'][0]['text'] === '回复：今�
 
 $GLOBALS['__sent'] = [];
 customapi运行($runApi, []);
-ok('2 秒内重复触发被限频', count($GLOBALS['__sent']) === 0);
+ok('连续两次指令都会回复（不再限频吞消息）', count($GLOBALS['__sent']) === 1);
 
 $GLOBALS['__admin'] = false;
 $adminApi = customapi规范化($runApi + []);
@@ -520,6 +520,58 @@ $noneApi = customapi规范化([
 $GLOBALS['__sent'] = [];
 $send = customapi发送($noneApi, ['ok' => true, 'vars' => $vars, 'text' => '结果']);
 ok('不发送模式不发消息', count($GLOBALS['__sent']) === 0 && $send['sent'] === 0);
+
+// ==================== 12. 消息清洗 / 入口兜底 / 调用记录 ====================
+echo "\n== 12. 消息清洗与入口兜底 ==\n";
+
+ok('@机器人 + 斜杠能洗净', customapi清洗消息('<@!123456> /一言') === '一言');
+ok('@机器人 + 全角斜杠能洗净', customapi清洗消息('<@!123456> ／来句话') === '来句话');
+ok('全角空格能洗净', customapi清洗消息("　一言　") === '一言');
+ok('零宽字符能洗净', customapi清洗消息("\u{200B}一言") === '一言');
+ok('纯文本 @昵称 能洗净', customapi清洗消息('@小明 一言') === '一言');
+ok('纯文本 @昵称 + 斜杠能洗净', customapi清洗消息('@机器人 /一言') === '一言');
+ok('正文里的斜杠不受影响', customapi清洗消息('https://a.com/x/y') === 'https://a.com/x/y');
+
+ok('英文指令不区分大小写', customapi匹配单个(['match_mode' => 'exact'], 'Weather', 'weather') !== null);
+$pm = customapi匹配单个(['match_mode' => 'prefix'], '天气', '天气 北京');
+ok('前缀匹配能取到参数', is_array($pm) && $pm['全部'] === '北京' && $pm['列表'] === ['北京']);
+
+list($okSave, $fallbackId) = customapi保存([
+    'name'           => '兜底测试',
+    'enabled'        => 1,
+    'trigger_type'   => 'message',
+    'trigger'        => '天气',
+    'match_mode'     => 'prefix',
+    'scope'          => 'all',
+    'permission'     => 'all',
+    'method'         => 'GET',
+    'url'            => $base . '/json',
+    'timeout'        => 5,
+    'parse'          => 'json',
+    'extracts'       => json_encode([['name' => '结果', 'path' => 'data.text']]),
+    'reply_type'     => 'text',
+    'reply_template' => '兜底：{结果}',
+]);
+ok('兜底用 API 保存成功', $okSave === true);
+
+$GLOBALS['__sent'] = [];
+$handled = customapi处理当前请求();
+$texts = array_column($GLOBALS['__sent'], 'text');
+ok('内核兜底能命中并回复',
+    $handled === true && in_array('兜底：今天晴，18 度', $texts, true),
+    'handled=' . var_export($handled, true) . ' sent=' . json_encode($GLOBALS['__sent'], JSON_UNESCAPED_UNICODE));
+
+$GLOBALS['__sent'] = [];
+$again = customapi处理当前请求();
+ok('同一请求只处理一次，不会重复回复', $again === false && count($GLOBALS['__sent']) === 0);
+
+$logs = customapi最近日志(5);
+ok('写入调用记录', count($logs) > 0 && $logs[0]['api_name'] === '兜底测试');
+ok('调用记录含发送条数', (int)$logs[0]['sent'] === 1);
+
+$state = customapi插件状态();
+ok('插件文件状态可读', isset($state['exists']) && $state['exists'] === true);
+ok('重建源码包含统一入口', strpos(customapi插件源码(), 'customapi处理当前请求') !== false);
 
 echo "\n==================== 结果 ====================\n";
 echo "通过 {$passCount} 项，失败 {$failCount} 项\n";

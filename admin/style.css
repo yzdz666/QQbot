@@ -462,6 +462,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .card-header h3 {
   font-size: 13px;
@@ -470,6 +471,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 /* 卡片标题前缀短横线 */
 .card-header h3::before {
@@ -1459,6 +1463,11 @@ body.nav-open { overflow: hidden; }
   .card-body { padding: 14px; }
   .card-header { padding: 11px 14px; }
   .card-header h3 { font-size: 12.5px; }
+  /* 插件页搜索框：窄屏独占一行，避免把标题挤成竖排或撑出屏幕 */
+  .plugin-search { flex: 1 1 100%; margin-left: 0 !important; }
+  .plugin-search .form-control { width: 100% !important; }
+  /* 机器人名在标题里会把「插件列表（共 N 个）」挤成竖排，窄屏直接隐藏（上方选择框已显示） */
+  .plugin-bot-label { display: none !important; }
   .table { font-size: 12px; }
   .table-scroll-hint { display: inline; }
   .hide-sm { display: none; }

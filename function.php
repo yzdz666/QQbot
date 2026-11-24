@@ -31,6 +31,31 @@ if (!function_exists('mb_strtolower')) {
     }
 }
 
+/**
+ * 统一清洗消息内容（所有插件共用）
+ *
+ * 处理三类实际会遇到的情况：
+ *  1. `<@!123456> /一言`  —— @ 提及在最前面，旧逻辑先 trim('/ ') 再去提及，
+ *     斜杠会残留，导致按「一言」配置的指令匹配不到；
+ *  2. 中文输入法打出的全角斜杠 `／`、全角空格 U+3000；
+ *  3. 复制粘贴带入的零宽字符。
+ *
+ * 只在首尾裁剪指令前缀符，正文里的斜杠（URL 等）不受影响。
+ */
+function 清理消息内容($content) {
+    $content = (string)$content;
+    if ($content === '') return '';
+
+    // 零宽字符（复制粘贴、部分客户端会带）
+    $content = preg_replace('/[\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $content);
+    // <@!123> / <@123> 形式的 @ 提及
+    $content = preg_replace('/<@!?[A-Za-z0-9_\-]+>/', '', $content);
+    // 首尾：空白（含全角空格、不间断空格）与指令斜杠（含全角）
+    $content = preg_replace('/^[\s\x{3000}\x{00A0}\/／]+|[\s\x{3000}\x{00A0}\/／]+$/u', '', $content);
+
+    return (string)$content;
+}
+
 // 引入数据库层
 require_once(APP_ROOT . 'db.php');
 

@@ -141,10 +141,8 @@ function Main($raw) {
         case "GROUP_MESSAGE_CREATE":
             define("消息来源", "群聊");
             define("消息ID", $raw["d"]["id"] ?? '');
-            // 内容清洗: 去首尾空白 + 去/前缀 + 去@前缀 (参照 Python MessageUtils.sanitize_content)
-            $content = trim($raw["d"]["content"] ?? '', "/ ");
-            $content = preg_replace('/<@!?[A-Za-z0-9]+>/', '', $content);
-            $content = trim($content);
+            // 内容清洗: 去 @ 提及 + 首尾空白 + 指令斜杠（含全角，见 清理消息内容）
+            $content = 清理消息内容($raw["d"]["content"] ?? '');
             define("消息", $content);
             // 参照 Python base.py + ws_event_handler.php: group_openid 优先, group_id 兜底
             define("来源", $raw["d"]["group_openid"] ?? ($raw["d"]["group_id"] ?? ''));
@@ -155,7 +153,7 @@ function Main($raw) {
         case "C2C_MESSAGE_CREATE":
             define("消息来源", "私聊");
             define("消息ID", $raw["d"]["id"] ?? '');
-            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            $content = 清理消息内容($raw["d"]["content"] ?? '');
             define("消息", $content);
             define("来源", $raw["d"]["author"]["user_openid"] ?? ($raw["d"]["author"]["id"] ?? ''));
             define("用户", $raw["d"]["author"]["user_openid"] ?? ($raw["d"]["author"]["id"] ?? ''));
@@ -286,9 +284,7 @@ function Main($raw) {
             // 频道@消息 (公域)
             define("消息来源", "频道");
             define("消息ID", $raw["d"]["id"] ?? '');
-            $content = trim($raw["d"]["content"] ?? '', "/ ");
-            $content = preg_replace('/<@!?[A-Za-z0-9]+>/', '', $content);
-            $content = trim($content);
+            $content = 清理消息内容($raw["d"]["content"] ?? '');
             define("消息", $content);
             define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["guild_id"] ?? ''));
             define("用户", $raw["d"]["author"]["id"] ?? ($raw["d"]["author"]["member_openid"] ?? ''));
@@ -298,7 +294,7 @@ function Main($raw) {
             // 频道消息 (私域)
             define("消息来源", "频道");
             define("消息ID", $raw["d"]["id"] ?? '');
-            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            $content = 清理消息内容($raw["d"]["content"] ?? '');
             define("消息", $content);
             define("来源", $raw["d"]["channel_id"] ?? ($raw["d"]["guild_id"] ?? ''));
             define("用户", $raw["d"]["author"]["id"] ?? '');
@@ -308,7 +304,7 @@ function Main($raw) {
             // 频道私信
             define("消息来源", "频道私信");
             define("消息ID", $raw["d"]["id"] ?? '');
-            $content = trim($raw["d"]["content"] ?? '', "/ ");
+            $content = 清理消息内容($raw["d"]["content"] ?? '');
             define("消息", $content);
             define("来源", $raw["d"]["guild_id"] ?? ($raw["d"]["channel_id"] ?? ''));
             define("用户", $raw["d"]["author"]["id"] ?? '');
@@ -626,6 +622,12 @@ function Main($raw) {
     //       因为 ACK 会"消费" interaction_id, 导致后续消息API的 event_id 失效
     //       参照 ElainaBot_v2: ACK 由框架在插件分发结束后统一调用, 而非提前调用
     load_plugin();
+
+    // 自定义 API 内核兜底：插件文件缺失或加载失败时，仍能按后台配置触发
+    // （插件已正常加载时，内部标记会让这里直接跳过，不会重复回复）
+    if (function_exists('customapi核心兜底')) {
+        customapi核心兜底();
+    }
 
     // 互动回调确认: 在插件执行完毕后调用, 确保消息先通过 event_id 发送成功
     // 官方文档: 收到 INTERACTION_CREATE 事件后需调用 PUT /interactions/{interaction_id} 回应

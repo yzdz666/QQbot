@@ -112,16 +112,16 @@ function formatFileSize($bytes)
 <div class="card">
   <div class="card-header">
     <h3>
-      插件列表（共 <?= count($plugins) ?> 个<span id="pluginVisibleCount"></span>）
+      <span class="card-title-text">插件列表（共 <?= count($plugins) ?> 个<span id="pluginVisibleCount"></span>）</span>
       <?php if ($selectedBot): ?>
-        <span class="text-muted" style="font-size:13px; font-weight:400; margin-left:4px;">
+        <span class="text-muted plugin-bot-label" style="font-size:13px; font-weight:400; margin-left:4px;">
           · 当前机器人：<?= htmlspecialchars($selectedBot['appid']) ?>
           <?php if (!empty($selectedBot['nickname'])): ?>（<?= htmlspecialchars($selectedBot['nickname']) ?>）<?php endif; ?>
         </span>
       <?php endif; ?>
     </h3>
     <?php if (count($plugins) > 8): ?>
-    <div style="margin-left:auto;">
+    <div class="plugin-search" style="margin-left:auto;">
       <input type="text" id="pluginSearch" class="form-control" placeholder="搜索插件名..." style="width:220px; display:inline-block; height:34px;" oninput="filterPluginRows(this.value)">
     </div>
     <?php endif; ?>
