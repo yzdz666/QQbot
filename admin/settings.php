@@ -16,7 +16,7 @@ $silkCfg = [
     'silk_provider'        => db()->getSetting('silk_provider', 'oiapi'),
     'silk_oiapi_base'      => db()->getSetting('silk_oiapi_base', 'https://oiapi.net/api/Mp32Silk'),
     'silk_wb_base'         => db()->getSetting('silk_wb_base', 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url'),
-    'silk_wb_sharecode'    => db()->getSetting('silk_wb_sharecode', ''),
+    'silk_wb_sharecode'    => db()->getSetting('silk_wb_sharecode', 'YNB7MWHTCB'),
     'silk_wb_sample_rate'  => db()->getSetting('silk_wb_sample_rate', '24000'),
     'silk_wb_frame_ms'     => db()->getSetting('silk_wb_frame_ms', '20'),
     'silk_wb_complexity'   => db()->getSetting('silk_wb_complexity', '1'),
@@ -249,7 +249,7 @@ pre#wsLogBox {
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <div class="form-group" style="flex:1 1 180px;">
             <label for="silkWbSharecode">访问码 sharecode</label>
-            <input type="text" id="silkWbSharecode" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_sharecode']) ?>" placeholder="留空则不发送">
+            <input type="text" id="silkWbSharecode" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_sharecode']) ?>" placeholder="示例：YNB7MWHTCB">
           </div>
           <div class="form-group" style="flex:1 1 120px;">
             <label for="silkWbSampleRate">采样率</label>

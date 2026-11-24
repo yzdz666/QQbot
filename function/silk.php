@@ -113,7 +113,7 @@ function silk_workbuddy($link) {
         'frame_ms'    => silk设置('silk_wb_frame_ms', '20'),
         'complexity'  => silk设置('silk_wb_complexity', '1'),
     ];
-    $sc = trim(silk设置('silk_wb_sharecode', ''));
+    $sc = trim(silk设置('silk_wb_sharecode', 'YNB7MWHTCB'));
     if ($sc !== '') $q['sharecode'] = $sc;
 
     $url = $base . (strpos($base, '?') !== false ? '&' : '?') . http_build_query($q);
