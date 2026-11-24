@@ -12,16 +12,18 @@ if (!$aiConfig) {
 }
 
 // ==================== 加载语音转 Silk 配置 ====================
+// WorkBuddy 部分取「生效值」：库里留空时自动套用推荐配置（访问码 / 防盗链 / 采样率等）
+$silkWb = silk_wb生效配置();
 $silkCfg = [
     'silk_provider'        => db()->getSetting('silk_provider', 'oiapi'),
     'silk_oiapi_base'      => db()->getSetting('silk_oiapi_base', 'https://oiapi.net/api/Mp32Silk'),
-    'silk_wb_base'         => db()->getSetting('silk_wb_base', 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url'),
-    'silk_wb_sharecode'    => db()->getSetting('silk_wb_sharecode', 'YNB7MWHTCB'),
-    'silk_wb_sample_rate'  => db()->getSetting('silk_wb_sample_rate', '24000'),
-    'silk_wb_frame_ms'     => db()->getSetting('silk_wb_frame_ms', '20'),
-    'silk_wb_complexity'   => db()->getSetting('silk_wb_complexity', '1'),
-    'silk_wb_tencent'      => db()->getSetting('silk_wb_tencent', '1'),
-    'silk_wb_timeout'      => db()->getSetting('silk_wb_timeout', '90'),
+    'silk_wb_base'         => $silkWb['base'],
+    'silk_wb_sharecode'    => $silkWb['sharecode'],
+    'silk_wb_sample_rate'  => $silkWb['sample_rate'],
+    'silk_wb_frame_ms'     => $silkWb['frame_ms'],
+    'silk_wb_complexity'   => $silkWb['complexity'],
+    'silk_wb_tencent'      => $silkWb['tencent'],
+    'silk_wb_timeout'      => (string)$silkWb['timeout'],
     'silk_custom_url'      => db()->getSetting('silk_custom_url', ''),
     'silk_custom_method'   => db()->getSetting('silk_custom_method', 'GET'),
     'silk_custom_headers'  => db()->getSetting('silk_custom_headers', ''),
@@ -239,6 +241,9 @@ pre#wsLogBox {
 
       <!-- WorkBuddy 参数 -->
       <div id="silkWbBox">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+          <button type="button" class="btn btn-outline" style="font-size:12px; padding:4px 10px;" onclick="silkWb推荐()">填入推荐配置</button>
+        </div>
         <div class="form-group">
           <label for="silkWbBase">接口地址</label>
           <input type="text" id="silkWbBase" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_base']) ?>" placeholder="https://your-host/api/v1/convert/url">
@@ -250,6 +255,9 @@ pre#wsLogBox {
           <div class="form-group" style="flex:1 1 180px;">
             <label for="silkWbSharecode">访问码 sharecode</label>
             <input type="text" id="silkWbSharecode" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_sharecode']) ?>" placeholder="示例：YNB7MWHTCB">
+            <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+              留空时，示例部署会自动补默认访问码；自建部署留空则不发该参数。
+            </small>
           </div>
           <div class="form-group" style="flex:1 1 120px;">
             <label for="silkWbSampleRate">采样率</label>
@@ -673,6 +681,19 @@ function silkSwitch() {
     document.getElementById('silkCustomBox').style.display = (p === 'custom') ? '' : 'none';
     var badge = document.getElementById('silkProviderBadge');
     if (badge) badge.textContent = sel.options[sel.selectedIndex].text;
+}
+
+// 一键填回推荐值：示例地址 + 默认访问码 + 打开防盗链 + 标准参数
+function silkWb推荐() {
+    document.getElementById('silkWbBase').value = 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url';
+    document.getElementById('silkWbSharecode').value = 'YNB7MWHTCB';
+    document.getElementById('silkWbSampleRate').value = '24000';
+    document.getElementById('silkWbFrameMs').value = '20';
+    document.getElementById('silkWbComplexity').value = '1';
+    document.getElementById('silkWbTimeout').value = '90';
+    document.getElementById('silkWbTencent').checked = true;
+    document.getElementById('silkProvider').value = 'workbuddy';
+    silkSwitch();
 }
 
 function saveSilkConfig(event) {

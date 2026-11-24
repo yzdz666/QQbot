@@ -156,6 +156,42 @@ ok('frame_ms=20', ($q['frame_ms'] ?? '') === '20');
 ok('complexity=1', ($q['complexity'] ?? '') === '1');
 ok('sharecode 正确传递', ($q['sharecode'] ?? '') === 'SC123');
 
+// ---- 留空自动兜底（防盗链 + 访问码）----
+$def = silk_wb默认();
+$DB->s['silk_wb_base']   = $def['base'];
+$DB->s['silk_wb_sharecode'] = '';
+$c = silk_wb生效配置();
+ok('官方部署留空自动补访问码', $c['sharecode'] === $def['sharecode'], $c['sharecode']);
+$DB->s['silk_wb_tencent'] = '';
+ok('防盗链留空视为开启', silk_wb生效配置()['tencent'] === '1');
+$DB->s['silk_wb_tencent'] = '0';
+ok('显式 0 尊重用户关闭', silk_wb生效配置()['tencent'] === '0');
+$DB->s['silk_wb_tencent'] = '1';
+
+$DB->s['silk_wb_base'] = 'https://self.example.com/api/convert/url';
+ok('自建部署留空不发访问码', silk_wb生效配置()['sharecode'] === '');
+
+// 实际请求层面：空值也要带上 tencent=true
+$DB->s['silk_wb_base']      = $base . '/echo';
+$DB->s['silk_wb_sharecode'] = '';
+$DB->s['silk_wb_tencent']   = '';
+silk_workbuddy('https://example.com/f.mp3');
+$q2 = [];
+parse_str((string)parse_url($GLOBALS['__silk_http_last']['url'] ?? '', PHP_URL_QUERY), $q2);
+ok('空 tencent 实际发 true', ($q2['tencent'] ?? '') === 'true');
+ok('自建部署不带 sharecode', !isset($q2['sharecode']));
+
+$DB->s['silk_wb_sharecode'] = '';
+$DB->s['silk_wb_sample_rate'] = '';
+$DB->s['silk_wb_frame_ms'] = '';
+$DB->s['silk_wb_complexity'] = '';
+silk_workbuddy('https://example.com/g.mp3');
+$q3 = [];
+parse_str((string)parse_url($GLOBALS['__silk_http_last']['url'] ?? '', PHP_URL_QUERY), $q3);
+ok('空采样率回落 24000', ($q3['sample_rate'] ?? '') === '24000');
+ok('空帧长回落 20', ($q3['frame_ms'] ?? '') === '20');
+ok('空复杂度回落 1', ($q3['complexity'] ?? '') === '1');
+
 $DB->s['silk_wb_base'] = $base . '/json';
 ok('兼容 JSON 返回 URL 的部署', silk转换('https://example.com/b.mp3') === 'https://example.com/ok.silk');
 

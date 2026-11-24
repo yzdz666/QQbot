@@ -652,6 +652,30 @@ switch ($action) {
             'silk_custom_url', 'silk_custom_method', 'silk_custom_headers',
             'silk_custom_body', 'silk_custom_parse', 'silk_custom_field', 'silk_custom_timeout',
         ];
+
+        // WorkBuddy：留空的项自动补推荐值，避免「保存成功但转换 403」
+        if ($provider === 'workbuddy') {
+            $wbDef = silk_wb默认();
+            $base  = trim((string)($_POST['silk_wb_base'] ?? ''));
+            if ($base === '') $base = $wbDef['base'];
+            $_POST['silk_wb_base'] = $base;
+
+            // 访问码：官方示例部署留空即补默认值；自建部署保持留空
+            if (trim((string)($_POST['silk_wb_sharecode'] ?? '')) === '' && silk_是官方示例($base)) {
+                $_POST['silk_wb_sharecode'] = $wbDef['sharecode'];
+            }
+            // 防盗链：没提交或提交空值都按开启处理（显式 '0' 才关闭）
+            if (trim((string)($_POST['silk_wb_tencent'] ?? '')) === '') {
+                $_POST['silk_wb_tencent'] = '1';
+            }
+            // 其余数值项留空回落默认
+            foreach (['silk_wb_sample_rate' => $wbDef['sample_rate'],
+                      'silk_wb_frame_ms'    => $wbDef['frame_ms'],
+                      'silk_wb_complexity'  => $wbDef['complexity'],
+                      'silk_wb_timeout'     => $wbDef['timeout']] as $k => $dv) {
+                if (trim((string)($_POST[$k] ?? '')) === '') $_POST[$k] = (string)$dv;
+            }
+        }
         db()->setSetting('silk_provider', $provider);
         foreach ($fields as $k) {
             if (isset($_POST[$k])) db()->setSetting($k, trim((string)$_POST[$k]));

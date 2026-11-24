@@ -101,23 +101,75 @@ function silk_oiapi($link) {
     return is_string($u) ? $u : '';
 }
 
+/** WorkBuddy 推荐配置（后台留空时自动套用） */
+function silk_wb默认() {
+    return [
+        'base'        => 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url',
+        'sharecode'   => 'YNB7MWHTCB',
+        'sample_rate' => '24000',
+        'frame_ms'    => '20',
+        'complexity'  => '1',
+        'tencent'     => '1',
+        'timeout'     => '90',
+    ];
+}
+
+/** 是否官方示例部署（只有它才自动补示例访问码，自建部署留空就不发） */
+function silk_是官方示例($base) {
+    $h = strtolower((string)parse_url($base, PHP_URL_HOST));
+    return $h !== '' && strpos($h, 'workbuddy.host') !== false;
+}
+
+/** 空值回落到默认值的读取（数据库里存了空串也照样用默认） */
+function silk设置非空($key, $default) {
+    $v = trim(silk设置($key, ''));
+    return $v === '' ? $default : $v;
+}
+
+/**
+ * WorkBuddy 生效配置：把「留空」统一折算成实际会用的值。
+ * 后台展示、运行时请求都用这一份，避免界面显示留空、实际却发不出去。
+ */
+function silk_wb生效配置() {
+    $d    = silk_wb默认();
+    $base = silk设置非空('silk_wb_base', $d['base']);
+
+    // 访问码：留空时仅官方示例部署自动补默认值，自建部署尊重留空
+    $sc = trim(silk设置('silk_wb_sharecode', ''));
+    if ($sc === '' && silk_是官方示例($base)) $sc = $d['sharecode'];
+
+    // 防盗链：只有明确存成 '0' 才关闭，空值视为开启
+    $tencent = silk设置('silk_wb_tencent', '1') !== '0';
+
+    return [
+        'base'        => $base,
+        'sharecode'   => $sc,
+        'sample_rate' => silk设置非空('silk_wb_sample_rate', $d['sample_rate']),
+        'frame_ms'    => silk设置非空('silk_wb_frame_ms', $d['frame_ms']),
+        'complexity'  => silk设置非空('silk_wb_complexity', $d['complexity']),
+        'tencent'     => $tencent ? '1' : '0',
+        'timeout'     => (int)silk设置非空('silk_wb_timeout', $d['timeout']),
+    ];
+}
+
 /** WorkBuddy：成功直接返回 #!SILK_V3 二进制；失败返回 {ok:false,error:{...}} */
 function silk_workbuddy($link) {
-    $base = trim(silk设置('silk_wb_base', 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url'));
+    $cfg  = silk_wb生效配置();
+    $base = $cfg['base'];
     if ($base === '') return '';
 
     $q = [
         'url'         => $link,
-        'sample_rate' => silk设置('silk_wb_sample_rate', '24000'),
-        'tencent'     => silk设置('silk_wb_tencent', '1') === '1' ? 'true' : 'false',
-        'frame_ms'    => silk设置('silk_wb_frame_ms', '20'),
-        'complexity'  => silk设置('silk_wb_complexity', '1'),
+        'sample_rate' => $cfg['sample_rate'],
+        'tencent'     => $cfg['tencent'] === '1' ? 'true' : 'false',
+        'frame_ms'    => $cfg['frame_ms'],
+        'complexity'  => $cfg['complexity'],
     ];
-    $sc = trim(silk设置('silk_wb_sharecode', 'YNB7MWHTCB'));
+    $sc = $cfg['sharecode'];
     if ($sc !== '') $q['sharecode'] = $sc;
 
     $url = $base . (strpos($base, '?') !== false ? '&' : '?') . http_build_query($q);
-    $resp = silk_http($url, 'GET', [], '', (int)silk设置('silk_wb_timeout', '90'));
+    $resp = silk_http($url, 'GET', [], '', max(5, (int)$cfg['timeout']));
 
     if (silk是二进制($resp)) return $resp;
 
@@ -215,14 +267,23 @@ function silk测试($link) {
     $http = $GLOBALS['__silk_http_last'];
     if (is_array($http)) {
         unset($http['headers'], $http['body']);
+        // 访问码打了码再回传，避免截图 / 日志带出
+        if (!empty($http['url'])) {
+            $http['url'] = preg_replace('/([?&]sharecode=)[^&]*/i', '$1***', $http['url']);
+        }
     }
 
+    // 把实际生效的 WorkBuddy 关键项一并返回，方便确认「防盗链/访问码」是否真的带上了
+    $wb = silk_wb生效配置();
+
     return [
-        'provider'   => silk设置('silk_provider', 'oiapi'),
-        'elapsed_ms' => $ms,
-        'type'       => $out === '' ? 'empty' : ($isBin ? 'silk' : 'url'),
-        'bytes'      => strlen($out),
-        'url'        => $isBin ? '' : $out,
-        'http'       => $http,
+        'provider'      => silk设置('silk_provider', 'oiapi'),
+        'elapsed_ms'    => $ms,
+        'type'          => $out === '' ? 'empty' : ($isBin ? 'silk' : 'url'),
+        'bytes'         => strlen($out),
+        'url'           => $isBin ? '' : $out,
+        'http'          => $http,
+        'tencent'       => $wb['tencent'] === '1',
+        'sharecode_set' => $wb['sharecode'] !== '',
     ];
 }
