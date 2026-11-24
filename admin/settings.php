@@ -334,8 +334,9 @@ pre#wsLogBox {
         </div>
       </div>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:4px;">
         <button type="submit" class="btn btn-primary" id="silkSaveBtn">保存配置</button>
+        <span id="silkSaveMsg" role="status" aria-live="polite" style="font-size:13px; display:none;"></span>
       </div>
     </form>
 
@@ -696,6 +697,30 @@ function silkWb推荐() {
     silkSwitch();
 }
 
+// 页内提示：不依赖 alert（部分内嵌浏览器会拦截弹窗，看起来像「点了没反应」）
+var silkMsgTimer = null;
+function silkMsg(text, ok) {
+    var el = document.getElementById('silkSaveMsg');
+    if (!el) return;
+    el.textContent = (ok ? '✓ ' : '✕ ') + (text || '');
+    el.style.color = ok ? 'var(--ok)' : 'var(--danger)';
+    el.style.display = '';
+    if (silkMsgTimer) clearTimeout(silkMsgTimer);
+    silkMsgTimer = setTimeout(function() { el.style.display = 'none'; }, 4000);
+}
+
+// 保存成功后把「实际生效值」写回表单，避免界面留空让人以为没保存
+function silkWb应用(cfg) {
+    if (!cfg) return;
+    if (cfg.base != null)        document.getElementById('silkWbBase').value = cfg.base;
+    if (cfg.sharecode != null)   document.getElementById('silkWbSharecode').value = cfg.sharecode;
+    if (cfg.sample_rate != null) document.getElementById('silkWbSampleRate').value = cfg.sample_rate;
+    if (cfg.frame_ms != null)    document.getElementById('silkWbFrameMs').value = cfg.frame_ms;
+    if (cfg.complexity != null)  document.getElementById('silkWbComplexity').value = cfg.complexity;
+    if (cfg.timeout != null)     document.getElementById('silkWbTimeout').value = cfg.timeout;
+    if (cfg.tencent != null)     document.getElementById('silkWbTencent').checked = (cfg.tencent === '1');
+}
+
 function saveSilkConfig(event) {
     event.preventDefault();
     var btn = document.getElementById('silkSaveBtn');
@@ -723,11 +748,13 @@ function saveSilkConfig(event) {
     apiCall('save_silk_config', payload, function(res) {
         btn.disabled = false;
         btn.textContent = original;
-        silkSwitch();
         if (res.success) {
-            alert(res.message || '已保存');
+            // 回填生效值（访问码留空会被自动补上，这里同步显示）
+            silkWb应用(res.effective);
+            silkSwitch();
+            silkMsg(res.message || '已保存', true);
         } else {
-            alert(res.message || '保存失败');
+            silkMsg(res.message || '保存失败', false);
         }
     });
     return false;
@@ -737,8 +764,8 @@ function silkTest() {
     var url = document.getElementById('silkTestUrl').value.trim();
     var box = document.getElementById('silkTestResult');
     var btn = document.getElementById('silkTestBtn');
-    if (!url) { alert('先填一个音频直链'); return; }
-    if (!/^https?:\/\//i.test(url)) { alert('地址需要以 http:// 或 https:// 开头'); return; }
+    if (!url) { silkMsg('先填一个音频直链', false); return; }
+    if (!/^https?:\/\//i.test(url)) { silkMsg('地址需要以 http:// 或 https:// 开头', false); return; }
 
     btn.disabled = true;
     var original = btn.textContent;

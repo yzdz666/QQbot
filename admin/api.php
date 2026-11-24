@@ -682,9 +682,11 @@ switch ($action) {
         }
         后台操作记录('保存语音转换配置', $provider);
         json_response([
-            'success'  => true,
-            'message'  => '语音转换配置已保存',
-            'provider' => $provider,
+            'success'   => true,
+            'message'   => '语音转换配置已保存',
+            'provider'  => $provider,
+            // 回传生效值，前端据此刷新表单（例如访问码留空被自动补齐）
+            'effective' => $provider === 'workbuddy' ? silk_wb生效配置() : null,
         ]);
         break;
 
