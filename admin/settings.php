@@ -11,6 +11,28 @@ if (!$aiConfig) {
     $aiConfig = ['base_url' => '', 'api_key' => '', 'model' => 'gpt-4o-mini'];
 }
 
+// ==================== 加载语音转 Silk 配置 ====================
+$silkCfg = [
+    'silk_provider'        => db()->getSetting('silk_provider', 'oiapi'),
+    'silk_oiapi_base'      => db()->getSetting('silk_oiapi_base', 'https://oiapi.net/api/Mp32Silk'),
+    'silk_wb_base'         => db()->getSetting('silk_wb_base', 'https://a9601a654d5c4fdb1.app.workbuddy.host/api/v1/convert/url'),
+    'silk_wb_sharecode'    => db()->getSetting('silk_wb_sharecode', ''),
+    'silk_wb_sample_rate'  => db()->getSetting('silk_wb_sample_rate', '24000'),
+    'silk_wb_frame_ms'     => db()->getSetting('silk_wb_frame_ms', '20'),
+    'silk_wb_complexity'   => db()->getSetting('silk_wb_complexity', '1'),
+    'silk_wb_tencent'      => db()->getSetting('silk_wb_tencent', '1'),
+    'silk_wb_timeout'      => db()->getSetting('silk_wb_timeout', '90'),
+    'silk_custom_url'      => db()->getSetting('silk_custom_url', ''),
+    'silk_custom_method'   => db()->getSetting('silk_custom_method', 'GET'),
+    'silk_custom_headers'  => db()->getSetting('silk_custom_headers', ''),
+    'silk_custom_body'     => db()->getSetting('silk_custom_body', ''),
+    'silk_custom_parse'    => db()->getSetting('silk_custom_parse', 'json'),
+    'silk_custom_field'    => db()->getSetting('silk_custom_field', 'data.url'),
+    'silk_custom_timeout'  => db()->getSetting('silk_custom_timeout', '60'),
+];
+$silkProviders = silkProvider列表();
+if (!isset($silkProviders[$silkCfg['silk_provider']])) $silkCfg['silk_provider'] = 'oiapi';
+
 // ==================== 加载登录日志 ====================
 $loginLogs = Auth::getLoginLogs();
 
@@ -179,6 +201,147 @@ pre#wsLogBox {
       </div>
       <button type="submit" class="btn btn-primary" id="aiSaveBtn">保存配置</button>
     </form>
+  </div>
+</div>
+
+<!-- ==================== Section 2.6: 语音转 Silk ==================== -->
+<div class="card mb-3">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+    <h3>语音转 Silk</h3>
+    <span class="badge badge-secondary" id="silkProviderBadge"><?= htmlspecialchars($silkProviders[$silkCfg['silk_provider']]) ?></span>
+  </div>
+  <div class="card-body">
+    <p style="color:var(--text-secondary); margin:0 0 18px; font-size:13px; line-height:1.75;">
+      发语音前需要把 mp3 / wav 等格式转成 QQ 要求的 SILK。接口返回「音频 URL」或「SILK 二进制」都能自动识别，
+      转换失败时会回落到文字提示，不会把空数据交给官方接口。
+    </p>
+
+    <form id="silkForm" onsubmit="return saveSilkConfig(event)">
+      <div class="form-group">
+        <label for="silkProvider">转换接口</label>
+        <select id="silkProvider" class="form-control" onchange="silkSwitch()">
+          <?php foreach ($silkProviders as $pk => $pLabel): ?>
+            <option value="<?= htmlspecialchars($pk) ?>" <?= $silkCfg['silk_provider'] === $pk ? 'selected' : '' ?>><?= htmlspecialchars($pLabel) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+
+      <!-- oiapi 参数 -->
+      <div id="silkOiapiBox">
+        <div class="form-group">
+          <label for="silkOiapiBase">接口地址</label>
+          <input type="text" id="silkOiapiBase" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_oiapi_base']) ?>" placeholder="https://oiapi.net/api/Mp32Silk">
+          <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+            默认官方地址，可换成同结构的镜像；调用方式为 <code>?url=编码后的音频地址</code>。
+          </small>
+        </div>
+      </div>
+
+      <!-- WorkBuddy 参数 -->
+      <div id="silkWbBox">
+        <div class="form-group">
+          <label for="silkWbBase">接口地址</label>
+          <input type="text" id="silkWbBase" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_base']) ?>" placeholder="https://your-host/api/v1/convert/url">
+          <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+            默认是示例实例，建议换成你自己的部署；接口需支持 <code>url</code> 查询参数。
+          </small>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1 1 180px;">
+            <label for="silkWbSharecode">访问码 sharecode</label>
+            <input type="text" id="silkWbSharecode" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_sharecode']) ?>" placeholder="留空则不发送">
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label for="silkWbSampleRate">采样率</label>
+            <input type="text" id="silkWbSampleRate" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_sample_rate']) ?>" placeholder="24000">
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1 1 120px;">
+            <label for="silkWbFrameMs">帧长 frame_ms</label>
+            <input type="text" id="silkWbFrameMs" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_frame_ms']) ?>" placeholder="20">
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label for="silkWbComplexity">复杂度</label>
+            <input type="text" id="silkWbComplexity" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_complexity']) ?>" placeholder="1">
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label for="silkWbTimeout">超时（秒）</label>
+            <input type="text" id="silkWbTimeout" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_wb_timeout']) ?>" placeholder="90">
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="silkWbTencent" <?= $silkCfg['silk_wb_tencent'] === '1' ? 'checked' : '' ?>>
+            <span>腾讯音乐模式（tencent=true，处理 QQ 音乐 vkey 防盗链）</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 自定义 API 参数 -->
+      <div id="silkCustomBox">
+        <div class="form-group">
+          <label for="silkCustomUrl">请求地址模板</label>
+          <input type="text" id="silkCustomUrl" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_custom_url']) ?>" placeholder="https://api.example.com/convert?audio={url}">
+          <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+            用 <code>{url}</code> 表示编码后的音频地址，<code>{url_raw}</code> 表示原始地址。
+          </small>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1 1 140px;">
+            <label for="silkCustomMethod">请求方式</label>
+            <select id="silkCustomMethod" class="form-control">
+              <?php foreach (['GET', 'POST'] as $m): ?>
+                <option value="<?= $m ?>" <?= strtoupper($silkCfg['silk_custom_method']) === $m ? 'selected' : '' ?>><?= $m ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 140px;">
+            <label for="silkCustomParse">响应类型</label>
+            <select id="silkCustomParse" class="form-control">
+              <option value="json" <?= $silkCfg['silk_custom_parse'] === 'json' ? 'selected' : '' ?>>JSON（取字段里的 URL）</option>
+              <option value="binary" <?= $silkCfg['silk_custom_parse'] === 'binary' ? 'selected' : '' ?>>二进制（直接是 SILK）</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 140px;">
+            <label for="silkCustomTimeout">超时（秒）</label>
+            <input type="text" id="silkCustomTimeout" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_custom_timeout']) ?>" placeholder="60">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="silkCustomField">结果字段路径（JSON 时生效）</label>
+          <input type="text" id="silkCustomField" class="form-control" value="<?= htmlspecialchars($silkCfg['silk_custom_field']) ?>" placeholder="data.url">
+          <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+            支持点号路径，例如 <code>data.url</code>、<code>result.0.audio</code>。
+          </small>
+        </div>
+        <div class="form-group">
+          <label for="silkCustomHeaders">自定义请求头</label>
+          <textarea id="silkCustomHeaders" class="form-control" rows="3" placeholder="Authorization: Bearer xxx"><?= htmlspecialchars($silkCfg['silk_custom_headers']) ?></textarea>
+          <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">每行一条，格式 <code>Key: Value</code>。</small>
+        </div>
+        <div class="form-group">
+          <label for="silkCustomBody">POST Body 模板（可选）</label>
+          <textarea id="silkCustomBody" class="form-control" rows="3" placeholder='{"audio":"{url}"} / audio={url}'><?= htmlspecialchars($silkCfg['silk_custom_body']) ?></textarea>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+        <button type="submit" class="btn btn-primary" id="silkSaveBtn">保存配置</button>
+      </div>
+    </form>
+
+    <hr style="border:0; border-top:1px solid var(--line); margin:22px 0 18px;">
+
+    <div class="form-group">
+      <label for="silkTestUrl">测试当前接口</label>
+      <input type="text" id="silkTestUrl" class="form-control" placeholder="https://example.com/test.mp3">
+      <small style="display:block; margin-top:6px; color:var(--text-secondary); font-size:12px;">
+        填一个可公开访问的音频直链，用「已保存」的配置跑一次转换。
+      </small>
+    </div>
+    <button type="button" class="btn btn-outline" id="silkTestBtn" onclick="silkTest()">开始测试</button>
+    <div id="silkTestResult" style="display:none; margin-top:14px; padding:12px 14px; border:1px solid var(--line); background:var(--surface-3); font-family:var(--mono); font-size:12px; line-height:1.8; white-space:pre-wrap; word-break:break-all;"></div>
   </div>
 </div>
 
@@ -499,6 +662,91 @@ function saveAiConfig(event) {
     });
     return false;
 }
+
+// ==================== 语音转 Silk ====================
+function silkSwitch() {
+    var sel = document.getElementById('silkProvider');
+    if (!sel) return;
+    var p = sel.value;
+    document.getElementById('silkOiapiBox').style.display  = (p === 'oiapi') ? '' : 'none';
+    document.getElementById('silkWbBox').style.display     = (p === 'workbuddy') ? '' : 'none';
+    document.getElementById('silkCustomBox').style.display = (p === 'custom') ? '' : 'none';
+    var badge = document.getElementById('silkProviderBadge');
+    if (badge) badge.textContent = sel.options[sel.selectedIndex].text;
+}
+
+function saveSilkConfig(event) {
+    event.preventDefault();
+    var btn = document.getElementById('silkSaveBtn');
+    var payload = {
+        silk_provider:       document.getElementById('silkProvider').value,
+        silk_oiapi_base:     document.getElementById('silkOiapiBase').value.trim(),
+        silk_wb_base:        document.getElementById('silkWbBase').value.trim(),
+        silk_wb_sharecode:   document.getElementById('silkWbSharecode').value.trim(),
+        silk_wb_sample_rate: document.getElementById('silkWbSampleRate').value.trim(),
+        silk_wb_frame_ms:    document.getElementById('silkWbFrameMs').value.trim(),
+        silk_wb_complexity:  document.getElementById('silkWbComplexity').value.trim(),
+        silk_wb_timeout:     document.getElementById('silkWbTimeout').value.trim(),
+        silk_wb_tencent:     document.getElementById('silkWbTencent').checked ? '1' : '0',
+        silk_custom_url:     document.getElementById('silkCustomUrl').value.trim(),
+        silk_custom_method:  document.getElementById('silkCustomMethod').value,
+        silk_custom_parse:   document.getElementById('silkCustomParse').value,
+        silk_custom_field:   document.getElementById('silkCustomField').value.trim(),
+        silk_custom_headers: document.getElementById('silkCustomHeaders').value,
+        silk_custom_body:    document.getElementById('silkCustomBody').value,
+        silk_custom_timeout: document.getElementById('silkCustomTimeout').value.trim()
+    };
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = '保存中...';
+    apiCall('save_silk_config', payload, function(res) {
+        btn.disabled = false;
+        btn.textContent = original;
+        silkSwitch();
+        if (res.success) {
+            alert(res.message || '已保存');
+        } else {
+            alert(res.message || '保存失败');
+        }
+    });
+    return false;
+}
+
+function silkTest() {
+    var url = document.getElementById('silkTestUrl').value.trim();
+    var box = document.getElementById('silkTestResult');
+    var btn = document.getElementById('silkTestBtn');
+    if (!url) { alert('先填一个音频直链'); return; }
+    if (!/^https?:\/\//i.test(url)) { alert('地址需要以 http:// 或 https:// 开头'); return; }
+
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = '测试中...';
+    box.style.display = 'block';
+    box.textContent = '请求中，最长等待约 90 秒…';
+
+    apiCall('silk_test', { url: url }, function(res) {
+        btn.disabled = false;
+        btn.textContent = original;
+        var d = res.data || {};
+        var typeMap = { silk: 'SILK 二进制', url: '音频 URL', empty: '无数据' };
+        var lines = [];
+        lines.push('结果：' + (res.success ? '成功' : '失败'));
+        lines.push('接口：' + (d.provider || '-'));
+        lines.push('耗时：' + (d.elapsed_ms != null ? d.elapsed_ms + ' ms' : '-'));
+        lines.push('类型：' + (typeMap[d.type] || '-'));
+        if (d.bytes) lines.push('大小：' + d.bytes + ' 字节');
+        if (d.url) lines.push('地址：' + d.url);
+        if (d.http) {
+            lines.push('HTTP：' + (d.http.code || '-'));
+            if (d.http.error) lines.push('错误：' + d.http.error);
+        }
+        lines.push('说明：' + (res.message || ''));
+        box.textContent = lines.join('\n');
+    });
+}
+
+silkSwitch();
 
 // ==================== 解封 IP ====================
 function unbanIp(ip, btn) {

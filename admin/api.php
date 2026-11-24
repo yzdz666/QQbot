@@ -639,6 +639,50 @@ switch ($action) {
         json_response(['success' => true, 'message' => '设置已保存']);
         break;
 
+    // ==================== 语音转 Silk ====================
+    case 'save_silk_config':
+        $provider = trim($_POST['silk_provider'] ?? 'oiapi');
+        if (!array_key_exists($provider, silkProvider列表())) {
+            json_response(['success' => false, 'message' => '未知的转换接口']);
+        }
+        // 白名单写入，避免带进多余键
+        $fields = [
+            'silk_oiapi_base', 'silk_wb_base', 'silk_wb_sharecode', 'silk_wb_sample_rate',
+            'silk_wb_frame_ms', 'silk_wb_complexity', 'silk_wb_tencent', 'silk_wb_timeout',
+            'silk_custom_url', 'silk_custom_method', 'silk_custom_headers',
+            'silk_custom_body', 'silk_custom_parse', 'silk_custom_field', 'silk_custom_timeout',
+        ];
+        db()->setSetting('silk_provider', $provider);
+        foreach ($fields as $k) {
+            if (isset($_POST[$k])) db()->setSetting($k, trim((string)$_POST[$k]));
+        }
+        后台操作记录('保存语音转换配置', $provider);
+        json_response([
+            'success'  => true,
+            'message'  => '语音转换配置已保存',
+            'provider' => $provider,
+        ]);
+        break;
+
+    case 'silk_test':
+        $link = trim($_POST['url'] ?? '');
+        if ($link === '' || !preg_match('/^https?:\/\//i', $link)) {
+            json_response(['success' => false, 'message' => '请填写 http(s) 开头的音频直链']);
+        }
+        $r = silk测试($link);
+        后台操作记录('测试语音转换', $r['provider'] . ' → ' . $r['type']);
+        $msg = [
+            'silk'  => '转换成功，返回 SILK 二进制（' . number_format($r['bytes']) . ' 字节）',
+            'url'   => '转换成功，返回音频地址',
+            'empty' => '转换失败，接口没有返回可用数据',
+        ][$r['type']];
+        json_response([
+            'success' => $r['type'] !== 'empty',
+            'message' => $msg,
+            'data'    => $r,
+        ]);
+        break;
+
     // ==================== 代发网关鉴权 (relay.php) ====================
     case 'relay_auth_get':
         // 查看代发签名密钥与开关状态 (密钥用于外部脚本计算 HMAC-SHA256 签名)

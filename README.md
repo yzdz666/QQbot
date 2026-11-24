@@ -216,6 +216,7 @@ if (消息 == "发张图") {
 - **消息档案**：落库时保存昵称、头像、群昵称快照；退群事件区分「群解散」与「被移出」；聊天记录页点击头像/昵称即可查看用户资料卡（昵称、头像、union_openid、主动推送权限、本地备注）
 - **头像渲染**：官方下发头像优先；缺失时回落到 `q.qlogo.cn/qqapp/{appid}/{openid}/640` 兜底，该接口对 openid 返回 40×40 默认剪影，前端按实际像素判定后继续回落到按 openid 稳定取色的首字块
 - **素材管理**：图片上传平台换取 `qqbot-media://` 引用，支持大图分片、预览、复制 Markdown、删除
+- **语音转 Silk 可切换**：后台可选 oiapi / WorkBuddy（直出 SILK 二进制）/ 自定义 API / 不转换；自定义支持 URL 模板、请求方式、请求头、Body 与字段路径，内置在线测试
 - **安全防护**：bcrypt 密码、全站 CSRF、同源校验、CSP、登录限流、IP 封禁/白名单、安装向导锁定
 - **移动端适配**：响应式设计，适配手机 / 平板 / 桌面
 - **零依赖部署**：PHP + SQLite，无需 MySQL，宝塔面板一键部署
@@ -322,7 +323,7 @@ if (消息 == "测试图片") {
 │   ├── api.php / download.php / submit.php
 │   └── config.php       # 市场配置（管理员哈希、站点地址）
 ├── data/                # 数据目录（SQLite、日志、插件备份）
-├── function/            # 核心函数库（Mail / Parsedown / GD / qrcode）
+├── function/            # 核心函数库（Mail / Parsedown / GD / qrcode / silk 语音转换）
 ├── plugin/              # 插件目录 ★ 你的业务代码放这里
 ├── tools/               # 运维工具（reset_admin.php）
 ├── auth.php             # 认证系统（bcrypt / CSRF / 同源）

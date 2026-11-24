@@ -338,13 +338,10 @@ function 图片($image,$content=null,$logMedia=null) {
 }
 
 
+// 语音转 Silk：实际接口由后台「系统设置 → 语音转 Silk」决定
+// —— 支持 oiapi / WorkBuddy / 自定义 API / 不转换，见 function.php 的 silk转换()
 function silk($link){
-    $url = "https://oiapi.net/api/Mp32Silk?url=" . urlencode($link);
-    $r = json_decode(curl($url, "GET", [], ''), true);
-    if (($r["code"] ?? 0) != 1 || empty($r["data"]["url"])) {
-        return '';
-    }
-    return $r["data"]["url"];
+    return function_exists('silk转换') ? silk转换($link) : '';
 }
 
 // ==================== 本地语音功能 ====================
@@ -421,9 +418,15 @@ function 本地语音($yy, $logMedia = null) {
 
 function 语音($yy, $logMedia = null) {
    $logContent = ($logMedia !== null && trim((string)$logMedia) !== '') ? trim((string)$logMedia) : $yy;
+
+   // 先统一转换一次：失败时直接回文字，不把空数据交给官方 /files
+   $silk = silk($yy);
+   if ($silk === '') {
+      return 文字('语音转换失败，请稍后再试');
+   }
+
    switch (消息来源) {
      case "群聊":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -444,7 +447,6 @@ function 语音($yy, $logMedia = null) {
      case "私聊":
      case "好友增加":   // C2C生命周期事件
      case "好友删除":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
@@ -470,7 +472,6 @@ function 语音($yy, $logMedia = null) {
      case "群消息拒绝":
      case "群消息接收":
      case "互动":
-        $silk = silk($yy);
         $file_info = 富媒体("语音",$silk);
         if (isset($file_info['message'])) {
          return 文字($file_info['message']);
