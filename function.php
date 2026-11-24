@@ -68,6 +68,7 @@ include_once(APP_ROOT . "function/Mail/PHPMailer.php");
 include(APP_ROOT . "function/tuwen.php");
 include_once(APP_ROOT . "function/silk.php");
 include_once(APP_ROOT . "function/customapi.php");
+include_once(APP_ROOT . "function/ws_pool.php");
 
 // 定义 sodium 常量（如果未定义）
 if (!defined('SODIUM_CRYPTO_SIGN_SEEDBYTES')) {
@@ -1634,6 +1635,11 @@ function addBot($appid, $secret, $env = '正式') {
 function deleteBot($appid) {
     db()->execute("DELETE FROM bots WHERE appid = ?", [$appid]);
     db()->execute("DELETE FROM plugin_status WHERE appid = ?", [$appid]);
+    try {
+        db()->execute("DELETE FROM ws_bot_status WHERE appid = ?", [$appid]);
+    } catch (Throwable $e) {
+        // 旧库尚未迁移时忽略
+    }
     return true;
 }
 

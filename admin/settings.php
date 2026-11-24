@@ -73,6 +73,7 @@ $sysInfo = getSystemInfo();
 .card-body .alert,
 #wsCronGuide,
 #wsPendingNotice,
+#wsOrphanNotice,
 .card-body > .alert-info {
     display: block !important;
     align-items: stretch;
@@ -80,6 +81,14 @@ $sysInfo = getSystemInfo();
     overflow-x: hidden;
     overflow-wrap: break-word;
     word-wrap: break-word;
+}
+
+/* 这三块由 JS 控制显隐，hidden 必须压过上面的 !important，
+   否则"定时任务引导/处理中/残留进程"会一直显示。 */
+#wsCronGuide[hidden],
+#wsPendingNotice[hidden],
+#wsOrphanNotice[hidden] {
+    display: none !important;
 }
 
 /* 所有 code 元素强制换行，防止长路径溢出 */
@@ -124,6 +133,17 @@ pre#wsLogBox {
 /* WS 控制按钮区移动端适配 */
 #wsStartBtn, #wsStopBtn {
     white-space: nowrap;
+}
+
+/* 手机上收起次要列，避免表格横向滚动 */
+.ws-mobile-meta { display: none; }
+@media (max-width: 560px) {
+    .ws-col-env, .ws-col-url, .ws-col-time { display: none; }
+    .ws-mobile-meta { display: block; font-size: 11px; color: var(--text-secondary); margin-top: 2px; word-break: break-all; }
+}
+@media (max-width: 340px) {
+    #wsBotTableBody td, #wsBotTableBody th { padding-left: 5px; padding-right: 5px; font-size: 11px; }
+    #wsBotTableBody .badge { font-size: 10px; padding: 2px 5px; }
 }
 
 @media (max-width: 768px) {
@@ -473,7 +493,12 @@ pre#wsLogBox {
   <div class="card-body">
     <p style="color:var(--text-secondary); margin-bottom:16px;">
       WebSocket 模式让机器人主动连接 QQ 网关接收实时事件，无需公网回调地址。点击下方按钮即可在后台启动/停止守护进程。
+      <br><strong>支持同时运行多个机器人</strong>：每个机器人是独立子进程，各自连接、互不影响；在机器人管理里开启/关闭 WS 后约 10 秒自动生效，无需重启整个服务。
     </p>
+
+    <div id="wsOrphanNotice" class="alert alert-warning" hidden style="margin-bottom:16px;">
+      <span>检测到上次异常退出残留的机器人进程，可能造成重复回复，请点击「清理残留进程」。</span>
+    </div>
 
     <!-- 控制按钮区 -->
     <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; align-items:center;">
@@ -487,7 +512,7 @@ pre#wsLogBox {
     </div>
 
     <!-- 定时任务设置引导（仅当需要时显示） -->
-    <div id="wsCronGuide" class="alert alert-warning" style="display:none; margin-bottom:16px;">
+    <div id="wsCronGuide" class="alert alert-warning" hidden style="margin-bottom:16px;">
       <h4 style="margin:0 0 8px; font-size:14px;">⚠ 需要配置定时任务才能在网页后台启动/停止 WS 守护进程</h4>
       <p style="margin:0 0 8px; font-size:13px;">您的服务器禁用了所有进程管理函数（shell_exec/exec/popen/proc_open），网页无法直接启动进程。请配置以下定时任务：</p>
       <div style="background:rgba(0,0,0,0.05); padding:10px; border-radius:6px; margin:8px 0; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;">
@@ -499,7 +524,7 @@ pre#wsLogBox {
     </div>
 
     <!-- 待处理状态提示 -->
-    <div id="wsPendingNotice" class="alert alert-info" style="display:none; margin-bottom:16px;">
+    <div id="wsPendingNotice" class="alert alert-info" hidden style="margin-bottom:16px;">
       <span id="wsPendingText">处理中...</span>
     </div>
 
@@ -521,11 +546,11 @@ pre#wsLogBox {
           <thead>
             <tr>
               <th>AppID</th>
-              <th>环境</th>
+              <th class="ws-col-env">环境</th>
               <th>机器人状态</th>
               <th>WS连接状态</th>
-              <th>自定义WS地址</th>
-              <th>最后更新</th>
+              <th class="ws-col-url">自定义WS地址</th>
+              <th class="ws-col-time">最后更新</th>
             </tr>
           </thead>
           <tbody id="wsBotTableBody">
@@ -534,8 +559,11 @@ pre#wsLogBox {
               $wsUrl = trim($bot['ws_url'] ?? '');
             ?>
             <tr data-appid="<?= htmlspecialchars($bot['appid']) ?>">
-              <td style="font-weight:500;"><?= htmlspecialchars($bot['appid']) ?></td>
-              <td>
+              <td style="font-weight:500;">
+                <?= htmlspecialchars($bot['appid']) ?>
+                <div class="ws-mobile-meta"><?= htmlspecialchars($bot['env'] ?? '正式') ?><?= $wsUrl !== '' ? ' · ' . htmlspecialchars($wsUrl) : '' ?></div>
+              </td>
+              <td class="ws-col-env">
                 <span class="badge <?= ($bot['env'] ?? '正式') === '沙箱' ? 'badge-warning' : 'badge-info' ?>">
                   <?= htmlspecialchars($bot['env'] ?? '正式') ?>
                 </span>
@@ -548,10 +576,10 @@ pre#wsLogBox {
               <td class="ws-conn-status">
                 <span class="badge badge-secondary">未知</span>
               </td>
-              <td class="text-muted">
+              <td class="text-muted ws-col-url">
                 <?= $wsUrl !== '' ? htmlspecialchars($wsUrl) : '<span class="text-muted">自动获取</span>' ?>
               </td>
-              <td class="ws-last-update text-muted" style="white-space:nowrap;">-</td>
+              <td class="ws-last-update text-muted ws-col-time" style="white-space:nowrap;">-</td>
             </tr>
             <?php endforeach; ?>
           </tbody>
@@ -873,7 +901,7 @@ function wsStart() {
                 var text = document.getElementById('wsPendingText');
                 if (notice && text) {
                     text.textContent = '✓ 已提交启动请求！定时任务将在1分钟内自动启动守护进程。';
-                    notice.style.display = '';
+                    notice.hidden = false;
                     notice.className = 'alert alert-success';
                 }
             }
@@ -885,8 +913,9 @@ function wsStart() {
 }
 
 function wsStop() {
-    if (!confirm('确定要停止 WebSocket 守护进程吗？')) return;
     var btn = document.getElementById('wsStopBtn');
+    var isCleanup = btn && btn.textContent.indexOf('清理') >= 0;
+    if (!confirm(isCleanup ? '确定清理残留的机器人进程吗？' : '确定要停止 WebSocket 守护进程吗？\n所有机器人的连接都会被断开。')) return;
     btn.disabled = true;
     btn.textContent = '停止中...';
     apiCall('ws_stop', {}, function(res) {
@@ -914,17 +943,17 @@ function wsRefreshStatus() {
 
         // 显示/隐藏定时任务引导
         if (data.needs_cron && cronGuide) {
-            cronGuide.style.display = '';
+            cronGuide.hidden = false;
             if (cronCmd && data.cron_command) {
                 cronCmd.textContent = data.cron_command;
             }
         } else if (cronGuide) {
-            cronGuide.style.display = 'none';
+            cronGuide.hidden = true;
         }
 
         // 显示待处理状态
         if (data.pending_action && pendingNotice && pendingText) {
-            pendingNotice.style.display = '';
+            pendingNotice.hidden = false;
             if (data.pending_action === 'starting') {
                 pendingText.textContent = '⏳ 启动请求处理中... 定时任务将在1分钟内执行';
                 pendingNotice.className = 'alert alert-info';
@@ -933,21 +962,34 @@ function wsRefreshStatus() {
                 pendingNotice.className = 'alert alert-info';
             }
         } else if (pendingNotice) {
-            pendingNotice.style.display = 'none';
+            pendingNotice.hidden = true;
         }
 
         if (data.master_running) {
             masterBadge.className = 'badge badge-success';
-            masterBadge.textContent = '运行中 (PID:' + data.master_pid + ')';
+            masterBadge.textContent = '运行中 (PID:' + data.master_pid
+                + (data.worker_count ? ' · ' + data.worker_count + ' 个机器人' : '') + ')';
             startBtn.style.display = 'none';
             stopBtn.style.display = '';
+            stopBtn.textContent = '停止守护进程';
             // 进程运行中时隐藏待处理提示
-            if (pendingNotice) pendingNotice.style.display = 'none';
+            if (pendingNotice) pendingNotice.hidden = true;
+        } else if (data.orphan_workers > 0) {
+            masterBadge.className = 'badge badge-warning';
+            masterBadge.textContent = '已停止（残留 ' + data.orphan_workers + ' 个进程）';
+            startBtn.style.display = '';
+            stopBtn.style.display = '';
+            stopBtn.textContent = '清理残留进程';
         } else {
             masterBadge.className = 'badge badge-secondary';
             masterBadge.textContent = '已停止';
             startBtn.style.display = '';
             stopBtn.style.display = 'none';
+        }
+
+        var orphanNotice = document.getElementById('wsOrphanNotice');
+        if (orphanNotice) {
+            orphanNotice.hidden = !(!data.master_running && data.orphan_workers > 0);
         }
 
         document.getElementById('wsAutoStartToggle').checked = data.auto_start;
@@ -969,7 +1011,9 @@ function wsRefreshStatus() {
                     case 'stopped': statusClass = 'badge-secondary'; statusText = '已停止'; break;
                     case 'unknown': statusClass = 'badge-secondary'; statusText = '未知'; break;
                 }
-                if (connCell) connCell.innerHTML = '<span class="badge ' + statusClass + '" title="' + (bot.message || '') + '">' + statusText + '</span>';
+                var tip = (bot.message || '').replace(/"/g, '&quot;');
+                var pidHtml = (bot.worker_running && bot.pid) ? '<span class="text-muted" style="font-size:11px; margin-left:6px; white-space:nowrap; display:inline-block;">PID ' + bot.pid + '</span>' : '';
+                if (connCell) connCell.innerHTML = '<span class="badge ' + statusClass + '" title="' + tip + '">' + statusText + '</span>' + pidHtml;
                 if (updateCell) updateCell.textContent = bot.updated_at || '-';
             });
         }

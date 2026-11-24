@@ -161,7 +161,7 @@ try {
             $running = true;
         }
     }
-    $statusData = db()->getSetting('ws_daemon_status', []);
+    $statusData = ws读取连接状态();
     $botSummary = '';
     if (is_array($statusData) && !empty($statusData)) {
         foreach ($statusData as $aid => $s) {
@@ -170,9 +170,12 @@ try {
     } else {
         $botSummary = '暂无机器人连接记录';
     }
+    $workerCount = ws存活子进程数();
     addCheck('WebSocket 守护进程', true,
-        $running ? "运行中 (PID:{$masterPid})。" . $botSummary
-                 : '未运行。在 后台→系统设置→WebSocket模式 启动，或配置定时任务 ws_monitor.sh',
+        $running ? "运行中 (PID:{$masterPid}，{$workerCount} 个机器人连接)。" . $botSummary
+                 : ($workerCount > 0
+                    ? "守护进程未运行，但检测到 {$workerCount} 个残留机器人进程，请在 后台→系统设置→WebSocket模式 点击「清理残留进程」"
+                    : '未运行。在 后台→系统设置→WebSocket模式 启动，或配置定时任务 ws_monitor.sh'),
         '');
 } catch (Throwable $e) {
     addCheck('WebSocket 守护进程', false, $e->getMessage(), '');

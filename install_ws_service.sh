@@ -24,10 +24,10 @@ User=$WEB_USER
 Group=$WEB_USER
 WorkingDirectory=$APP_DIR
 ExecStart=$PHP_BIN $APP_DIR/ws_client.php
-Restart=always
+Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
-TimeoutStopSec=15
+TimeoutStopSec=20
 StandardOutput=append:$APP_DIR/data/logs/ws_daemon.log
 StandardError=append:$APP_DIR/data/logs/ws_daemon.log
 

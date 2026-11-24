@@ -11,6 +11,8 @@ ls -ld "$APP_DIR/data" "$APP_DIR/data/logs" 2>/dev/null || true
 ls -l "$APP_DIR/data/bot.db" "$APP_DIR/data"/*.db* 2>/dev/null || true
 echo "--- WS process ---"
 ps aux | grep '[w]s_client.php' || true
+echo "--- WS workers (appid<TAB>pid) ---"
+cat "$APP_DIR/data/ws_workers.pids" 2>/dev/null || echo "(无)"
 echo "--- systemd ---"
 systemctl --no-pager status qqbot-ws.service 2>/dev/null || true
 echo "--- PHP disable_functions ---"

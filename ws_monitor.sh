@@ -31,6 +31,7 @@ START_FLAG="$APP_DIR/data/ws_start.flag"
 STOP_FLAG="$APP_DIR/data/ws_stop.flag"
 AUTOSTART_FILE="$APP_DIR/data/ws_autostart.flag"
 STATUS_FILE="$APP_DIR/data/ws_monitor_status.json"
+WORKERS_FILE="$APP_DIR/data/ws_workers.pids"
 
 # 确保目录存在
 mkdir -p "$APP_DIR/data/logs" 2>/dev/null
@@ -93,21 +94,54 @@ is_running() {
     if [ -z "$pid" ]; then
         return 1
     fi
-    # 方法1: /proc 文件系统
+    # 必须确认是本项目的 ws_client.php，避免 PID 复用导致误判
     if [ -d "/proc/$pid" ]; then
-        # 验证是 PHP 进程
         local cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ')
-        if echo "$cmdline" | grep -q "ws_client"; then
+        if echo "$cmdline" | grep -q "ws_client.php"; then
             return 0
         fi
-        # cmdline 不匹配但进程存在，也可能是我们的进程
-        return 0
+        return 1
     fi
-    # 方法2: ps 命令
     if ps -p "$pid" > /dev/null 2>&1; then
         return 0
     fi
     return 1
+}
+
+# 停止所有机器人子进程（先子后主，避免主进程被 kill 后子进程变孤儿继续收消息）
+stop_workers() {
+    local pids=""
+    if [ -f "$WORKERS_FILE" ]; then
+        pids=$(awk -F '\t' '{print $2}' "$WORKERS_FILE" 2>/dev/null)
+    fi
+    for f in "$APP_DIR"/data/ws_worker_*.pid; do
+        [ -f "$f" ] || continue
+        pids="$pids $(cat "$f" 2>/dev/null)"
+    done
+    pids=$(echo "$pids" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u)
+    [ -z "$pids" ] && return 0
+
+    for p in $pids; do
+        if [ -d "/proc/$p" ] && grep -q "ws_client.php" "/proc/$p/cmdline" 2>/dev/null; then
+            kill -15 "$p" 2>/dev/null
+        fi
+    done
+    local waited=0
+    while [ $waited -lt 3 ]; do
+        sleep 1
+        waited=$((waited + 1))
+        local left=0
+        for p in $pids; do
+            [ -d "/proc/$p" ] && left=$((left + 1))
+        done
+        [ $left -eq 0 ] && break
+    done
+    for p in $pids; do
+        [ -d "/proc/$p" ] && kill -9 "$p" 2>/dev/null
+    done
+    rm -f "$APP_DIR"/data/ws_worker_*.pid 2>/dev/null
+    rm -f "$WORKERS_FILE" 2>/dev/null
+    return 0
 }
 
 # 获取当前 PID
@@ -126,8 +160,9 @@ start_daemon() {
         return 0
     fi
 
-    # 清理旧 PID 文件
+    # 清理旧 PID/子进程列表文件（守护进程启动时会清理残留子进程）
     rm -f "$PID_FILE" 2>/dev/null
+    rm -f "$WORKERS_FILE" 2>/dev/null
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动 WebSocket 守护进程..." >> "$MONITOR_LOG"
 
@@ -164,19 +199,24 @@ start_daemon() {
 stop_daemon() {
     local pid=$(get_pid)
     if [ -z "$pid" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 守护进程未运行（无PID文件）" >> "$MONITOR_LOG"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 守护进程未运行（无PID文件），检查残留子进程" >> "$MONITOR_LOG"
+        stop_workers
         write_status false 0 "not_running"
         return 0
     fi
 
     if ! is_running; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 进程 $pid 已不存在，清理 PID 文件" >> "$MONITOR_LOG"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 进程 $pid 已不存在，清理 PID 文件与残留子进程" >> "$MONITOR_LOG"
+        stop_workers
         rm -f "$PID_FILE" 2>/dev/null
         write_status false 0 "already_stopped"
         return 0
     fi
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 正在停止守护进程 (PID:$pid)..." >> "$MONITOR_LOG"
+
+    # 先停所有机器人子进程，再停守护进程
+    stop_workers
 
     # 发送 SIGTERM
     kill -15 "$pid" 2>/dev/null
@@ -198,10 +238,11 @@ stop_daemon() {
         sleep 1
     fi
 
-    # 清理子进程（如果有）
-    pkill -P "$pid" 2>/dev/null
+    # 再停一次子进程（防止检查期间有新拉起的）
+    stop_workers
 
     rm -f "$PID_FILE" 2>/dev/null
+    rm -f "$WORKERS_FILE" 2>/dev/null
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 守护进程已停止" >> "$MONITOR_LOG"
     write_status false 0 "stopped_by_monitor"
 }

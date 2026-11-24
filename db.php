@@ -63,6 +63,21 @@ class Database {
         return self::$instance;
     }
 
+    /**
+     * 断开并重新建立连接
+     * fork 子进程必须调用：父进程创建的 PDO/SQLite 文件句柄不能被子进程共用，
+     * 否则并发读写会出现 "database is locked" 或事务状态错乱。
+     */
+    public function reconnect() {
+        $this->pdo = null;
+        $this->pdo = new PDO('sqlite:' . $this->dbPath);
+        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $this->pdo->exec('PRAGMA journal_mode = WAL');
+        $this->pdo->exec('PRAGMA foreign_keys = ON');
+        $this->pdo->exec('PRAGMA busy_timeout = 5000');
+    }
+
     private function initTables() {
         $sqls = [
             // 管理员表
@@ -103,6 +118,15 @@ class Database {
                 plugin_name TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
                 PRIMARY KEY (appid, plugin_name)
+            )",
+
+            // WebSocket 多机器人：每个机器人一条连接状态（独立子进程上报，避免并发覆盖）
+            "CREATE TABLE IF NOT EXISTS ws_bot_status (
+                appid TEXT PRIMARY KEY,
+                status TEXT DEFAULT 'unknown',
+                message TEXT DEFAULT '',
+                pid INTEGER DEFAULT 0,
+                updated_at TEXT DEFAULT (datetime('now','localtime'))
             )",
 
             // 自定义 API（后台可视化配置的触发 → 请求 → 取值 → 发送）

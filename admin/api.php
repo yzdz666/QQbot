@@ -1410,12 +1410,25 @@ switch ($action) {
         $logFile = $wsRoot . '/data/logs/ws_daemon.log';
         $startFlag = $wsRoot . '/data/ws_start.flag';
 
-        // 检查是否已在运行
-        if (file_exists($pidFile)) {
-            $pid = intval(file_get_contents($pidFile));
-            if ($pid > 0 && isProcessRunning($pid)) {
-                json_response(['success' => false, 'message' => 'WebSocket 守护进程已在运行 (PID:' . $pid . ')']);
-            }
+        // 用户主动启动：清掉上次停止留下的标志，避免后台一直显示"停止处理中"
+        @unlink($wsRoot . '/data/ws_stop.flag');
+
+        // 检查是否已在运行（必须确认真的是 ws_client.php，避免 PID 复用误判）
+        $runningPid = intval(@file_get_contents($pidFile));
+        if ($runningPid > 0 && ws是客户端进程($runningPid)) {
+            $aliveWorkers = ws存活子进程数();
+            json_response([
+                'success' => false,
+                'message' => 'WebSocket 守护进程已在运行 (PID:' . $runningPid . '，' . $aliveWorkers . ' 个机器人连接)',
+            ]);
+        }
+
+        // 守护进程不在但子进程还在（上次被 kill -9）→ 先清理，避免同一条消息被回复两次
+        $stale = ws清理残留子进程();
+        $staleNote = '';
+        if (!empty($stale)) {
+            $staleNote = '，已清理 ' . count($stale) . ' 个残留进程';
+            后台操作记录('清理WS残留进程', json_encode($stale, JSON_UNESCAPED_UNICODE));
         }
 
         // 确保日志目录存在且尽量可写（修复 www/root 属主不一致问题）
@@ -1423,26 +1436,22 @@ switch ($action) {
         ensureWritableDir($logDir);
         ensureWritableDir($wsRoot . '/data');
 
-        // 检查是否有启用了 WS 的机器人
-        $bots = getBots();
-        $wsBots = array_filter($bots, function($b) {
-            return intval($b['ws_enabled']) === 1 && intval($b['enabled']) === 1;
-        });
+        // 检查是否有启用了 WS 的机器人（必须同时启用机器人本身）
+        $wsBots = ws启用的机器人();
         if (empty($wsBots)) {
-            json_response(['success' => false, 'message' => '没有已启用 WebSocket 模式的机器人，请先在机器人管理中启用']);
+            json_response(['success' => false, 'message' => '没有已启用 WebSocket 模式的机器人，请先在机器人管理中开启 WS 模式并启用机器人']);
         }
+        $botCount = count($wsBots);
 
         // 检测环境：是否可以直接启动进程
         $envCheck = canStartProcess();
 
         if ($envCheck['can_start']) {
-            // 服务器允许启动进程 → 直接启动
             $phpBin = getPhpBinary();
             $wsScript = $wsRoot . '/ws_client.php';
             $result = startBackgroundProcess($phpBin, $wsScript, $logFile);
 
             if (!$result['success']) {
-                // 直接启动失败，降级到标志文件方案
                 $flagWrite = writeFileSafe($startFlag, date('Y-m-d H:i:s'));
                 json_response([
                     'success' => false,
@@ -1454,31 +1463,35 @@ switch ($action) {
             $newPid = $result['pid'];
             // 等待守护进程启动并写入 PID 文件
             $waited = 0;
-            while ($waited < 3) {
-                usleep(300000);
-                $waited += 0.3;
-                if (file_exists($pidFile)) {
-                    $filePid = intval(file_get_contents($pidFile));
-                    if ($filePid > 0) {
-                        $newPid = $filePid;
-                        break;
-                    }
-                }
-            }
-            if ($newPid > 0 && !isProcessRunning($newPid)) {
-                if (file_exists($pidFile)) {
-                    $filePid = intval(file_get_contents($pidFile));
-                    if ($filePid > 0 && isProcessRunning($filePid)) {
-                        $newPid = $filePid;
-                    }
+            while ($waited < 50) {
+                usleep(200000);
+                $waited++;
+                $filePid = intval(@file_get_contents($pidFile));
+                if ($filePid > 0 && isProcessRunning($filePid)) {
+                    $newPid = $filePid;
+                    break;
                 }
             }
 
-            后台操作记录('启动WS守护进程', 'PID:' . $newPid);
+            // 再给子进程一点时间写 PID，统计已拉起的连接数
+            usleep(600000);
+            $startedWorkers = ws存活子进程数();
+            if ($newPid <= 0 || !ws是客户端进程($newPid)) {
+                json_response([
+                    'success' => false,
+                    'message' => '守护进程启动后未保持运行，请查看运行日志排查（常见原因：PHP 路径不可执行、data 目录不可写）',
+                ]);
+            }
+
+            后台操作记录('启动WS守护进程', 'PID:' . $newPid . ' 机器人:' . $botCount);
             json_response([
                 'success' => true,
-                'message' => 'WebSocket 守护进程已启动' . ($newPid > 0 ? ' (PID:' . $newPid . ')' : ''),
+                'message' => 'WebSocket 守护进程已启动 (PID:' . $newPid . ')，正在并行连接 ' . $botCount . ' 个机器人'
+                    . ($startedWorkers > 0 ? '，已拉起 ' . $startedWorkers . ' 个连接' : '')
+                    . $staleNote,
                 'pid' => $newPid,
+                'bots' => $botCount,
+                'workers' => $startedWorkers,
                 'mode' => 'direct',
             ]);
         } else {
@@ -1488,12 +1501,13 @@ switch ($action) {
                 json_response(['success' => false, 'message' => '写入启动标志失败: ' . $flagWrite['message']]);
             }
 
-            后台操作记录('启动WS守护进程', 'cron模式');
+            后台操作记录('启动WS守护进程', 'cron模式 机器人:' . $botCount);
             json_response([
                 'success' => true,
-                'message' => '已提交启动请求，守护进程将通过定时任务在1分钟内自动启动。请确保已配置 cron 定时任务：* * * * * /bin/bash ' . $wsRoot . '/ws_monitor.sh',
+                'message' => '已提交启动请求，定时任务将在1分钟内自动启动 ' . $botCount . ' 个机器人连接。请确保已配置 cron 定时任务：* * * * * /bin/bash ' . $wsRoot . '/ws_monitor.sh',
                 'mode' => 'cron',
                 'needs_cron' => true,
+                'bots' => $botCount,
             ]);
         }
         break;
@@ -1503,74 +1517,102 @@ switch ($action) {
         $pidFile = $wsRoot . '/data/ws_master.pid';
         $stopFlag = $wsRoot . '/data/ws_stop.flag';
 
-        if (!file_exists($pidFile)) {
-            // 写入停止标志，防止定时任务自动重启
-            $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
-            @unlink($wsRoot . '/data/ws_autostart.flag');
-            json_response(['success' => true, 'message' => '守护进程未运行，已清除自动启动'
-                . ($flagWrite['success'] ? '' : '（停止标志写入失败: ' . $flagWrite['message'] . '）')]);
-        }
-
-        $pid = intval(file_get_contents($pidFile));
-        if ($pid <= 0) {
-            @unlink($pidFile);
-            $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
-            @unlink($wsRoot . '/data/ws_autostart.flag');
-            json_response(['success' => true, 'message' => 'PID文件无效，已清理']);
-        }
-
-        // 写入停止标志，防止定时任务自动重启
-        $flagWrite = writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
-        if (!$flagWrite['success']) {
-            json_response(['success' => false, 'message' => '写入停止标志失败: ' . $flagWrite['message']]);
-        }
+        // 先写停止标志，防止定时任务在停止过程中又拉起守护进程
+        writeFileSafe($stopFlag, date('Y-m-d H:i:s'));
         @unlink($wsRoot . '/data/ws_autostart.flag');
 
-        // 尝试通过 posix_kill 终止进程（宝塔面板未禁用此函数）
-        $killed = false;
-        if (function_exists('posix_kill')) {
-            // 先发 SIGTERM
-            @posix_kill($pid, 15);
-            $killed = true;
+        $scanBefore = ws查找本项目客户端进程([getmypid()]);
+        if (!file_exists($pidFile) && empty(ws读取子进程列表()) && !glob($wsRoot . '/data/ws_worker_*.pid') && empty($scanBefore)) {
+            ws停止全部连接状态('已通过后台停止');
+            @unlink($stopFlag);
+            json_response(['success' => true, 'message' => '守护进程未运行，已清除自动启动']);
+        }
 
-            // 等待退出
+        // 1. 先停子进程：守护进程被 kill -9 时也能把连接全部断掉
+        $workerPids = ws读取子进程列表();
+        foreach (glob($wsRoot . '/data/ws_worker_*.pid') ?: [] as $f) {
+            $p = intval(@file_get_contents($f));
+            if ($p > 0) $workerPids['worker-' . $p] = $p;
+        }
+
+        $killedWorkers = 0;
+        foreach ($workerPids as $wpid) {
+            if (!ws是客户端进程($wpid)) continue;
+            killProcess($wpid, 15);
+            $killedWorkers++;
+        }
+
+        // 等待子进程退出，最多 3 秒
+        $waited = 0;
+        while ($waited < 30) {
+            $alive = 0;
+            foreach ($workerPids as $wpid) {
+                if (ws是客户端进程($wpid)) $alive++;
+            }
+            if ($alive === 0) break;
+            usleep(100000);
+            $waited++;
+        }
+        foreach ($workerPids as $wpid) {
+            if (ws是客户端进程($wpid)) killProcess($wpid, 9);
+        }
+
+        // 2. 再停守护进程
+        $pid = intval(@file_get_contents($pidFile));
+        $masterKilled = false;
+        if ($pid > 0 && ws是客户端进程($pid)) {
+            killProcess($pid, 15);
             $waited = 0;
-            while ($waited < 5) {
-                usleep(500000);
-                $waited += 0.5;
+            while ($waited < 50) {
+                usleep(100000);
+                $waited++;
                 if (!isProcessRunning($pid)) break;
             }
+            if (isProcessRunning($pid)) killProcess($pid, 9);
+            $masterKilled = true;
+        }
 
-            // 如果还没退出，SIGKILL
-            if (isProcessRunning($pid)) {
-                @posix_kill($pid, 9);
-                sleep(1);
+        // 3. 兜底清扫：旧版本子进程不写 PID 文件，按项目路径扫描，避免升级后残留继续回复
+        $leftovers = ws查找本项目客户端进程([getmypid()]);
+        if (!empty($leftovers)) {
+            foreach ($leftovers as $lp) killProcess($lp, 15);
+            $waited = 0;
+            while ($waited < 20) {
+                $still = 0;
+                foreach ($leftovers as $lp) {
+                    if (isProcessRunning($lp)) $still++;
+                }
+                if ($still === 0) break;
+                usleep(100000);
+                $waited++;
             }
-        } else {
-            // posix_kill 也不可用，只能依赖定时任务停止
-            killProcess($pid, 15);
+            foreach ($leftovers as $lp) {
+                if (isProcessRunning($lp)) killProcess($lp, 9);
+            }
+            $killedWorkers += count($leftovers);
         }
 
+        // 4. 清理所有 PID/列表文件，状态统一置为已停止
+        foreach (glob($wsRoot . '/data/ws_worker_*.pid') ?: [] as $f) {
+            @unlink($f);
+        }
+        ws清理子进程列表();
         @unlink($pidFile);
+        ws停止全部连接状态('已通过后台停止');
 
-        // 更新数据库状态
-        $statusData = db()->getSetting('ws_daemon_status', []);
-        if (!is_array($statusData)) $statusData = [];
-        foreach ($statusData as $aid => &$s) {
-            $s['status'] = 'stopped';
-            $s['message'] = '已通过后台停止';
-            $s['updated_at'] = date('Y-m-d H:i:s');
-            $s['pid'] = 0;
+        // 直连模式已经没有进程需要定时任务处理了，删除停止标志；
+        // 只有确实杀不掉（无 posix 等）时才保留给 ws_monitor.sh。
+        $stillAlive = isProcessRunning($pid) || ws存活子进程数() > 0;
+        if (!$stillAlive) {
+            @unlink($stopFlag);
         }
-        unset($s);
-        db()->setSetting('ws_daemon_status', $statusData);
 
-        if ($killed && !isProcessRunning($pid)) {
-            后台操作记录('停止WS守护进程', '');
-            json_response(['success' => true, 'message' => 'WebSocket 守护进程已停止']);
-        } else {
-            json_response(['success' => true, 'message' => '已提交停止请求，守护进程将通过定时任务停止']);
-        }
+        后台操作记录('停止WS守护进程', '子进程:' . $killedWorkers . ' 守护进程:' . ($masterKilled ? '已停止' : '未运行'));
+        json_response([
+            'success' => true,
+            'message' => 'WebSocket 已停止' . ($killedWorkers > 0 ? '（已断开 ' . $killedWorkers . ' 个机器人连接）' : ''),
+            'workers' => $killedWorkers,
+        ]);
         break;
 
     case 'ws_status':
@@ -1581,52 +1623,66 @@ switch ($action) {
         $stopFlag = $wsRoot . '/data/ws_stop.flag';
         $autostartFile = $wsRoot . '/data/ws_autostart.flag';
 
-        $masterRunning = false;
-        $masterPid = 0;
+        $masterPid = intval(@file_get_contents($pidFile));
+        $masterRunning = $masterPid > 0 && ws是客户端进程($masterPid);
+
+        // 标志文件超过 10 分钟视为历史残留，不再显示"处理中"
         $pendingAction = null;
+        if (file_exists($startFlag) && time() - intval(@filemtime($startFlag)) < 600) $pendingAction = 'starting';
+        if (file_exists($stopFlag) && time() - intval(@filemtime($stopFlag)) < 600) $pendingAction = 'stopping';
 
-        if (file_exists($pidFile)) {
-            $masterPid = intval(file_get_contents($pidFile));
-            if ($masterPid > 0) {
-                $masterRunning = isProcessRunning($masterPid);
-            }
-        }
-
-        // 检查待处理的操作
-        if (file_exists($startFlag)) {
-            $pendingAction = 'starting';
-        }
-        if (file_exists($stopFlag)) {
-            $pendingAction = 'stopping';
-        }
-
-        // 检测环境能力
         $envCheck = canStartProcess();
         $canKill = canKillProcess();
         $autostartEnabled = file_exists($autostartFile) || db()->getSetting('ws_auto_start', '0') === '1';
 
-        // 从数据库读取各 bot 的 WS 状态
-        $botStatuses = db()->getSetting('ws_daemon_status', []);
-        if (!is_array($botStatuses)) $botStatuses = [];
+        // 新表读取：每个机器人一条，子进程并发写不会互相覆盖
+        $botStatuses = ws读取连接状态();
+        $workerPids = ws读取子进程列表();
 
-        // 获取已启用 WS 的机器人列表
+        $botStatusesOut = [];
         $bots = getBots();
-        $wsBots = [];
+        $configuredCount = 0;
         foreach ($bots as $bot) {
-            if (intval($bot['ws_enabled']) === 1) {
-                $wsBots[] = [
-                    'appid' => $bot['appid'],
-                    'env' => $bot['env'] ?? '正式',
-                    'enabled' => intval($bot['enabled']) === 1,
-                    'ws_url' => trim($bot['ws_url'] ?? ''),
-                    'status' => $botStatuses[$bot['appid']]['status'] ?? 'unknown',
-                    'message' => $botStatuses[$bot['appid']]['message'] ?? '',
-                    'updated_at' => $botStatuses[$bot['appid']]['updated_at'] ?? '',
-                ];
+            $appid = (string)$bot['appid'];
+            if (intval($bot['ws_enabled']) !== 1) continue;
+            $enabled = intval($bot['enabled']) === 1;
+            if ($enabled) $configuredCount++;
+
+            $row = $botStatuses[$appid] ?? [];
+            $status = $row['status'] ?? 'unknown';
+            $message = $row['message'] ?? '';
+            $updatedAt = $row['updated_at'] ?? '';
+            $pid = intval($workerPids[$appid] ?? ($row['pid'] ?? 0));
+            $workerRunning = $pid > 0 && isProcessRunning($pid);
+
+            // 守护进程没运行但状态还停留在 connected，是上次异常退出的残留，展示为已停止
+            if (!$masterRunning && !$workerRunning && !in_array($status, ['stopped', 'unknown'], true)) {
+                $status = 'stopped';
+                $message = '守护进程未运行';
             }
+            if (!$enabled) {
+                $status = 'stopped';
+                $message = '机器人已禁用';
+            }
+
+            $botStatusesOut[] = [
+                'appid' => $appid,
+                'env' => $bot['env'] ?? '正式',
+                'enabled' => $enabled,
+                'ws_url' => trim($bot['ws_url'] ?? ''),
+                'status' => $status,
+                'message' => $message,
+                'updated_at' => $updatedAt,
+                'pid' => $pid,
+                'worker_running' => $workerRunning,
+            ];
         }
 
-        // 读取最近日志
+        // 旧版本子进程不写 PID 文件，扫描项目目录兜底统计，升级后也能发现残留
+        $scannedClients = ws查找本项目客户端进程([getmypid()]);
+        $aliveWorkers = max(ws存活子进程数(), count($scannedClients));
+        $orphanWorkers = !$masterRunning ? $aliveWorkers : 0;
+
         $recentLogs = '';
         if (file_exists($logFile)) {
             $lines = @file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -1646,7 +1702,10 @@ switch ($action) {
                 'can_kill' => $canKill,
                 'needs_cron' => !$envCheck['can_start'],
                 'cron_command' => '* * * * * /bin/bash ' . $wsRoot . '/ws_monitor.sh',
-                'bots' => $wsBots,
+                'bots' => $botStatusesOut,
+                'configured_count' => $configuredCount,
+                'worker_count' => $aliveWorkers,
+                'orphan_workers' => $orphanWorkers,
                 'logs' => $recentLogs,
             ]
         ]);
