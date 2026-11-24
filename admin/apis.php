@@ -10,17 +10,42 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
 ?>
 
 <style>
-.ca-modal { width: 900px; max-width: 97%; max-height: 92vh; }
+.ca-modal { width: 900px; max-width: 97%; max-height: 92vh; position: relative; }
 .ca-modal .modal-header { flex-wrap: wrap; gap: 8px; }
 .ca-modal-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
 .ca-modal-tools #caTpl { height: 28px; font-size: 11.5px; width: auto; max-width: 100%; min-width: 0; }
 @media (max-width: 560px) {
-  /* 窄屏：标题独占一行，模板下拉与关闭按钮换到下一行，标题不再被挤成竖排 */
-  .ca-modal .modal-header { position: relative; padding-right: 34px; }
-  .ca-modal-tools { flex: 1 1 100%; margin-left: 0; }
-  .ca-modal-tools #caTpl { flex: 1 1 auto; width: 100%; }
-  .ca-modal .modal-close { position: absolute; top: 8px; right: 8px; }
+  /* 窄屏：标题独占一行，模板下拉单独一行，留足上下间距，避免贴边/被裁切 */
+  .ca-modal .modal-header { position: relative; padding: 12px 46px 12px 14px; row-gap: 10px; align-items: flex-start; }
+  .ca-modal .modal-header h3 { font-size: 14px; line-height: 22px; padding-right: 2px; }
+  .ca-modal-tools { flex: 1 1 100%; margin: 0; }
+  .ca-modal-tools #caTpl { flex: 1 1 auto; width: 100%; height: 40px; font-size: 14px; padding: 0 10px; }
+  .ca-modal .modal-close { position: absolute; top: 4px; right: 2px; width: 40px; height: 40px; font-size: 22px; }
+  .ca-modal .modal-body { padding: 14px; }
+  .ca-modal .modal-body .form-control { font-size: 16px; }
+  .ca-modal .modal-body .form-control:not(textarea) { height: 42px; }
+  .ca-modal .modal-footer { padding: 10px 14px; }
+  .ca-modal .modal-footer .btn { height: 40px; }
 }
+.ca-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  transform: translate(-50%, 6px);
+  max-width: 82%;
+  padding: 9px 14px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 2px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+  z-index: 6;
+}
+.ca-toast.on { opacity: 1; transform: translate(-50%, 0); }
 .ca-intro { border-left: 2px solid var(--ink); }
 .ca-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
 .ca-step { padding: 2px 18px; border-right: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
@@ -89,16 +114,58 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
 .ca-sec small { font-weight: 400; color: var(--ink-3); font-size: 11px; }
 .ca-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .ca-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 14px; }
-@media (max-width: 720px) { .ca-grid2, .ca-grid3 { grid-template-columns: 1fr; } }
+.ca-check-inline { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 24px; }
+@media (max-width: 720px) { .ca-grid2, .ca-grid3 { grid-template-columns: 1fr; } .ca-check-inline { margin-top: 0; } }
 .ca-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .ca-chip { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); font-family: var(--mono); font-size: 10.5px; padding: 2px 6px; border-radius: 2px; cursor: pointer; }
 .ca-chip:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
-.ca-extracts { width: 100%; border-collapse: collapse; }
-.ca-extracts th { text-align: left; font-size: 10.5px; color: var(--ink-3); font-weight: 500; padding: 0 6px 5px; }
-.ca-extracts td { padding: 3px 6px; vertical-align: middle; }
-.ca-extracts .form-control { height: 30px; font-size: 12px; font-family: var(--mono); }
-.ca-extracts .ca-del { border: 0; background: transparent; color: var(--ink-3); cursor: pointer; font-size: 15px; line-height: 1; padding: 4px 6px; }
-.ca-extracts .ca-del:hover { color: var(--danger); }
+/* 取值表：桌面四列，手机自动换行（变量名+默认值一行，取值路径单独占满一行） */
+.ca-extracts { width: 100%; }
+.ca-ex-head, .ca-ex-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 110px 30px;
+  gap: 6px;
+  align-items: center;
+}
+.ca-ex-head { font-size: 10.5px; color: var(--ink-3); padding: 0 2px 5px; }
+.ca-ex-row { padding: 3px 2px; }
+.ca-ex-cell { min-width: 0; display: flex; flex-direction: column; }
+.ca-ex-lbl { display: none; }
+.ca-extracts .form-control { height: 32px; font-size: 12px; font-family: var(--mono); min-width: 0; }
+.ca-extracts .ca-del { border: 1px solid transparent; background: transparent; color: var(--ink-3); cursor: pointer; font-size: 17px; line-height: 1; width: 30px; height: 30px; padding: 0; border-radius: 2px; }
+.ca-extracts .ca-del:hover { color: var(--danger); border-color: var(--line); }
+@media (max-width: 560px) {
+  .ca-ex-head { display: none; }
+  .ca-ex-row {
+    grid-template-columns: minmax(0, 1fr) 88px 30px;
+    grid-template-areas:
+      "name def del"
+      "path path path";
+    gap: 7px 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: 3px;
+  }
+  .ca-ex-cell-name { grid-area: name; }
+  .ca-ex-cell-path { grid-area: path; }
+  .ca-ex-cell-def { grid-area: def; }
+  .ca-ex-row .ca-del { grid-area: del; align-self: end; width: 30px; height: 42px; }
+  .ca-ex-lbl { display: block; font-size: 10.5px; line-height: 1.4; color: var(--ink-3); margin-bottom: 4px; }
+  .ca-extracts .form-control { height: 42px; font-size: 16px; }
+}
+.ca-mobile-only { display: none; }
+@media (max-width: 560px) { .ca-mobile-only { display: block; } }
+.ca-pathbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.ca-pathbar > span { font-size: 10.5px; color: var(--ink-3); }
+.ca-pathbar .ca-chip { font-size: 11px; padding: 4px 8px; }
+/* 触屏设备统一大字号，避免 iOS 聚焦输入框时自动放大页面 */
+@media (pointer: coarse) {
+  .ca-modal .modal-body .form-control { font-size: 16px; }
+  .ca-modal .modal-body .form-control:not(textarea) { height: 42px; }
+  .ca-extracts .form-control { font-size: 16px; height: 42px; }
+}
 .ca-path { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); padding: 6px 9px; border-radius: 2px; cursor: pointer; font-size: 11px; margin-bottom: 5px; }
 .ca-path:hover { border-color: var(--ink); background: var(--surface-2); }
 .ca-path code { font-size: 10.5px; color: var(--ink); flex: 0 0 auto; }
@@ -225,7 +292,7 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
           <input type="text" class="form-control" id="caIcon" placeholder="一个 emoji，例如 ☀️" maxlength="8">
         </div>
         <div class="form-group">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:24px;">
+          <label class="ca-check-inline">
             <input type="checkbox" id="caEnabled" checked>
             <span>启用这条 API</span>
           </label>
@@ -358,18 +425,20 @@ $caEventList = function_exists('customapi事件列表') ? customapi事件列表(
       </div>
       <div class="form-group">
         <label>取值表</label>
-        <table class="ca-extracts">
-          <thead>
-            <tr>
-              <th style="width:120px;">变量名</th>
-              <th>取值路径</th>
-              <th style="width:120px;">默认值</th>
-              <th style="width:30px;"></th>
-            </tr>
-          </thead>
-          <tbody id="caExtracts"></tbody>
-        </table>
-        <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="addExtract()">+ 添加取值</button>
+        <div class="form-hint ca-mobile-only" style="margin:-2px 0 8px;">手机上第一行填变量名和默认值，第二行填「取值路径」；不知道写什么就点下面的常用路径，或点「探测返回结构」后选一条。</div>
+        <div class="ca-extracts" id="caExtracts">
+          <div class="ca-ex-head" aria-hidden="true">
+            <span>变量名</span><span>取值路径</span><span>默认值</span><span></span>
+          </div>
+        </div>
+        <div class="ca-pathbar">
+          <span>常用路径</span>
+          <button type="button" class="ca-chip" onclick="usePath('@body')">@body 整段返回</button>
+          <button type="button" class="ca-chip" onclick="usePath('data.text')">data.text</button>
+          <button type="button" class="ca-chip" onclick="usePath('result.0.url')">result.0.url</button>
+          <button type="button" class="ca-chip" onclick="usePath('list.*.url')">list.*.url</button>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="addExtract()">+ 添加取值</button>
         <div class="ca-note" style="margin-top:10px;">
           路径写法：<code>data.text</code> 取嵌套字段，<code>result.0.url</code> 取数组第一项，<code>list.*.url</code> 取数组里第一个有值的，<code>@body</code> 用整段返回，<code>re:正则</code> 用正则提取。
           变量名叫 <code>结果</code> 时，回复模板里的 <code>{结果}</code> 直接用它。
@@ -747,7 +816,13 @@ function openEditor(id, withTpl) {
 
     document.getElementById('caMask').style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    setTimeout(function () { document.getElementById('caName').focus(); }, 60);
+    // 手机上不自动聚焦：键盘弹出会把「基本信息」顶到滚动区外，看起来像被裁掉
+    if (!window.matchMedia('(max-width: 720px)').matches) {
+        setTimeout(function () { document.getElementById('caName').focus(); }, 60);
+    } else {
+        var bodyEl = document.querySelector('.ca-modal .modal-body');
+        if (bodyEl) bodyEl.scrollTop = 0;
+    }
 
     if (withTpl) {
         document.getElementById('caTpl').value = 'hitokoto';
@@ -779,34 +854,45 @@ function insertTplVar(name) {
 
 // ==================== 取值表 ====================
 function renderExtracts(rows) {
-    var tb = document.getElementById('caExtracts');
-    tb.innerHTML = '';
+    var box = document.getElementById('caExtracts');
+    box.querySelectorAll('.ca-ex-row').forEach(function (r) { r.remove(); });
     (rows || []).forEach(function (r) { addExtract(r.name, r.path, r.default, true); });
-    if (!tb.children.length) addExtract();
+    if (!box.querySelector('.ca-ex-row')) addExtract();
 }
 
 function addExtract(name, path, def, skipRender) {
-    var tb = document.getElementById('caExtracts');
-    var tr = document.createElement('tr');
-    tr.innerHTML =
-        '<td><input type="text" class="form-control ca-ex-name" value="' + caEsc(name || '') + '" placeholder="结果"></td>' +
-        '<td><input type="text" class="form-control ca-ex-path" value="' + caEsc(path || '') + '" placeholder="data.text"></td>' +
-        '<td><input type="text" class="form-control ca-ex-def" value="' + caEsc(def || '') + '" placeholder="留空"></td>' +
-        '<td><button type="button" class="ca-del" title="删除" onclick="this.closest(\'tr\').remove()">&times;</button></td>';
-    tb.appendChild(tr);
+    var box = document.getElementById('caExtracts');
+    var row = document.createElement('div');
+    row.className = 'ca-ex-row';
+    row.innerHTML =
+        '<div class="ca-ex-cell ca-ex-cell-name"><span class="ca-ex-lbl">变量名</span>' +
+          '<input type="text" class="form-control ca-ex-name" value="' + caEsc(name || '') + '" placeholder="结果" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="ca-ex-cell ca-ex-cell-path"><span class="ca-ex-lbl">取值路径</span>' +
+          '<input type="text" class="form-control ca-ex-path" value="' + caEsc(path || '') + '" placeholder="data.text 或 @body" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="ca-ex-cell ca-ex-cell-def"><span class="ca-ex-lbl">默认值</span>' +
+          '<input type="text" class="form-control ca-ex-def" value="' + caEsc(def || '') + '" placeholder="留空" autocomplete="off"></div>' +
+        '<button type="button" class="ca-del" title="删除这个取值" aria-label="删除这个取值" onclick="removeExtract(this)">&times;</button>';
+    box.appendChild(row);
     if (!skipRender) {
-        var inputs = tr.querySelectorAll('input');
+        var inputs = row.querySelectorAll('input');
         if (inputs[0]) inputs[0].focus();
     }
 }
 
+function removeExtract(btn) {
+    var row = btn.closest('.ca-ex-row');
+    if (row) row.remove();
+    var box = document.getElementById('caExtracts');
+    if (box && !box.querySelector('.ca-ex-row')) addExtract('', '', '', true);
+}
+
 function collectExtracts() {
     var out = [];
-    document.querySelectorAll('#caExtracts tr').forEach(function (tr) {
-        var name = tr.querySelector('.ca-ex-name').value.trim();
-        var path = tr.querySelector('.ca-ex-path').value.trim();
+    document.querySelectorAll('#caExtracts .ca-ex-row').forEach(function (row) {
+        var name = row.querySelector('.ca-ex-name').value.trim();
+        var path = row.querySelector('.ca-ex-path').value.trim();
         if (!name || !path) return;
-        out.push({ name: name, path: path, default: tr.querySelector('.ca-ex-def').value });
+        out.push({ name: name, path: path, default: row.querySelector('.ca-ex-def').value });
     });
     return out;
 }
@@ -995,7 +1081,7 @@ function probeApi() {
 }
 
 function usePath(path) {
-    var rows = document.querySelectorAll('#caExtracts tr');
+    var rows = document.querySelectorAll('#caExtracts .ca-ex-row');
     var target = null;
     for (var i = 0; i < rows.length; i++) {
         var p = rows[i].querySelector('.ca-ex-path').value.trim();
@@ -1003,7 +1089,7 @@ function usePath(path) {
         if (!p || !n) { target = rows[i]; break; }
     }
     if (!target) {
-        addExtract(path.split('.').pop(), path, '', true);
+        addExtract('', '', '', true);
         target = document.getElementById('caExtracts').lastElementChild;
     }
     var nameInput = target.querySelector('.ca-ex-name');
@@ -1013,8 +1099,29 @@ function usePath(path) {
         var seg = path.replace(/^@/, '').split('.').filter(function (s) { return s && s !== '*'; }).pop() || '字段';
         nameInput.value = seg === 'body' ? '结果' : seg;
     }
-    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    nameInput.focus();
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // 手机上不主动聚焦，避免键盘弹起把取值表顶出屏幕
+    if (!window.matchMedia('(max-width: 720px)').matches) {
+        pathInput.focus();
+    }
+    caToast('已填入：' + (nameInput.value || '结果') + ' = ' + path);
+}
+
+/* 弹窗内轻提示 */
+function caToast(msg) {
+    var modal = document.querySelector('.ca-modal');
+    if (!modal) return;
+    var el = document.getElementById('caToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'caToast';
+        el.className = 'ca-toast';
+        modal.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(caToast._t);
+    caToast._t = setTimeout(function () { el.classList.remove('on'); }, 2200);
 }
 
 // ==================== 模板 ====================
@@ -1069,6 +1176,10 @@ function applyTemplate(key) {
     document.getElementById('caReplyTpl').value = t.reply_template || '';
     onReplyTypeChange();
     renderExtracts(t.extracts || []);
+    var bodyEl = document.querySelector('.ca-modal .modal-body');
+    if (bodyEl) bodyEl.scrollTop = 0;
+    var first = (t.extracts && t.extracts[0]) ? t.extracts[0] : null;
+    caToast('已套用「' + t.name + '」' + (first ? '：' + first.name + ' = ' + first.path : ''));
 }
 
 // 关闭弹窗的 Esc

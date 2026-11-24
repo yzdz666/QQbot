@@ -267,6 +267,56 @@ window.avtLoaded = function (img) {
   window.addEventListener('hashchange', function () { if (!panel.hidden) close(); });
 })();
 </script>
+<script>
+/* 新版本提醒：后台每次打开时静默检查一次（服务端缓存 6 小时），
+   有更新就在内容区顶部显示一条提醒；关闭只对本次会话生效。 */
+(function () {
+  var bar = document.getElementById('verbar');
+  if (!bar) return;
+  var titleEl = document.getElementById('verbarTitle');
+  var subEl = document.getElementById('verbarSub');
+  var goEl = document.getElementById('verbarGo');
+  var closeEl = document.getElementById('verbarClose');
+  var badge = document.getElementById('navUpdBadge');
+  var version = '';
+
+  function remember(v) {
+    try { sessionStorage.setItem('verbar_skip', v); } catch (e) {}
+  }
+  function skipped(v) {
+    try { return sessionStorage.getItem('verbar_skip') === v; } catch (e) { return false; }
+  }
+
+  function close() {
+    bar.hidden = true;
+    if (version) remember(version);
+  }
+  if (closeEl) closeEl.addEventListener('click', close);
+
+  // 更新页自己会展示版本信息，不再叠一条提醒
+  if (/\/update\.php$/.test(location.pathname)) return;
+
+  fetch('api/update.php?action=notice', {
+    credentials: 'same-origin',
+    headers: { 'Accept': 'application/json' },
+    cache: 'no-store'
+  }).then(function (r) {
+    return r.json();
+  }).then(function (res) {
+    if (!res || !res.success || !res.data) return;
+    var d = res.data;
+    if (!d.has_update || !d.version) return;
+    version = d.version;
+    if (badge) badge.hidden = false;
+    if (skipped(version)) return;
+
+    titleEl.textContent = '发现新版本 v' + d.version;
+    subEl.textContent = '当前 v' + d.current + (d.notes ? ' · 更新内容：' + d.notes : ' · 点击右侧按钮可一键更新');
+    goEl.textContent = '查看并更新';
+    bar.hidden = false;
+  }).catch(function () { /* 网络不通时静默，不影响后台使用 */ });
+})();
+</script>
 <?php endif; ?>
 </body>
 </html>

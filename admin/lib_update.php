@@ -14,6 +14,9 @@ define('更新默认仓库', 'yzdz666/QQbot');
 define('更新临时目录', APP_ROOT . 'data/update_tmp/');
 define('更新备份目录', APP_ROOT . 'data/update_backups/');
 define('更新状态文件', APP_ROOT . 'data/update_state.json');
+define('更新检查缓存文件', APP_ROOT . 'data/update_check.json');
+define('更新检查有效期', 21600);      // 6 小时内不重复请求 GitHub
+define('更新检查失败有效期', 1800);   // 检查失败 30 分钟后重试
 define('更新单包上限', 41943040);   // 40MB
 define('更新解压上限', 83886080);   // 80MB
 
@@ -219,7 +222,7 @@ function 更新下载文件(string $url, string $dest, int $timeout = 300, int $
 }
 
 /** 查询最新 Release */
-function 更新检查(array $配置, string &$错误 = ''): array {
+function 更新检查(array $配置, string &$错误 = '', int $timeout = 20): array {
     $api = 'https://api.github.com/repos/' . $配置['repo'] . '/releases/latest';
     $尝试 = [];
     if ($配置['api_proxy'] !== '') {
@@ -229,7 +232,7 @@ function 更新检查(array $配置, string &$错误 = ''): array {
 
     $lastError = '';
     foreach ($尝试 as $url) {
-        $r = 更新请求($url, 20, 2097152);
+        $r = 更新请求($url, max(3, $timeout), 2097152);
         if (!$r['ok']) {
             $lastError = $r['error'] !== '' ? $r['error'] : '网络不可达';
             continue;
@@ -313,6 +316,98 @@ function 更新检查(array $配置, string &$错误 = ''): array {
 
     $错误 = $lastError !== '' ? $lastError : '无法连接 GitHub';
     return ['ok' => false, 'message' => $错误];
+}
+
+/** 把 Release 说明压成一行，用于后台顶部的更新提醒 */
+function 更新摘要(string $body, int $limit = 110): string {
+    $text = str_replace(["\r\n", "\r"], "\n", $body);
+    $lines = preg_split('/\n+/', $text) ?: [];
+    $heading = '';
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || preg_match('/^[-=]{3,}$/', $line)) continue;
+        // 标题行单独记下来，正文没有内容时再退回用标题
+        if (preg_match('/^#{1,6}\s*(.+)$/', $line, $m)) {
+            if ($heading === '') $heading = trim($m[1]);
+            continue;
+        }
+        $line = preg_replace('/^[-*+]\s+/', '', $line);
+        $line = preg_replace('/\[([^\]]+)\]\([^)]*\)/', '$1', $line);
+        $line = str_replace(['**', '`', '__'], '', $line);
+        $line = trim($line);
+        if ($line === '') continue;
+        if (mb_strlen($line, 'UTF-8') > $limit) {
+            $line = mb_substr($line, 0, $limit, 'UTF-8') . '…';
+        }
+        return $line;
+    }
+    return $heading;
+}
+
+/**
+ * 带缓存的版本检查（后台每次打开时静默调用）
+ *
+ * 缓存 6 小时，失败缓存 30 分钟；并发请求用文件锁串行，抢不到锁直接返回旧缓存，
+ * 避免多个标签页同时打 GitHub API 触发限流。
+ */
+function 更新检查缓存(bool $强制 = false, int $timeout = 8): array {
+    $now = time();
+    $cache = null;
+
+    if (is_file(更新检查缓存文件)) {
+        $d = json_decode((string)@file_get_contents(更新检查缓存文件), true);
+        if (is_array($d) && !empty($d['checked_at'])) $cache = $d;
+    }
+
+    $age = $cache ? max(0, $now - (int)$cache['checked_at']) : -1;
+    $ttl = ($cache && empty($cache['ok'])) ? 更新检查失败有效期 : 更新检查有效期;
+
+    if (!$强制 && $cache && $age >= 0 && $age < $ttl) {
+        $cache['cached'] = true;
+        $cache['age'] = $age;
+        $cache['current'] = 更新当前版本();
+        if (!empty($cache['version'])) {
+            $cache['has_update'] = version_compare((string)$cache['version'], $cache['current'], '>');
+        }
+        return $cache;
+    }
+
+    // 并发保护
+    $lockFile = 更新检查缓存文件 . '.lock';
+    $fp = @fopen($lockFile, 'c');
+    if ($fp && !flock($fp, LOCK_EX | LOCK_NB)) {
+        fclose($fp);
+        if ($cache) {
+            $cache['cached'] = true;
+            $cache['age'] = $age;
+            return $cache;
+        }
+        return ['ok' => false, 'message' => '正在检查更新，请稍后再看', 'checked_at' => $now, 'cached' => false];
+    }
+
+    $配置 = 更新配置();
+    $错误 = '';
+    $r = 更新检查($配置, $错误, $timeout);
+    $r['checked_at'] = $now;
+    $r['cached'] = false;
+
+    if ($fp) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+    }
+
+    $dir = dirname(更新检查缓存文件);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $save = $r;
+    if (isset($save['body']) && mb_strlen((string)$save['body'], 'UTF-8') > 4000) {
+        $save['body'] = mb_substr((string)$save['body'], 0, 4000, 'UTF-8');
+    }
+    $tmp = 更新检查缓存文件 . '.tmp';
+    if (@file_put_contents($tmp, json_encode($save, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)) !== false) {
+        @rename($tmp, 更新检查缓存文件);
+    }
+
+    return $r;
 }
 
 /** 清理目录 */

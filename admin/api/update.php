@@ -68,6 +68,7 @@ switch ($action) {
         更新保存配置('update_proxy', $proxy);
         更新保存配置('update_api_proxy', $apiProxy);
         更新保存配置('update_asset_hint', $hint);
+        @unlink(更新检查缓存文件); // 换了仓库/加速源，旧检查结果立即失效
         后台操作记录('保存在线更新配置', $repo === '' ? 更新默认仓库 : $repo);
         json_response(['success' => true, 'message' => '已保存']);
         break;
@@ -188,6 +189,7 @@ switch ($action) {
         }
         $r = 更新应用($meta['root'], (string)($meta['tag'] ?? ''));
         更新删除目录(更新临时目录);
+        @unlink(更新检查缓存文件); // 已经是最新版本，别再用更新前的检查结果提醒
         if (empty($r['ok'])) {
             json_response(['success' => false, 'message' => $r['message']]);
         }
@@ -196,6 +198,33 @@ switch ($action) {
             'success' => true,
             'message' => $r['message'] . '，当前版本 v' . ($r['version'] ?? ''),
             'data' => $r,
+        ]);
+        break;
+
+    case 'notice':
+        // 后台每次打开都会静默调用一次：命中缓存立刻返回，未命中最多等 8 秒。
+        // 这里不需要写 session，先释放会话锁，避免拖住同页面的其它请求。
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        $r = 更新检查缓存(false, 8);
+        $current = 更新当前版本();
+        $latest = (string)($r['version'] ?? '');
+        $has = !empty($r['ok']) && $latest !== '' && version_compare($latest, $current, '>');
+        json_response([
+            'success' => true,
+            'data' => [
+                'ok' => !empty($r['ok']),
+                'current' => $current,
+                'version' => $latest,
+                'has_update' => $has,
+                'name' => (string)($r['name'] ?? ''),
+                'notes' => 更新摘要((string)($r['body'] ?? '')),
+                'html_url' => (string)($r['html_url'] ?? ('https://github.com/' . 更新默认仓库 . '/releases')),
+                'checked_at' => (int)($r['checked_at'] ?? 0),
+                'cached' => !empty($r['cached']),
+                'message' => (string)($r['message'] ?? ''),
+            ],
         ]);
         break;
 

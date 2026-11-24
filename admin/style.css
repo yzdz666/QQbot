@@ -387,6 +387,78 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   white-space: nowrap;
 }
 
+/* 新版本提醒条（后台每次打开静默检查，有更新才显示） */
+.verbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -10px 0 22px;
+  padding: 10px 14px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 30px -24px rgba(0, 0, 0, .9);
+}
+.verbar[hidden] { display: none; }
+.verbar-ico {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+}
+.verbar-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.verbar-text b { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.verbar-text span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, .68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verbar-go {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.verbar-go:hover { background: #e9e9e6; }
+.verbar-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, .6);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.verbar-close:hover { color: #fff; }
+@media (max-width: 640px) {
+  .verbar { flex-wrap: wrap; align-items: flex-start; gap: 9px 10px; margin: -12px 0 18px; padding: 11px 12px; }
+  .verbar-ico { order: 1; margin-top: 1px; }
+  .verbar-text { order: 1; flex: 1 1 calc(100% - 80px); }
+  .verbar-text span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .verbar-close { order: 2; width: 32px; height: 32px; align-self: flex-start; margin-top: -3px; }
+  .verbar-go { order: 3; flex: 1 1 100%; height: 38px; }
+}
+
 .mobile-menu-btn {
   display: none;
   width: 32px; height: 32px;

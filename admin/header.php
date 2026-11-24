@@ -234,6 +234,7 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4.5 6.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 11.5V12.5C2.5 13.05 2.95 13.5 3.5 13.5H12.5C13.05 13.5 13.5 13.05 13.5 12.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
         系统更新
+        <span class="nav-badge" id="navUpdBadge" hidden>新</span>
       </a>
     </div>
     <div class="sidebar-foot">
@@ -263,4 +264,13 @@ window.ADMIN_CSRF = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE) ?>;
         <span class="topbar-version">v<?= htmlspecialchars($sysVersionNo) ?></span>
       </div>
     </header>
+    <div class="verbar" id="verbar" hidden>
+      <span class="verbar-ico" aria-hidden="true">↑</span>
+      <div class="verbar-text">
+        <b id="verbarTitle">发现新版本</b>
+        <span id="verbarSub"></span>
+      </div>
+      <a class="verbar-go" id="verbarGo" href="update.php?check=1">查看并更新</a>
+      <button type="button" class="verbar-close" id="verbarClose" aria-label="本次不再提示">&times;</button>
+    </div>
 <?php endif; ?>

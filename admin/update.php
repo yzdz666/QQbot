@@ -414,6 +414,11 @@ $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
       document.getElementById('updProxy').value = b.getAttribute('data-proxy');
     });
   });
+
+  // 从顶部「发现新版本」提醒点进来时，直接开始检查，不用再点一次
+  if (/[?&]check=1(&|$)/.test(location.search)) {
+    setTimeout(function () { btnCheck.click(); }, 60);
+  }
 })();
 </script>
 
